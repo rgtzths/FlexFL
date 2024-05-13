@@ -5,8 +5,8 @@ import json
 class DatasetUtils:
     """
     Functions to implement in the child class:
-    - download_data(self)
-    - process_data(self)
+    - download(self)
+    - preprocess(self)
     - {ml}_model(self)
     """
 

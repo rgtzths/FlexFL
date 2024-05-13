@@ -1,5 +1,24 @@
 {
     "name": "IOT_DNL",
     "link": "https://www.kaggle.com/datasets/speedwall10/iot-device-network-logs",
-    "model": "model from {}"
+    "model": "Deep Neural Network-Based Security Model for IoT Device Network",
+    "samples": 477426,
+    "features": [
+        "frame.len",
+        "eth.src",
+        "eth.dst",
+        "ip.src",
+        "ip.dst",
+        "ip.proto",
+        "ip.len",
+        "tcp.len",
+        "tcp.srcport",
+        "tcp.dstport",
+        "Value"
+    ],
+    "split": {
+        "train": 305552,
+        "val": 76388,
+        "test": 95486
+    }
 }
