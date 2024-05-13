@@ -1,19 +1,24 @@
 import argparse
-from pathlib import Path
 
 from config import DATASETS
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-d", "--dataset", type=str, required=True, help="Dataset name (\"all\" to preprocess all datasets)")
-parser.add_argument("-n", "--num_workers", type=int, required=True, help="Number of workers")
+parser.add_argument("-d", "--dataset", type=str, required=True, help="Dataset name (\"all\" to divide all datasets)")
+parser.add_argument("-n", "--num_workers", type=int, required=True, help="Number of workers (0 to divide for 2,4,8)")
 args = parser.parse_args()
 
 if args.dataset not in DATASETS and args.dataset != "all":
     raise ValueError(f"Dataset {args.dataset} not found")
 
+if args.num_workers < 0:
+    raise ValueError("Number of workers must be greater or equal to 0")
+
 datasets = list(DATASETS.keys()) if args.dataset == "all" else [args.dataset]
 for dataset in datasets:
     dataset = DATASETS[dataset]()
-    print(f"Dividing data for {dataset.name} dataset with {args.num_workers} workers")
-    dataset.data_division(args.num_workers)
+    num_workers = [2, 4, 8] if args.num_workers == 0 else [args.num_workers]
+    for nw in num_workers:
+        print(f"Dividing {dataset.name} for {nw} workers")
+        dataset.data_division(nw)
+    
     
