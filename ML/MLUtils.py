@@ -1,6 +1,12 @@
 
 
-class Base:
+class MLUtils:
+    """
+    Functions to implement in the child class:
+    -
+    """
+
+
     def __init__(self,
         prefix,
         optimizer,
@@ -23,13 +29,20 @@ class Base:
         self.model = self.get_model()
 
 
+    def call_fn(self, fn, *args, **kwargs):
+        if hasattr(self.dataset, fn):
+            return getattr(self.dataset, fn)(*args, **kwargs)
+        else:
+            raise NotImplementedError(f"{fn} not implemented in {self.dataset.name}")
+
+
     def get_model(self):
-        return self.dataset.call_fn(f"{self.prefix}_model")
+        return self.call_fn(f"{self.prefix}_model")
     
 
     def load_data(self, split):
-        return self.dataset.call_fn(f"{self.prefix}_data", split)
+        return self.call_fn(f"{self.prefix}_data", split)
     
 
     def load_worker_data(self, worker_id, num_workers):
-        return self.dataset.call_fn(f"{self.prefix}_worker_data", worker_id, num_workers)
+        return self.call_fn(f"{self.prefix}_worker_data", worker_id, num_workers)

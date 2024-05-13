@@ -1,9 +1,14 @@
 import numpy as np
 from pathlib import Path
 import json
-import requests
 
-class Base:
+class DatasetUtils:
+    """
+    Functions to implement in the child class:
+    - download_data(self)
+    - process_data(self)
+    - {ml}_model(self)
+    """
 
     def __init__(self):
         self.metadata = {}
@@ -13,20 +18,6 @@ class Base:
     @property
     def name(self):
         return self.__class__.__name__
-
-
-    def process_data(self):
-        """
-        Implement this method to process the raw data and save the processed data
-        """
-        raise NotImplementedError(f"process_data not implemented in {self.name}")
-    
-
-    def call_fn(self, fn, *args, **kwargs):
-        if hasattr(self, fn):
-            return getattr(self, fn)(*args, **kwargs)
-        else:
-            raise NotImplementedError(f"{fn} not implemented in {self.name}")
     
 
     def load_metadata(self):
@@ -40,22 +31,6 @@ class Base:
         path = Path(f'Datasets/Metadata/{self.name}.json')
         with open(path, 'w') as file:
             json.dump(self.metadata, file, indent=4)
-
-
-    def download(self):
-        if 'download' not in self.metadata:
-            print(f"Download link not available for {self.name}, add it to the metadata as 'download'")
-            return
-        url = self.metadata['download']
-        local_filename = url.split('/')[-1]
-        self.edit_metadata('raw', local_filename)
-        folder = Path(f'Data/{self.name}')
-        folder.mkdir(parents=True, exist_ok=True)
-        with requests.get(url, stream=True) as r:
-            r.raise_for_status()
-            with open(folder/local_filename, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
         
 
     def save_data(self, x, y, split):

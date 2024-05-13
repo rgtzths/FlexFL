@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from ML.Base import Base as MLUtils
+from ML.MLUtils import MLUtils
 
 OPTIMIZERS = {
     'adam': tf.keras.optimizers.Adam,
