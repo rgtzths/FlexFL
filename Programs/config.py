@@ -9,6 +9,9 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 # datasets
 from Datasets.IOT_DNL import IOT_DNL
+from Datasets.MNIST import MNIST
+from Datasets.FASHION import FASHION
+from Datasets.CIFAR10 import CIFAR10
 
 # ML
 from ML.Torch import Torch as MLtorch
@@ -23,12 +26,18 @@ from FL.DecentralizedSync import DecentralizedSync
 # XAI
 
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
+# update tf logging level
+import tensorflow as tf
+tf.get_logger().setLevel('WARN')
+
 print("Config loaded\n")
 
 
 DATASETS = {
-    'IOT_DNL': IOT_DNL
+    'IOT_DNL': IOT_DNL,
+    'MNIST': MNIST,
+    'FASHION': FASHION,
+    'CIFAR10': CIFAR10
 }
 
 ML = {
