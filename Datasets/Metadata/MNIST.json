@@ -1,8 +1,9 @@
 {
     "name": "MNIST",
-    "link": "",
-    "type": "",
-    "model": "",
+    "link": "https://www.tensorflow.org/datasets/catalog/mnist",
+    "type": "Image Classification",
+    "model": "Assessing Four Neural Networks on Handwritten Digit Recognition Dataset (MNIST)",
+    "info": "",
     "samples": 70000,
     "split": {
         "train": "70.00%: 49000",

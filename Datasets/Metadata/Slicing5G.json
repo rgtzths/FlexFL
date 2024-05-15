@@ -1,7 +1,7 @@
 {
     "name": "Slicing5G",
-    "link": "",
-    "type": "",
+    "link": "https://ieee-dataport.org/open-access/crawdad-umkcnetworkslicing5g",
+    "type": "Tabular classification",
     "model": "",
     "info": "",
     "features": "Use CaseType (Input 1)|LTE/5G UE Category (Input 2)|Technology Supported (Input 3)|Day (Input4)|Time (Input 5)|QCI (Input 6)|Packet Loss Rate (Reliability)|Packet Delay Budget (Latency)",

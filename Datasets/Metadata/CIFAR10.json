@@ -1,8 +1,9 @@
 {
     "name": "CIFAR10",
-    "link": "",
-    "type": "",
-    "model": "",
+    "link": "https://www.tensorflow.org/datasets/catalog/cifar10",
+    "type": "Image Classification",
+    "model": "Cifar-10 Classification using Deep Convolutional Neural Network",
+    "info":"",
     "samples": 60000,
     "split": {
         "train": "70.00%: 42000",

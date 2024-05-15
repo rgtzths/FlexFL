@@ -1,8 +1,9 @@
 {
     "name": "FASHION",
-    "link": "",
-    "type": "",
+    "link": "https://www.tensorflow.org/datasets/catalog/fashion_mnist",
+    "type": "Image Classification",
     "model": "",
+    "info": "model is from architecture 2",
     "samples": 70000,
     "split": {
         "train": "70.00%: 49000",
