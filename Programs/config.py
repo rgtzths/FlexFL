@@ -13,6 +13,7 @@ from Datasets.MNIST import MNIST
 from Datasets.FASHION import FASHION
 from Datasets.CIFAR10 import CIFAR10
 from Datasets.UNSW import UNSW
+from Datasets.TON_IOT import TON_IOT
 
 
 # ML
@@ -40,7 +41,8 @@ DATASETS = {
     'MNIST': MNIST,
     'FASHION': FASHION,
     'CIFAR10': CIFAR10,
-    'UNSW': UNSW
+    'UNSW': UNSW,
+    'TON_IOT': TON_IOT
 }
 
 ML = {

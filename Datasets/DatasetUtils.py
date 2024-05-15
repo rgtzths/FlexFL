@@ -51,8 +51,9 @@ class DatasetUtils:
     
 
     def split_save(self, x, y, val_size, test_size, scaler=None):
-        x_train, x_, y_train, y_ = train_test_split(x, y, test_size=val_size+test_size, random_state=42, shuffle=True)
-        x_val, x_test, y_val, y_test = train_test_split(x_, y_, test_size=test_size/(val_size+test_size), random_state=42, shuffle=True)
+        self.metadata['samples'] = x.shape[0]
+        x_train, x, y_train, y = train_test_split(x, y, test_size=val_size+test_size, random_state=42, shuffle=True)
+        x_val, x_test, y_val, y_test = train_test_split(x, y, test_size=test_size/(val_size+test_size), random_state=42, shuffle=True)
         if scaler is not None:
             x_train = scaler.fit_transform(x_train)
             x_val = scaler.transform(x_val)
@@ -60,7 +61,6 @@ class DatasetUtils:
         self.save_data(x_train, y_train, 'train')
         self.save_data(x_val, y_val, 'val')
         self.save_data(x_test, y_test, 'test')
-        self.metadata['samples'] = x.shape[0]
         self.metadata['split'] = {
             'train': f"{(1-val_size-test_size)*100:.2f}%: {x_train.shape[0]}",
             'val': f"{val_size*100:.2f}%: {x_val.shape[0]}",
