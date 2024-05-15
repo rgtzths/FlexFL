@@ -1,16 +1,11 @@
 from kaggle import api
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
 import tensorflow as tf
 
 from Datasets.DatasetUtils import DatasetUtils
 
 class IOT_DNL(DatasetUtils):
-
-    def __init__(self):
-        super().__init__()
-
     
     def download(self):
         api.dataset_download_files(

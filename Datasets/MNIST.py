@@ -5,10 +5,6 @@ from Datasets.DatasetUtils import DatasetUtils
 
 class MNIST(DatasetUtils):
 
-    def __init__(self):
-        super().__init__()
-
-
     def download(self):
         return
 

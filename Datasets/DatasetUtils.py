@@ -2,6 +2,9 @@ import numpy as np
 from pathlib import Path
 import json
 from sklearn.model_selection import train_test_split
+import wget
+import zipfile
+
 
 class DatasetUtils:
     """
@@ -12,13 +15,9 @@ class DatasetUtils:
     """
 
     def __init__(self):
+        self.name = self.__class__.__name__
         self.metadata = {}
         self.load_metadata()
-
-
-    @property
-    def name(self):
-        return self.__class__.__name__
     
 
     def load_metadata(self):
@@ -27,7 +26,7 @@ class DatasetUtils:
             with open(path, 'r') as file:
                 self.metadata = json.load(file)
         else:
-            self.metadata = {"name": self.name, "link": "", "type": "", "model": ""}
+            self.metadata = {"name": self.name, "link": "", "type": "", "model": "", "info": ""}
             self.save_metadata()
 
 
@@ -95,6 +94,17 @@ class DatasetUtils:
         y = np.array_split(y, num_workers)
         for i in range(num_workers):
             self.save_worker_data(x[i], y[i], i, num_workers)
+
+
+    # def download_file(self, url, destination, unzip=False):
+    #     destination = Path(destination)
+    #     destination.parent.mkdir(parents=True, exist_ok=True)
+    #     wget.download(url, str(destination))
+    #     print()
+    #     if unzip:
+    #         with zipfile.ZipFile(destination, 'r') as zip_ref:
+    #             zip_ref.extractall(destination.parent)
+    #         destination.unlink()
 
 
     def tf_load_data(self, split):

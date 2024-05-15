@@ -12,6 +12,8 @@ from Datasets.IOT_DNL import IOT_DNL
 from Datasets.MNIST import MNIST
 from Datasets.FASHION import FASHION
 from Datasets.CIFAR10 import CIFAR10
+from Datasets.UNSW import UNSW
+
 
 # ML
 from ML.Torch import Torch as MLtorch
@@ -37,7 +39,8 @@ DATASETS = {
     'IOT_DNL': IOT_DNL,
     'MNIST': MNIST,
     'FASHION': FASHION,
-    'CIFAR10': CIFAR10
+    'CIFAR10': CIFAR10,
+    'UNSW': UNSW
 }
 
 ML = {
