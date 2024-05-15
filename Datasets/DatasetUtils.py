@@ -96,15 +96,14 @@ class DatasetUtils:
             self.save_worker_data(x[i], y[i], i, num_workers)
 
 
-    # def download_file(self, url, destination, unzip=False):
-    #     destination = Path(destination)
-    #     destination.parent.mkdir(parents=True, exist_ok=True)
-    #     wget.download(url, str(destination))
-    #     print()
-    #     if unzip:
-    #         with zipfile.ZipFile(destination, 'r') as zip_ref:
-    #             zip_ref.extractall(destination.parent)
-    #         destination.unlink()
+    def download_file(self, url):
+        destination = Path(f"Data/{self.name}/temp.zip")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        wget.download(url, str(destination))
+        print()
+        with zipfile.ZipFile(destination, 'r') as zip_ref:
+            zip_ref.extractall(destination.parent)
+        destination.unlink()
 
 
     def tf_load_data(self, split):
