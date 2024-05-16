@@ -8,9 +8,9 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 
 # utils
-from Datasets.DatasetUtils import DatasetUtils
-from ML.MLUtils import MLUtils
-from FL.FLUtils import FLUtils
+from Utils.DatasetUtils import DatasetUtils
+from Utils.MLUtils import MLUtils
+from Utils.FLUtils import FLUtils
 
 # datasets
 from Datasets.IOT_DNL import IOT_DNL

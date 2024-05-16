@@ -1,6 +1,6 @@
 import torch
 
-from ML.MLUtils import MLUtils
+from Utils.MLUtils import MLUtils
 
 OPTIMIZERS = {}
 

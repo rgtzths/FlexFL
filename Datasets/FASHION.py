@@ -1,7 +1,7 @@
 from tensorflow.keras.datasets import fashion_mnist
 import numpy as np
 
-from Datasets.DatasetUtils import DatasetUtils
+from Utils.DatasetUtils import DatasetUtils
 
 class FASHION(DatasetUtils):
 

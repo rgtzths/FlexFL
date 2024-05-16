@@ -1,7 +1,7 @@
 from tensorflow.keras.datasets import cifar10
 import numpy as np
 
-from Datasets.DatasetUtils import DatasetUtils
+from Utils.DatasetUtils import DatasetUtils
 
 class CIFAR10(DatasetUtils):
 

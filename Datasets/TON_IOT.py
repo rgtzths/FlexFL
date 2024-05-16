@@ -3,7 +3,7 @@ from sklearn.preprocessing import QuantileTransformer
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-from Datasets.DatasetUtils import DatasetUtils
+from Utils.DatasetUtils import DatasetUtils
 
 class TON_IOT(DatasetUtils):
 

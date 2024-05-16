@@ -2,7 +2,7 @@ import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 import os
 
-from Datasets.DatasetUtils import DatasetUtils
+from Utils.DatasetUtils import DatasetUtils
 
 class Slicing5G(DatasetUtils):
     
