@@ -4,11 +4,12 @@ import json
 from sklearn.model_selection import train_test_split
 import wget
 import zipfile
+import pprint
 
 
 class DatasetUtils:
     """
-    Functions to implement in the child class:
+    Methods to implement in the child class:
     - download(self)
     - preprocess(self, val_size, test_size)
     - {ml}_model(self)
@@ -120,3 +121,7 @@ class DatasetUtils:
 
     def torch_worker_data(self, worker_id, num_workers):
         return self.load_worker_data(worker_id, num_workers)
+    
+
+    def __str__(self):
+        return pprint.pformat(self.metadata)

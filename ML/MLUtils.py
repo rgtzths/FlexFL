@@ -1,31 +1,32 @@
-
+import pprint
 
 class MLUtils:
     """
     Functions to implement in the child class:
-    -
+    - init(self)
     """
 
-
     def __init__(self,
-        prefix,
+        dataset,
         optimizer,
         loss,
-        dataset,
-        batch_size,
-        max_score,
-        patience,
-        delta,
+        learning_rate = 0.001,
+        batch_size = 32,
+        max_score = 0.99,
+        patience = 5,
+        delta = 0.01,
         **kwargs
     ):
-        self.prefix = prefix
+        self.prefix = None
         self.dataset = dataset
         self.optimizer = optimizer
         self.loss = loss
+        self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.max_score = max_score
         self.patience = patience
         self.delta = delta
+        self.init()
         self.model = self.get_model()
 
 
@@ -46,3 +47,7 @@ class MLUtils:
 
     def load_worker_data(self, worker_id, num_workers):
         return self.call_fn(f"{self.prefix}_worker_data", worker_id, num_workers)
+    
+
+    def __str__(self):
+        return pprint.pformat(self.__dict__)
