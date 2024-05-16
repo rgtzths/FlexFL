@@ -6,7 +6,7 @@ class MLUtils:
     - init(self)
     """
 
-    def __init__(self,
+    def __init__(self, *,
         dataset,
         optimizer,
         loss,
@@ -50,4 +50,4 @@ class MLUtils:
     
 
     def __str__(self):
-        return pprint.pformat(self.__dict__)
+        return pprint.pformat(vars(self))
