@@ -27,7 +27,7 @@ class DatasetUtils:
             with open(path, 'r') as file:
                 self.metadata = json.load(file)
         else:
-            self.metadata = {"name": self.name, "link": "", "type": "", "model": "", "info": ""}
+            self.metadata = {"name": self.name, "link": "", "type": "", "info": ""}
             self.save_metadata()
 
 
@@ -53,6 +53,7 @@ class DatasetUtils:
 
     def split_save(self, x, y, val_size, test_size, scaler=None):
         self.metadata['samples'] = x.shape[0]
+        self.metadata['input_shape'] = x.shape[1:]
         x_train, x, y_train, y = train_test_split(x, y, test_size=val_size+test_size, random_state=42, shuffle=True)
         x_val, x_test, y_val, y_test = train_test_split(x, y, test_size=test_size/(val_size+test_size), random_state=42, shuffle=True)
         if scaler is not None:

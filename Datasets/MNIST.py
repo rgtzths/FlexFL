@@ -15,4 +15,5 @@ class MNIST(DatasetUtils):
         y = np.concatenate((y_train, y_test))
         x = x.astype('float32')
         x = x / 255.0
+        self.metadata['classes'] = len(np.unique(y))
         self.split_save(x, y, val_size, test_size)

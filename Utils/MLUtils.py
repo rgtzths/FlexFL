@@ -7,6 +7,7 @@ class MLUtils:
     """
 
     def __init__(self, *,
+        model,
         dataset,
         optimizer,
         loss,
@@ -27,7 +28,7 @@ class MLUtils:
         self.patience = patience
         self.delta = delta
         self.init()
-        self.model = self.get_model()
+        self.model = model.get_model(self.prefix, self.dataset)
 
 
     def call_fn(self, fn, *args, **kwargs):

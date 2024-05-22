@@ -1,6 +1,7 @@
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 import os
+import numpy as np
 
 from Utils.DatasetUtils import DatasetUtils
 
@@ -29,5 +30,6 @@ class Slicing5G(DatasetUtils):
         df["Slice Type (Output)"] = le.fit_transform(df["Slice Type (Output)"])
         x = df.drop('Slice Type (Output)', axis=1)
         y = df['Slice Type (Output)']
+        self.metadata['classes'] = len(np.unique(y))
         self.save_features(x.columns)
         self.split_save(x.to_numpy(), y.to_numpy(), val_size, test_size)

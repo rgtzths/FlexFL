@@ -3,7 +3,7 @@ import inspect
 from itertools import chain
 import json
 
-from config import DATASETS, ML, COMM, FL, UTILS
+from config import DATASETS, ML, COMM, FL, UTILS, MODELS
 
 new_args = set(
     chain.from_iterable(
@@ -17,11 +17,12 @@ new_args = set(
         )
     )
 )
-new_args -= set(['args', 'kwargs', 'file', 'dataset', 'ml', 'comm', 'fl'])
+new_args -= set(['args', 'kwargs', 'file', 'dataset', 'ml', 'comm', 'fl', 'model'])
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--file", type=str, required=False, help="Config file")
 parser.add_argument("-d", "--dataset", type=str, required=True, help="Dataset name")
+parser.add_argument("-m", "--model", type=str, required=True, help="Model name")
 parser.add_argument("--ml", type=str, required=True, help="ML framework")
 parser.add_argument("-c", "--comm", type=str, required=True, help="Communication framework")
 parser.add_argument("--fl", type=int, required=True, help="FL framework")
@@ -37,11 +38,13 @@ if args['file'] is not None:
 # args = {k: v for k, v in args.items() if v is not None}
 
 dataset = DATASETS[args.pop('dataset')]()
-ml = ML[args.pop('ml')](dataset = dataset, **args)
+model = MODELS[args.pop('model')]()
+ml = ML[args.pop('ml')](model = model, dataset = dataset, **args)
 comm = COMM[args.pop('comm')]()
 fl = FL[args.pop('fl')](ml = ml, comm = comm, **args)
 
 print(f"\nDataset {dataset.__class__.__name__}:\n{dataset}")
+print(f"\nModel {model.__class__.__name__}")
 print(f"\nML {ml.__class__.__name__}:\n{ml}")
 print(f"\nComm: {comm.__class__.__name__}")
 print(f"\nFL {fl.__class__.__name__}:\n{fl}")
