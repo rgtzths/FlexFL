@@ -21,11 +21,11 @@ new_args -= set(['args', 'kwargs', 'file', 'dataset', 'ml', 'comm', 'fl', 'model
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--file", type=str, required=False, help="Config file")
-parser.add_argument("-d", "--dataset", type=str, required=True, help="Dataset name")
-parser.add_argument("-m", "--model", type=str, required=True, help="Model name")
-parser.add_argument("--ml", type=str, required=True, help="ML framework")
-parser.add_argument("-c", "--comm", type=str, required=True, help="Communication framework")
-parser.add_argument("--fl", type=int, required=True, help="FL framework")
+parser.add_argument("-d", "--dataset", type=str, required=True, help="Dataset name", choices=DATASETS.keys())
+parser.add_argument("-m", "--model", type=str, required=True, help="Model name", choices=MODELS.keys())
+parser.add_argument("--ml", type=str, required=True, help="ML framework", choices=ML.keys())
+parser.add_argument("-c", "--comm", type=str, required=True, help="Communication framework", choices=COMM.keys())
+parser.add_argument("--fl", type=int, required=True, help="FL framework", choices=FL.keys())
 for arg in new_args:
     parser.add_argument(f"--{arg}", type=str, required=False, help=f"{arg}")
 args = parser.parse_args()
@@ -48,3 +48,5 @@ print(f"\nModel {model.__class__.__name__}")
 print(f"\nML {ml.__class__.__name__}:\n{ml}")
 print(f"\nComm: {comm.__class__.__name__}")
 print(f"\nFL {fl.__class__.__name__}:\n{fl}")
+
+fl.run()

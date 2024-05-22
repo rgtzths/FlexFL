@@ -2,7 +2,7 @@ import tensorflow as tf
 
 from Utils.ModelUtils import ModelUtils
 
-class IOT_DNL(ModelUtils):
+class IOT_DNL_M1(ModelUtils):
 
     def tf_model(self, input_shape, classes):
         return tf.keras.models.Sequential([
