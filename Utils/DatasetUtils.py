@@ -106,22 +106,6 @@ class DatasetUtils:
         with zipfile.ZipFile(destination, 'r') as zip_ref:
             zip_ref.extractall(destination.parent)
         destination.unlink()
-
-
-    def tf_load_data(self, split):
-        return self.load_data(split)
-    
-
-    def torch_load_data(self, split):
-        return self.load_data(split)
-    
-
-    def tf_worker_data(self, worker_id, num_workers):
-        return self.load_worker_data(worker_id, num_workers)
-    
-
-    def torch_worker_data(self, worker_id, num_workers):
-        return self.load_worker_data(worker_id, num_workers)
     
 
     def __str__(self):

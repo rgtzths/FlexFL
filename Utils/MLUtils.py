@@ -4,13 +4,23 @@ class MLUtils:
     """
     Functions to implement in the child class:
     - init(self)
+    - load_data(self, split)
+    - load_worker_data(self, worker_id, num_workers)
+    - get_weights(self)
+    - set_weights(self, weights)
+    - get_gradients(self)
+    - apply_gradients(self, gradients)
+    - train(self, epochs)
+    - evaluate(self, split)
+    - save_model(self, path)
+    - load_model(self, path)
     """
 
     def __init__(self, *,
         model,
         dataset,
-        optimizer,
-        loss,
+        optimizer = 'adam',
+        loss = 'scc',
         learning_rate = 0.001,
         batch_size = 32,
         max_score = 0.99,
@@ -29,25 +39,6 @@ class MLUtils:
         self.delta = delta
         self.init()
         self.model = model.get_model(self.prefix, self.dataset)
-
-
-    def call_fn(self, fn, *args, **kwargs):
-        if hasattr(self.dataset, fn):
-            return getattr(self.dataset, fn)(*args, **kwargs)
-        else:
-            raise NotImplementedError(f"{fn} not implemented in {self.dataset.name}")
-
-
-    def get_model(self):
-        return self.call_fn(f"{self.prefix}_model")
-    
-
-    def load_data(self, split):
-        return self.call_fn(f"{self.prefix}_data", split)
-    
-
-    def load_worker_data(self, worker_id, num_workers):
-        return self.call_fn(f"{self.prefix}_worker_data", worker_id, num_workers)
     
 
     def __str__(self):

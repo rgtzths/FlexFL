@@ -35,7 +35,7 @@ if args['file'] is not None:
     with open(args['file'], 'r') as f:
         file_args = json.load(f)
         args.update(file_args)
-# args = {k: v for k, v in args.items() if v is not None}
+args = {k: v for k, v in args.items() if v is not None}
 
 dataset = DATASETS[args.pop('dataset')]()
 model = MODELS[args.pop('model')]()

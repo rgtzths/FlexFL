@@ -3,12 +3,9 @@ import argparse
 from config import DATASETS
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-d", "--dataset", type=str, required=True, help="Dataset name (\"all\" to divide all datasets)")
+parser.add_argument("-d", "--dataset", type=str, required=True, help="Dataset name (\"all\" to divide all datasets)", choices=["all",*DATASETS.keys()])
 parser.add_argument("-n", "--num_workers", type=int, required=True, help="Number of workers (0 to divide for 2,4,8)")
 args = parser.parse_args()
-
-if args.dataset not in DATASETS and args.dataset != "all":
-    raise ValueError(f"Dataset {args.dataset} not found")
 
 if args.num_workers < 0:
     raise ValueError("Number of workers must be greater or equal to 0")

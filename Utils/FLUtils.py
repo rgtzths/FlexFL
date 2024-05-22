@@ -9,7 +9,7 @@ class FLUtils:
     def __init__(self, *, 
         ml, 
         comm, 
-        epochs, 
+        epochs = 10,
         **kwargs
     ):
         self.ml = ml
