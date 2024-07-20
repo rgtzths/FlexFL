@@ -1,0 +1,7 @@
+{
+    "dataset": "UNSW",
+    "model": "UNSW",
+    "ml": "tf",
+    "comm": "mpi",
+    "fl": 3
+}

@@ -23,6 +23,7 @@ from Datasets.Slicing5G import Slicing5G
 
 # models
 from Models.IOT_DNL_M1 import IOT_DNL_M1
+from Models.UNSW_M1 import UNSW_M1
 
 # ML
 from ML.Torch import Torch as MLtorch
@@ -64,7 +65,8 @@ DATASETS = {
 }
 
 MODELS = {
-    'IOT_DNL': IOT_DNL_M1
+    'IOT_DNL': IOT_DNL_M1,
+    'UNSW': UNSW_M1
 }
 
 ML = {

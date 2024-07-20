@@ -23,22 +23,22 @@ class MLUtils:
         loss = 'scc',
         learning_rate = 0.001,
         batch_size = 32,
-        max_score = 0.99,
-        patience = 5,
-        delta = 0.01,
         **kwargs
     ):
         self.prefix = None
         self.dataset = dataset
         self.optimizer = optimizer
+        self.optimizer_name = optimizer
         self.loss = loss
         self.learning_rate = learning_rate
         self.batch_size = batch_size
-        self.max_score = max_score
-        self.patience = patience
-        self.delta = delta
         self.init()
         self.model = model.get_model(self.prefix, self.dataset)
+        self.n_samples = None
+
+
+    def init(self):
+        return
     
 
     def __str__(self):
