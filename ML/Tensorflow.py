@@ -26,14 +26,12 @@ class Tensorflow(MLUtils):
 
     def load_data(self, split):
         x, y = self.dataset.load_data(split)
-        self.n_samples = len(x)
         data = tf.data.Dataset.from_tensor_slices((x, y)).batch(self.batch_size)
         setattr(self, f"{split}_data", data)
 
 
     def load_worker_data(self, worker_id, num_workers):
         x, y = self.dataset.load_worker_data(worker_id, num_workers)
-        self.n_samples = len(x)
         self.my_data = tf.data.Dataset.from_tensor_slices((x, y)).batch(self.batch_size)
 
 

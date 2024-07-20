@@ -48,6 +48,7 @@ class DatasetUtils:
         folder = Path(f'Data/{self.name}')
         x = np.load(folder/f'x_{split}.npy')
         y = np.load(folder/f'y_{split}.npy')
+        self.n_samples = x.shape[0]
         return x, y
     
 
@@ -87,6 +88,7 @@ class DatasetUtils:
         folder = Path(f'Data/{self.name}/{num_workers}_workers')
         x = np.load(folder/f'x_{worker_id}.npy')
         y = np.load(folder/f'y_{worker_id}.npy')
+        self.n_samples = x.shape[0]
         return x, y
     
 

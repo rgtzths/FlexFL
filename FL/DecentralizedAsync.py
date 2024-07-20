@@ -19,7 +19,7 @@ class DecentralizedAsync(FLUtils):
         if self.comm.is_master():
             self.node_weights = [0] * self.comm.n_workers
             self.ml.load_data('val')
-            self.comm.set_buffer(self.ml.dataset.metadata["samples"])
+            self.comm.set_buffer(self.ml.dataset.n_samples)
             
             for _ in range(self.comm.n_workers):
                 worker_id, n_samples = self.comm.recv_worker()
@@ -29,7 +29,7 @@ class DecentralizedAsync(FLUtils):
                 
         else:
             self.ml.load_worker_data(self.comm.worker_id, self.comm.n_workers)
-            self.comm.set_buffer(self.ml.n_samples)
+            self.comm.set_buffer(self.ml.dataset.n_samples)
             self.comm.send_master()
 
     

@@ -34,8 +34,9 @@ class MPI(CommUtils):
         return self.pickle.loads(self.buffer)
     
 
-    def send_worker(self, worker_id):
-        self.comm.send(self.buffer, dest=worker_id)
+    def send_workers(self):
+        for i in range(1, self.size):
+            self.comm.send(self.buffer, dest=i)
 
 
     def recv_worker(self):
