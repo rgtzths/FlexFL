@@ -24,6 +24,7 @@ class FLUtils:
         self.delta = delta
         self.stop = False
         self.patience_buffer = [0] * self.patience
+        self.all_results = []
 
         self.base_path = f'Results/{self.ml.dataset.__class__.__name__}/{self.__class__.__name__}/{self.comm.__class__.__name__}_{self.comm.n_workers}/{self.ml.prefix}_{self.ml.optimizer_name}_{self.ml.batch_size}_{self.epochs}'
 

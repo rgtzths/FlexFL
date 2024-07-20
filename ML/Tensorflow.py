@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 
 from Utils.MLUtils import MLUtils
 
@@ -28,6 +29,7 @@ class Tensorflow(MLUtils):
         x, y = self.dataset.load_data(split)
         data = tf.data.Dataset.from_tensor_slices((x, y)).batch(self.batch_size)
         setattr(self, f"{split}_data", data)
+        return x, y
 
 
     def load_worker_data(self, worker_id, num_workers):
@@ -63,8 +65,8 @@ class Tensorflow(MLUtils):
         )
 
 
-    def evaluate(self, split):
-        return self.model.evaluate(getattr(self, f"{split}_data"))
+    def predict(self, split):
+        return np.argmax(self.model.predict(getattr(self, f"{split}_data"), verbose=0), axis=1)
     
 
     def save_model(self, path):

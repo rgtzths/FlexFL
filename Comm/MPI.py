@@ -28,6 +28,11 @@ class MPI(CommUtils):
         return self.pickle.loads(data)
     
 
+    def send_worker(self, worker_id, data):
+        data = self.pickle.dumps(data)
+        self.comm.send(data, dest=worker_id+1)
+    
+
     def send_workers(self, data):
         data = self.pickle.dumps(data)
         for i in range(1, self.size):
