@@ -15,33 +15,26 @@ class MPI(CommUtils):
         self.pickle =  MPI4py.pickle
 
 
-    def set_buffer(self, data):
-        self.buffer = self.pickle.dumps(data)
-
-
     def is_master(self):
         return self.rank == 0
     
 
-    def send_master(self):
-        self.comm.send(self.buffer, dest=0)
+    def send_master(self, data):
+        self.comm.send(self.pickle.dumps(data), dest=0)
 
 
     def recv_master(self):
-        if not isinstance(self.buffer, bytearray):
-            self.buffer = bytearray(sys.getsizeof(self.buffer))
-        self.comm.recv(self.buffer, source=0)
-        return self.pickle.loads(self.buffer)
+        data = self.comm.recv(source=0)
+        return self.pickle.loads(data)
     
 
-    def send_workers(self):
+    def send_workers(self, data):
+        data = self.pickle.dumps(data)
         for i in range(1, self.size):
-            self.comm.send(self.buffer, dest=i)
+            self.comm.send(data, dest=i)
 
 
     def recv_worker(self):
-        if not isinstance(self.buffer, bytearray):
-            self.buffer = bytearray(sys.getsizeof(self.buffer))
-        self.comm.recv(self.buffer, source=MPI4py.ANY_SOURCE, status=self.status)
-        return (self.status.Get_source()-1, self.pickle.loads(self.buffer))
+        data = self.comm.recv(source=MPI4py.ANY_SOURCE, status=self.status)
+        return (self.status.Get_source()-1, self.pickle.loads(data))
         
