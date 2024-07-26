@@ -13,6 +13,7 @@ from Utils.DatasetUtils import DatasetUtils
 from Utils.MLUtils import MLUtils
 from Utils.FLUtils import FLUtils
 from Utils.ModelUtils import ModelUtils
+from Utils.XAIUtils import XAIUtils
 
 # datasets
 from Datasets.IOT_DNL import IOT_DNL
@@ -53,7 +54,8 @@ UTILS = {
     'dataset': DatasetUtils,
     'model': ModelUtils,
     'ml': MLUtils,
-    'fl': FLUtils
+    'fl': FLUtils,
+    'xai': XAIUtils
 }
 
 DATASETS = {
