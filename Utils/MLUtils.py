@@ -23,6 +23,7 @@ class MLUtils:
         loss = 'scc',
         learning_rate = 0.001,
         batch_size = 32,
+        seed = 42,
         **kwargs
     ):
         self.prefix = None
@@ -30,8 +31,10 @@ class MLUtils:
         self.optimizer = optimizer
         self.optimizer_name = optimizer
         self.loss = loss
+        self.loss_name = loss
         self.learning_rate = learning_rate
         self.batch_size = batch_size
+        self.seed = seed
         self.init()
         self.model = model.get_model(self.prefix, self.dataset)
         self.n_samples = None

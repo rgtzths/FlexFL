@@ -23,6 +23,7 @@ class Tensorflow(MLUtils):
         self.prefix = 'tf'
         self.loss = LOSSES[self.loss]()
         self.optimizer = OPTIMIZERS[self.optimizer](learning_rate=self.learning_rate)
+        tf.random.set_seed(self.seed)
 
 
     def load_data(self, split):

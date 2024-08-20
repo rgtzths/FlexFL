@@ -20,26 +20,23 @@ class MPI(CommUtils):
     
 
     def send_master(self, data):
-        self.comm.send(self.pickle.dumps(data), dest=0)
+        self.comm.send(data, dest=0)
 
 
     def recv_master(self):
-        data = self.comm.recv(source=0)
-        return self.pickle.loads(data)
+        return self.comm.recv(source=0)
     
 
     def send_worker(self, worker_id, data):
-        data = self.pickle.dumps(data)
-        self.comm.send(data, dest=worker_id+1)
+        self.comm.send(data, dest = worker_id + 1)
     
 
     def send_workers(self, data):
-        data = self.pickle.dumps(data)
         for i in range(1, self.size):
             self.comm.send(data, dest=i)
 
 
     def recv_worker(self):
         data = self.comm.recv(source=MPI4py.ANY_SOURCE, status=self.status)
-        return (self.status.Get_source()-1, self.pickle.loads(data))
+        return (self.status.Get_source()-1, data)
         

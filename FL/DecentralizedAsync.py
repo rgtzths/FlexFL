@@ -13,7 +13,7 @@ class DecentralizedAsync(FLUtils):
         super().__init__(**kwargs)
         self.local_epochs = local_epochs
         self.alpha = alpha
-        self.base_path += f'_{self.local_epochs}_{self.alpha}'
+        self.base_path += f'/{self.local_epochs}/{self.alpha}'
 
 
 

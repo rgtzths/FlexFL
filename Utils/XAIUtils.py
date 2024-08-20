@@ -15,7 +15,7 @@ class XAIUtils():
     ):
         self.dataset = dataset
         self.ml = ml
-        self.file_path
+        self.file_path = file_path
         self.model = getattr(self, f"load_{ml}")()
 
 
