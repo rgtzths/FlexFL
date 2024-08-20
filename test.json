@@ -3,5 +3,5 @@
     "model": "UNSW",
     "ml": "tf",
     "comm": "mpi",
-    "fl": 3
+    "fl": "da"
 }

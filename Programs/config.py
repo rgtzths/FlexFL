@@ -82,10 +82,10 @@ COMM = {
 }
 
 FL = {
-    1: CentralizedAsync,
-    2: CentralizedSync,
-    3: DecentralizedAsync,
-    4: DecentralizedSync
+    'ca': CentralizedAsync,
+    'cs': CentralizedSync,
+    'da': DecentralizedAsync,
+    'ds': DecentralizedSync
 }
 
 XAI = {

@@ -17,7 +17,7 @@ new_args = set(
         )
     )
 )
-new_args -= {'args', 'kwargs', 'file', 'dataset', 'ml', 'comm', 'fl', 'model'}
+new_args -= {'args', 'kwargs', 'file', 'dataset', 'ml', 'comm', 'fl', 'model', 'verbose'}
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--file", type=str, required=False, help="Config file")
@@ -25,17 +25,18 @@ parser.add_argument("-d", "--dataset", type=str, required=False, help="Dataset n
 parser.add_argument("-m", "--model", type=str, required=False, help="Model name", choices=MODELS.keys())
 parser.add_argument("--ml", type=str, required=False, help="ML framework", choices=ML.keys())
 parser.add_argument("-c", "--comm", type=str, required=False, help="Communication framework", choices=COMM.keys())
-parser.add_argument("--fl", type=int, required=False, help="FL framework", choices=FL.keys())
+parser.add_argument("--fl", type=str, required=False, help="FL framework", choices=FL.keys())
+parser.add_argument("-v", "--verbose", required=False, action='store_true', default=False, help="Verbose")
 for arg in new_args:
     parser.add_argument(f"--{arg}", type=str, required=False, help=f"{arg}")
-args = parser.parse_args()
+parser_args = parser.parse_args()
 
-args = vars(args)
-if args['file'] is not None:
-    with open(args['file'], 'r') as f:
-        file_args = json.load(f)
-        args.update(file_args)
-args = {k: v for k, v in args.items() if v is not None}
+parser_args = vars(parser_args)
+parser_args = {k: v for k, v in parser_args.items() if v is not None}
+if 'file' in parser_args:
+    with open(parser_args['file'], 'r') as f:
+        args = json.load(f)
+        args.update(parser_args)
 
 dataset = DATASETS[args.pop('dataset')]()
 model = MODELS[args.pop('model')]()
@@ -43,10 +44,12 @@ ml = ML[args.pop('ml')](model = model, dataset = dataset, **args)
 comm = COMM[args.pop('comm')]()
 fl = FL[args.pop('fl')](ml = ml, comm = comm, **args)
 
-# print(f"\nDataset {dataset.__class__.__name__}:\n{dataset}")
-# print(f"\nModel {model.__class__.__name__}")
-# print(f"\nML {ml.__class__.__name__}:\n{ml}")
-# print(f"\nComm: {comm.__class__.__name__}")
-# print(f"\nFL {fl.__class__.__name__}:\n{fl}")
+if args['verbose']:
+    print(f"\nDataset {dataset.__class__.__name__}:\n{dataset}")
+    print(f"\nModel {model.__class__.__name__}")
+    print(f"\nML {ml.__class__.__name__}:\n{ml}")
+    print(f"\nComm: {comm.__class__.__name__}")
+    print(f"\nFL {fl.__class__.__name__}:\n{fl}")
 
+exit()
 fl.run()
