@@ -98,8 +98,7 @@ class DecentralizedAsync(FLUtils):
 
     def worker_train(self):
         
-        for epoch in range(self.epochs):
-            epoch_start = time()
+        for _ in range(self.epochs):
             self.ml.train(self.local_epochs)
 
             weights = self.ml.get_weights()

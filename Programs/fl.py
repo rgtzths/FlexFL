@@ -44,12 +44,11 @@ ml = ML[args.pop('ml')](model = model, dataset = dataset, **args)
 comm = COMM[args.pop('comm')]()
 fl = FL[args.pop('fl')](ml = ml, comm = comm, **args)
 
-if args['verbose']:
+if args['verbose'] and comm.is_master():
     print(f"\nDataset {dataset.__class__.__name__}:\n{dataset}")
     print(f"\nModel {model.__class__.__name__}")
     print(f"\nML {ml.__class__.__name__}:\n{ml}")
     print(f"\nComm: {comm.__class__.__name__}")
     print(f"\nFL {fl.__class__.__name__}:\n{fl}")
 
-exit()
 fl.run()
