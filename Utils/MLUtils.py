@@ -33,7 +33,7 @@ class MLUtils:
         self.loss = loss
         self.loss_name = loss
         self.learning_rate = learning_rate
-        self.batch_size = batch_size
+        self.batch_size = int(batch_size)
         self.seed = seed
         self.init()
         self.model = model.get_model(self.prefix, self.dataset)

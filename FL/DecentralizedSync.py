@@ -78,6 +78,7 @@ class DecentralizedSync(FLUtils):
             self.comm.send_workers(avg_weights)
             print(f'Epoch {epoch + 1}, Time: {time() - epoch_start:.2f}s')
             self.validate(epoch)
+            self.comm.send_workers(self.stop)
 
 
 
@@ -88,6 +89,9 @@ class DecentralizedSync(FLUtils):
             weights = self.ml.get_weights()
             self.comm.send_master(weights)
             self.ml.set_weights(self.comm.recv_master())
+            stop = self.comm.recv_master()
+            if stop:
+                break
 
 
 

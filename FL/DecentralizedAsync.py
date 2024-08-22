@@ -86,13 +86,13 @@ class DecentralizedAsync(FLUtils):
             self.ml.set_weights(local_weights)
 
             self.comm.send_worker(worker_id, weight_diffs)
-            self.comm.send_worker(worker_id, self.stop)
 
             if self.stop:
                 exited_workers +=1
             
             if epoch % self.comm.n_workers == self.comm.n_workers-1:
                 self.validate(epoch)
+            self.comm.send_worker(worker_id, self.stop)
   
 
 

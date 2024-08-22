@@ -36,6 +36,7 @@ class Tensorflow(MLUtils):
     def load_worker_data(self, worker_id, num_workers):
         x, y = self.dataset.load_worker_data(worker_id, num_workers)
         self.my_data = tf.data.Dataset.from_tensor_slices((x, y)).batch(self.batch_size)
+        self.my_iterator = iter(self.my_data)
 
 
     def compile_model(self):
@@ -51,11 +52,19 @@ class Tensorflow(MLUtils):
 
 
     def get_gradients(self):
-        ...
+        with tf.GradientTape() as tape:
+            try:
+                x, y = next(self.my_iterator)
+            except StopIteration:
+                self.my_iterator = iter(self.my_data)
+                x, y = next(self.my_iterator)
+            y_pred = self.model(x, training=True)
+            loss = self.loss(y, y_pred)
+        return tape.gradient(loss, self.model.trainable_variables)
 
 
     def apply_gradients(self, gradients):
-        ...
+        self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
 
 
     def train(self, epochs):
