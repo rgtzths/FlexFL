@@ -35,7 +35,7 @@ from ML.Tensorflow import Tensorflow as MLtf
 from Comm.MPI import MPI as CommMPI
 
 # FL
-from FL.CentralizesAsync import CentralizedAsync
+from FL.CentralizedAsync import CentralizedAsync
 from FL.CentralizedSync import CentralizedSync
 from FL.DecentralizedAsync import DecentralizedAsync
 from FL.DecentralizedSync import DecentralizedSync
