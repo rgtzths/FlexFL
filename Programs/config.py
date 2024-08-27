@@ -26,6 +26,8 @@ from Datasets.Slicing5G import Slicing5G
 # models
 from Models.IOT_DNL_M1 import IOT_DNL_M1
 from Models.UNSW_M1 import UNSW_M1
+from Models.CIFAR10_M1 import CIFAR10_M1
+from Models.FASHION_M1 import FASHION_M1
 
 # ML
 from ML.Torch import Torch as MLtorch
@@ -41,7 +43,8 @@ from FL.DecentralizedAsync import DecentralizedAsync
 from FL.DecentralizedSync import DecentralizedSync
 
 # XAI
-
+from XAI.GradCAM import GradCAM
+from XAI.IntegratedGrads import IntegratedGrads
 
 # update tf logging level
 import tensorflow as tf
@@ -69,7 +72,9 @@ DATASETS = {
 
 MODELS = {
     'IOT_DNL': IOT_DNL_M1,
-    'UNSW': UNSW_M1
+    'UNSW': UNSW_M1,
+    'CIFAR10': CIFAR10_M1,
+    'FASHION': FASHION_M1
 }
 
 ML = {
@@ -89,5 +94,6 @@ FL = {
 }
 
 XAI = {
-
+    'GradCAM': GradCAM,
+    'IntegratedGrads': IntegratedGrads
 }
