@@ -45,6 +45,8 @@ from FL.DecentralizedSync import DecentralizedSync
 # XAI
 from XAI.GradCAM import GradCAM
 from XAI.IntegratedGrads import IntegratedGrads
+from XAI.PDV import PDV
+from XAI.PI import PI
 
 # update tf logging level
 import tensorflow as tf
@@ -95,5 +97,7 @@ FL = {
 
 XAI = {
     'GradCAM': GradCAM,
-    'IntegratedGrads': IntegratedGrads
+    'IntegratedGrads': IntegratedGrads,
+    'PDV': PDV,
+    'PI': PI
 }

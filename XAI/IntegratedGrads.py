@@ -44,7 +44,6 @@ class IntegratedGrads(XAIUtils):
         np.save(file, explanations)
 
 
-
     # Tensorflow
 
     def get_gradients(self, img_input, top_pred_idx):
@@ -107,7 +106,7 @@ class IntegratedGrads(XAIUtils):
         self.img_size = x_test[0].shape
 
         explanations = []
-        for sample in x_test[:10]:
+        for sample in x_test:
             exp = self.heatmaps_tf(sample)
             explanations.append(exp)
 

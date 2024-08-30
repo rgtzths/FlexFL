@@ -35,21 +35,27 @@ class XAIUtils():
         x_test = torch.tensor(x_test)
         y_test = torch.tensor(y_test)
 
-        if len(x_test.shape) == 4:
-            self.channels = x_test.shape[-1]
-            x_test = x_test.permute(0, 3, 1, 2)
-        else:
-            self.channels = 1
-            width = x_test.shape[1]
-            height = x_test.shape[2]
-            x_test = x_test.reshape(-1, 1, width, height)
+        data_type = "tabular" if "Tabular" in self.dataset.metadata["type"] else "image"
 
-        y_test = y_test.reshape(-1)
-        
-        test_dataset = TensorDataset(x_test, y_test)
-        test_dataloader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False)
+        if data_type == "tabular":
+            return x_test.float(), y_test
 
-        return test_dataloader
+        elif data_type == "image":
+            if len(x_test.shape) == 4:
+                self.channels = x_test.shape[-1]
+                x_test = x_test.permute(0, 3, 1, 2)
+            else:
+                self.channels = 1
+                width = x_test.shape[1]
+                height = x_test.shape[2]
+                x_test = x_test.reshape(-1, 1, width, height)
+
+            y_test = y_test.reshape(-1)
+            
+            test_dataset = TensorDataset(x_test, y_test)
+            test_dataloader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False)
+
+            return test_dataloader
 
 
     def load_model_tf(self):
