@@ -1,5 +1,8 @@
 import pprint
 
+from Utils.ModelUtils import ModelUtils
+from Utils.DatasetUtils import DatasetUtils
+
 class MLUtils:
     """
     Functions to implement in the child class:
@@ -11,19 +14,18 @@ class MLUtils:
     - get_gradients(self)
     - apply_gradients(self, gradients)
     - train(self, epochs)
-    - evaluate(self, split)
+    - predict(self, data)
     - save_model(self, path)
     - load_model(self, path)
     """
 
     def __init__(self, *,
-        model,
-        dataset,
+        model: ModelUtils,
+        dataset: DatasetUtils,
         optimizer = 'adam',
         loss = 'scc',
         learning_rate = 0.001,
         batch_size = 32,
-        seed = 42,
         **kwargs
     ):
         self.prefix = None
@@ -34,7 +36,6 @@ class MLUtils:
         self.loss_name = loss
         self.learning_rate = learning_rate
         self.batch_size = int(batch_size)
-        self.seed = seed
         self.init()
         self.model = model.get_model(self.prefix, self.dataset)
         self.n_samples = None

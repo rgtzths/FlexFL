@@ -23,7 +23,6 @@ class Tensorflow(MLUtils):
         self.prefix = 'tf'
         self.loss = LOSSES[self.loss]()
         self.optimizer = OPTIMIZERS[self.optimizer](learning_rate=self.learning_rate)
-        tf.random.set_seed(self.seed)
 
 
     def load_data(self, split):
@@ -75,8 +74,8 @@ class Tensorflow(MLUtils):
         )
 
 
-    def predict(self, split):
-        return np.argmax(self.model.predict(getattr(self, f"{split}_data"), verbose=0), axis=1)
+    def predict(self, data):
+        return self.model.predict(data, verbose=0)
     
 
     def save_model(self, path):
