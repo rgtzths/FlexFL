@@ -1,13 +1,14 @@
 import pprint
 from abc import ABC, abstractmethod
+from typing import Optional
 
 class CommUtils(ABC):
 
     def __init__(self,
         **kwargs
     ):
-        self.n_workers = None
-        self.worker_id = None
+        self.n_workers: Optional[int] = None
+        self.worker_id: Optional[int] = None
 
 
     @abstractmethod
@@ -72,7 +73,7 @@ class CommUtils(ABC):
         Receives data from any worker process
 
         Returns:
-            tuple[int, any]: the id of the worker process and the received data
+            tuple (int, any): the id of the worker process and the received data
         """
         pass
 

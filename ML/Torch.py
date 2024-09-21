@@ -8,5 +8,5 @@ LOSSES = {}
 
 class Torch(MLUtils):
     
-    def init(self):
+    def setup(self):
         self.prefix = 'torch'

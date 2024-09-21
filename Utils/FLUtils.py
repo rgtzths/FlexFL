@@ -5,9 +5,11 @@ from permetrics import RegressionMetric, ClassificationMetric
 import numpy as np
 from time import time
 from collections import deque
+import logging
 
 from Utils.MLUtils import MLUtils
 from Utils.CommUtils import CommUtils
+from Utils.Logger import Logger
 
 CLASSIFICATIONS = {'scc'}
 METRICS = {
@@ -30,7 +32,7 @@ class FLUtils(ABC):
         ml: MLUtils,
         comm: CommUtils,
         epochs = 10,
-        max_score = 0.99,
+        target_score = None,
         patience = 5,
         delta = 0.01,
         main_metric: str = None, # MCC for classification, SMAPE for regression
@@ -40,7 +42,7 @@ class FLUtils(ABC):
         self.ml = ml
         self.comm = comm
         self.epochs = epochs
-        self.max_score = max_score
+        self.target_score = target_score
         self.patience = patience
         self.delta = delta
         self.stop = False
@@ -98,7 +100,7 @@ class FLUtils(ABC):
             main_metric (str): the main metric to be used for early stopping
 
         Returns:
-            list[str]: the metrics to be used for validation and early stopping, where the first metric is the main metric
+            list (str): the metrics to be used for validation and early stopping, where the first metric is the main metric
         """
 
         all_metrics, self.evaluator = (
@@ -115,10 +117,13 @@ class FLUtils(ABC):
 
     def create_base_path(self) -> None:
         """
-        Create the base path for the results in the master node
+        Create the base path for the results and configure the logging
         """
+        Path(self.base_path).mkdir(parents=True, exist_ok=True)
         if self.comm.is_master():
-            Path(self.base_path).mkdir(parents=True, exist_ok=True)
+            Logger.setup_master(self.base_path)
+        else:
+            Logger.setup_worker(self.base_path, self.comm.worker_id)
 
 
     def run(self) -> None:
@@ -130,11 +135,28 @@ class FLUtils(ABC):
         # TODO: do something with the time
         self.last_time = time()
         if self.comm.is_master():
-            _, self.y_val = self.ml.load_data('val')
             self.master_train()
         else:
-            self.ml.load_worker_data(self.comm.worker_id, self.comm.n_workers)
             self.worker_train()
+        self.end()
+
+
+    def end(self) -> None:
+        """
+        End the Federated Learning
+        """
+        if self.comm.is_master():
+            self.ml.set_weights(self.best_weights)
+            self.ml.save_model(f'{self.base_path}/model')
+            for _ in range(self.comm.n_workers):
+                worker_id, logs = self.comm.recv_worker()
+                with open(f'{self.base_path}/worker_{worker_id}.log', 'w') as f:
+                    f.write(logs)
+        else:
+            with open(f'{self.base_path}/worker_{self.comm.worker_id}.log', 'r') as f:
+                logs = f.read()
+            self.comm.send_master(logs)
+            
 
 
     def validate(self, epoch: int) -> float:
@@ -147,8 +169,8 @@ class FLUtils(ABC):
         Returns:
             float: the new score
         """
-        
-        preds = self.ml.predict(self.y_val)
+
+        preds = self.ml.predict(self.x_val)
         if self.is_classification:
             preds = np.argmax(preds, axis=1)
         metrics = self.evaluator(self.y_val, preds).get_metrics_by_list_names(self.metrics)
@@ -180,6 +202,12 @@ class FLUtils(ABC):
         Returns:
             bool: True if the training should stop early and False otherwise
         """
+        if (
+            self.target_score is not None and
+            self.is_classification and new_score > self.target_score or
+            not self.is_classification and new_score < self.target_score
+        ):
+            return True
 
         if len(self.buffer) < self.patience:
             self.buffer.append(new_score)

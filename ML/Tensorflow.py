@@ -19,7 +19,7 @@ LOSSES = {
 class Tensorflow(MLUtils):
     
     
-    def init(self):
+    def setup(self):
         self.prefix = 'tf'
         self.loss = LOSSES[self.loss]()
         self.optimizer = OPTIMIZERS[self.optimizer](learning_rate=self.learning_rate)
@@ -36,6 +36,7 @@ class Tensorflow(MLUtils):
         x, y = self.dataset.load_worker_data(worker_id, num_workers)
         self.my_data = tf.data.Dataset.from_tensor_slices((x, y)).batch(self.batch_size)
         self.my_iterator = iter(self.my_data)
+        return x, y
 
 
     def compile_model(self):
@@ -79,8 +80,8 @@ class Tensorflow(MLUtils):
     
 
     def save_model(self, path):
-        self.model.save(path)
+        self.model.save(f"{path}.keras")
 
 
     def load_model(self, path):
-        self.model = tf.keras.models.load_model(path)
+        self.model = tf.keras.models.load_model(f"{path}.keras")
