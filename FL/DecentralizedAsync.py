@@ -41,8 +41,11 @@ class DecentralizedAsync(FLUtils):
 
 
     def worker_train(self):
-        ...
-
-        
-
-        
+        stop = False
+        while not stop:
+            self.ml.train(self.local_epochs)
+            weights = self.ml.get_weights()
+            self.comm.send_master(weights)
+            new_weights = self.comm.recv_master()
+            self.ml.set_weights(new_weights)
+            stop = self.comm.recv_master()

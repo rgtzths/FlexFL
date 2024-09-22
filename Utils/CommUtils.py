@@ -57,17 +57,6 @@ class CommUtils(ABC):
 
 
     @abstractmethod
-    def send_workers(self, data: any) -> None:
-        """
-        Sends data to all worker processes
-
-        Parameters:
-            data (any): the data to send
-        """
-        pass
-
-
-    @abstractmethod
     def recv_worker(self) -> tuple[int, any]:
         """
         Receives data from any worker process
@@ -76,6 +65,31 @@ class CommUtils(ABC):
             tuple (int, any): the id of the worker process and the received data
         """
         pass
+
+
+    @abstractmethod
+    def get_size(self, data: any) -> int:
+        """
+        Get the size of the data
+
+        Parameters:
+            data (any): the data to get the size of
+
+        Returns:
+            int: the size of the data
+        """
+        pass
+
+
+    def send_workers(self, data: any) -> None:
+        """
+        Sends data to all worker processes
+
+        Parameters:
+            data (any): the data to send
+        """
+        for worker_id in range(self.n_workers):
+            self.send_worker(worker_id, data)
 
 
     def __str__(self):

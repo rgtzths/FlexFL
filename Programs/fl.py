@@ -17,7 +17,7 @@ new_args = set(
         )
     )
 )
-new_args -= {'args', 'kwargs', 'file', 'dataset', 'ml', 'comm', 'fl', 'model', 'verbose'}
+new_args -= {'args', 'kwargs', 'file', 'dataset', 'ml', 'comm', 'fl', 'model', 'verbose', 'all_args'}
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--file", type=str, required=False, help="Config file")
@@ -38,11 +38,13 @@ if 'file' in parser_args:
         args = json.load(f)
         args.update(parser_args)
 
+all_args = {**args}
+
 dataset = DATASETS[args.pop('dataset')]()
 model = MODELS[args.pop('model')]()
 ml = ML[args.pop('ml')](model = model, dataset = dataset, **args)
 comm = COMM[args.pop('comm')]()
-fl = FL[args.pop('fl')](ml = ml, comm = comm, **args)
+fl = FL[args.pop('fl')](ml = ml, comm = comm, all_args = all_args, **args)
 
 if args['verbose'] and comm.is_master():
     print(f"\nDataset {dataset.__class__.__name__}:\n{dataset}")

@@ -26,7 +26,7 @@ class MLUtils(ABC):
         optimizer = 'adam',
         loss = 'scc',
         learning_rate = 0.001,
-        batch_size = 32,
+        batch_size = 1024,
         **kwargs
     ):
         self.prefix = None

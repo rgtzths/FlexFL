@@ -5,7 +5,7 @@ from permetrics import RegressionMetric, ClassificationMetric
 import numpy as np
 from time import time
 from collections import deque
-import logging
+import json
 
 from Utils.MLUtils import MLUtils
 from Utils.CommUtils import CommUtils
@@ -37,6 +37,7 @@ class FLUtils(ABC):
         delta = 0.01,
         main_metric: str = None, # MCC for classification, SMAPE for regression
         seed = 42,
+        all_args = None,
         **kwargs
     ):
         self.ml = ml
@@ -45,7 +46,6 @@ class FLUtils(ABC):
         self.target_score = target_score
         self.patience = patience
         self.delta = delta
-        self.stop = False
         self.is_classification = self.ml.loss_name in CLASSIFICATIONS
         self.metrics  = self.get_metrics(main_metric) # first metric used for early stopping
         self.buffer = deque(maxlen=patience)
@@ -53,6 +53,7 @@ class FLUtils(ABC):
         self.best_score = None
         self.best_weights = None
         self.last_time = 0
+        self.all_args = all_args
 
         self.base_path = (
             'Results/' +
@@ -124,6 +125,8 @@ class FLUtils(ABC):
             Logger.setup_master(self.base_path)
         else:
             Logger.setup_worker(self.base_path, self.comm.worker_id)
+        with open(f'{self.base_path}/args.json', 'w') as f:
+            json.dump(self.all_args, f, indent=4)
 
 
     def run(self) -> None:
@@ -152,7 +155,9 @@ class FLUtils(ABC):
                 worker_id, logs = self.comm.recv_worker()
                 with open(f'{self.base_path}/worker_{worker_id}.log', 'w') as f:
                     f.write(logs)
+            Logger.end()
         else:
+            Logger.end()
             with open(f'{self.base_path}/worker_{self.comm.worker_id}.log', 'r') as f:
                 logs = f.read()
             self.comm.send_master(logs)
@@ -175,12 +180,11 @@ class FLUtils(ABC):
             preds = np.argmax(preds, axis=1)
         metrics = self.evaluator(self.y_val, preds).get_metrics_by_list_names(self.metrics)
         new_time = time()
-        print(f"Epoch {epoch}/{self.epochs} - Time: {new_time - self.last_time:.2f}s")
+        delta_time = new_time - self.last_time
+        Logger.results(epoch, delta_time, metrics)
+        print(f"Epoch {epoch}/{self.epochs} - Time: {delta_time:.2f}s")
         self.last_time = new_time
-        print("Validation Metrics:")
-        for metric in metrics:
-            print(f"{metric}: {metrics[metric]:.4f}", end=', ')
-        print()
+        print(', '.join(f'{name}: {value:.4f}' for name, value in metrics.items()))
         new_score = metrics[self.metrics[0]]
         if (
             self.best_score is None or
@@ -204,8 +208,8 @@ class FLUtils(ABC):
         """
         if (
             self.target_score is not None and
-            self.is_classification and new_score > self.target_score or
-            not self.is_classification and new_score < self.target_score
+            self.is_classification and new_score >= self.target_score or
+            not self.is_classification and new_score <= self.target_score
         ):
             return True
 
@@ -223,9 +227,9 @@ class FLUtils(ABC):
         
         self.buffer.append(new_score)
         if self.is_classification:
-            return not any(score > self.compare_score + self.delta for score in self.buffer)
+            return not any(score >= self.compare_score + self.delta for score in self.buffer)
         else:
-            return not any(score < self.compare_score - self.delta for score in self.buffer)
+            return not any(score <= self.compare_score - self.delta for score in self.buffer)
             
 
     def __str__(self):
