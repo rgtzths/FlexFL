@@ -3,7 +3,7 @@ import inspect
 from itertools import chain
 import json
 
-from config import DATASETS, ML, COMM, FL, UTILS, MODELS
+from config import DATASETS, ML, COMM, FL, MODELS
 
 new_args = set(
     chain.from_iterable(
@@ -13,7 +13,6 @@ new_args = set(
             ML.values(), 
             COMM.values(), 
             FL.values(),
-            UTILS.values()
         )
     )
 )
