@@ -36,7 +36,7 @@ class GradCAM(XAIUtils):
         last_conv_layer = self.last_conv_layer_torch()
         explainer = LayerGradCam(self.model, last_conv_layer)
         explanations = self.heatmaps_torch(explainer, self.data)
-        np.save(file, explanations)
+        np.save(f"{file}.npy", explanations)
 
 
     # Tensorflow

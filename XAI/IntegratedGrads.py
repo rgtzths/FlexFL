@@ -27,7 +27,7 @@ class IntegratedGrads(XAIUtils):
         explanations = explanations.detach().numpy()
 
         if self.channels == 1:
-            heatmaps = [viz._normalize_attr(exp, "absolute_value") for exp in explanations]
+            heatmaps = [viz._normalize_attr(exp, "absolute_value")[0] for exp in explanations]
         else:
             heatmaps = []
             for exp in explanations:
@@ -41,7 +41,7 @@ class IntegratedGrads(XAIUtils):
     def run_torch(self, file):
         explainer = IntegratedGradients(self.model)
         explanations = self.heatmaps_torch(explainer, self.data)
-        np.save(file, explanations)
+        np.save(f"{file}.npy", explanations)
 
 
     # Tensorflow
@@ -106,9 +106,9 @@ class IntegratedGrads(XAIUtils):
         self.img_size = x_test[0].shape
 
         explanations = []
-        for sample in x_test:
+        for sample in x_test[:10]:
             exp = self.heatmaps_tf(sample)
             explanations.append(exp)
 
         explanations = np.array(explanations)
-        np.save(file, explanations)
+        np.save(f"{file}.npy", explanations)

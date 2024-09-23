@@ -39,7 +39,7 @@ class PI(XAIUtils):
             predictor=self.predict_fn_torch, score_fns='accuracy', feature_names=features
         )
         explanations = explainer.explain(X=x_test.numpy(), y=y_test.numpy(), kind='difference')
-        self.save_importances(explanations, file)
+        self.save_importances(explanations, f"{file}.json")
 
 
     # Tensorflow
@@ -56,4 +56,4 @@ class PI(XAIUtils):
             predictor=self.predict_fn_tf, score_fns='accuracy', feature_names=features
         )
         explanations = explainer.explain(X=x_test, y=y_test, kind='difference')
-        self.save_importances(explanations, file)
+        self.save_importances(explanations, f"{file}.json")

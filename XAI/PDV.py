@@ -39,7 +39,7 @@ class PDV(XAIUtils):
             predictor=self.predict_fn_torch, feature_names=features
         )
         explanations = explainer.explain(X=x_test.numpy(), method="importance")
-        self.save_importances(explanations, file)
+        self.save_importances(explanations, f"{file}.json")
 
 
     # Tensorflow
@@ -56,4 +56,4 @@ class PDV(XAIUtils):
             predictor=self.predict_fn_tf, feature_names=features
         )
         explanations = explainer.explain(X=x_test, method="importance")
-        self.save_importances(explanations, file)
+        self.save_importances(explanations, f"{file}.json")
