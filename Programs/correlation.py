@@ -11,7 +11,7 @@ CORR = {
 
 parser = argparse.ArgumentParser()
 parser.add_argument('file1', help="Filename 1")
-parser.add_argument('file2', help="Filename2")
+parser.add_argument('file2', help="Filename 2")
 parser.add_argument("-t", type=str, required=True, help="Problem type", choices=['tabular', 'image'])
 parser.add_argument("-f", type=str, required=True, help="Correlations filename")
 args = parser.parse_args()
@@ -20,7 +20,6 @@ Path("Results/Correlations").mkdir(parents=True, exist_ok=True)
 
 
 def correlation_images():
-
     heatmaps1 = np.load(args.file1)
     heatmaps2 = np.load(args.file2)
     

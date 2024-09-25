@@ -47,6 +47,7 @@ from XAI.GradCAM import GradCAM
 from XAI.IntegratedGrads import IntegratedGrads
 from XAI.PDV import PDV
 from XAI.PI import PI
+from XAI.ALE import ALE
 
 # update tf logging level
 import tensorflow as tf
@@ -99,5 +100,6 @@ XAI = {
     'GradCAM': GradCAM,
     'IntegratedGrads': IntegratedGrads,
     'PDV': PDV,
-    'PI': PI
+    'PI': PI,
+    'ALE': ALE
 }
