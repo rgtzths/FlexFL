@@ -43,11 +43,11 @@ from FL.DecentralizedAsync import DecentralizedAsync
 from FL.DecentralizedSync import DecentralizedSync
 
 # XAI
-from XAI.GradCAM import GradCAM
-from XAI.IntegratedGrads import IntegratedGrads
-from XAI.PDV import PDV
-from XAI.PI import PI
-from XAI.ALE import ALE
+# from XAI.GradCAM import GradCAM
+# from XAI.IntegratedGrads import IntegratedGrads
+# from XAI.PDV import PDV
+# from XAI.PI import PI
+# from XAI.ALE import ALE
 
 # update tf logging level
 import tensorflow as tf
@@ -96,10 +96,10 @@ FL = {
     'ds': DecentralizedSync
 }
 
-XAI = {
-    'GradCAM': GradCAM,
-    'IntegratedGrads': IntegratedGrads,
-    'PDV': PDV,
-    'PI': PI,
-    'ALE': ALE
-}
+# XAI = {
+#     'GradCAM': GradCAM,
+#     'IntegratedGrads': IntegratedGrads,
+#     'PDV': PDV,
+#     'PI': PI,
+#     'ALE': ALE
+# }
