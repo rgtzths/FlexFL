@@ -11,10 +11,10 @@ class CentralizedSync(FLUtils):
             for _ in range(self.comm.n_workers):
                 worker_id, n_batches = self.comm.recv_worker()
                 self.node_weights[worker_id] = n_batches
-            sum_n_batches = sum(self.node_weights)
-            self.total_n_batches = max(self.node_weights)
-            self.total_batches = self.total_n_batches * self.epochs
-            self.node_weights = [n_batches / sum_n_batches for n_batches in self.node_weights]
+            batches_sum = sum(self.node_weights)
+            self.epoch_batches = batches_sum // self.comm.n_workers
+            self.total_batches = self.epoch_batches * self.epochs
+            self.node_weights = [n_batches / batches_sum for n_batches in self.node_weights]
             self.comm.send_workers(self.ml.get_weights())
         else:
             x_train, _ = self.ml.load_worker_data(self.comm.worker_id, self.comm.n_workers)
@@ -41,7 +41,7 @@ class CentralizedSync(FLUtils):
 
             self.ml.apply_gradients(avg_grads)
             self.comm.send_workers(self.ml.get_weights())
-            if batch % self.total_n_batches == 0:
+            if batch % self.epoch_batches == 0:
                 epoch += 1
                 new_score = self.validate(epoch)
                 stop = self.early_stop(new_score) or epoch == self.epochs
