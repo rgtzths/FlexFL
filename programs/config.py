@@ -50,17 +50,3 @@ def get_modules_and_args(folders: list[str]) -> tuple[dict[str, dict[str, object
         if type_ in (int, float, str, bool)
     }
     return modules, args
-
-
-FOLDERS: list[str] = [
-    "utils",
-    "comm",
-    "datasets",
-    "message_layers",
-    "fl_algorithms",
-    "ml_frameworks",
-    "neural_networks",
-    "worker_managers",
-]
-
-MODULES, ALL_ARGS = get_modules_and_args(FOLDERS)
