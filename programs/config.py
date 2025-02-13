@@ -19,7 +19,8 @@ def get_classes(folder: str) -> dict[str, object]:
             spec = importlib.util.spec_from_file_location(f"{folder}.{class_name}", class_path)
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
-            classes[class_name] = getattr(module, class_name)
+            if hasattr(module, class_name):
+                classes[class_name] = getattr(module, class_name)
     return classes
 
 
@@ -33,6 +34,24 @@ def get_arguments(class_: object) -> Generator[tuple[str, type], None, None]:
     }.items()
 
 
+def get_modules_and_args(folders: list[str]) -> tuple[dict[str, dict[str, object]], dict[str, type]]:
+    """
+    Gets all modules and arguments
+    """
+    modules: dict[str, dict[str, object]] = {
+        module: get_classes(module) 
+        for module in folders 
+    }
+    args: dict[str, type] = {
+        arg: type_
+        for module in modules.values()
+        for class_ in module.values()
+        for arg, type_ in get_arguments(class_)
+        if type_ in (int, float, str, bool)
+    }
+    return modules, args
+
+
 FOLDERS: list[str] = [
     "utils",
     "comm",
@@ -44,15 +63,4 @@ FOLDERS: list[str] = [
     "worker_managers",
 ]
 
-MODULES: dict[str, dict[str, object]] = {
-    module: get_classes(module) 
-    for module in FOLDERS 
-}
-
-ALL_ARGS: dict[str, type] = {
-    arg: type_
-    for module in MODULES.values()
-    for class_ in module.values()
-    for arg, type_ in get_arguments(class_)
-    if type_ in (int, float, str, bool)
-}
+MODULES, ALL_ARGS = get_modules_and_args(FOLDERS)
