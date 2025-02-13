@@ -34,14 +34,14 @@ def get_arguments(class_: object) -> Generator[tuple[str, type], None, None]:
 
 
 FOLDERS: list[str] = [
-    "Utils",
-    "Comm",
-    "Datasets",
-    "Messages",
-    "FL",
-    "ML",
-    "NeuralNetworks",
-    "WorkerManagers",
+    "utils",
+    "comm",
+    "datasets",
+    "message_layers",
+    "fl_algorithms",
+    "ml_frameworks",
+    "neural_networks",
+    "worker_managers",
 ]
 
 MODULES: dict[str, dict[str, object]] = {

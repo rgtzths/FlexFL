@@ -1,8 +1,7 @@
-Data/**
-Results/**
+data/**
+results/**
 
 test.py
-
 
 !.keep
 

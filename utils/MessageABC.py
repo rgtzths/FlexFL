@@ -5,12 +5,9 @@ class MessageABC(ABC):
     Message layer abstract base class
     """
 
-    def __init__(self,
-        b,
-        a: int = 1,
-        **kwargs
-    ):
-        ...
+    def __init__(self, **kwargs) -> None:
+        return
+    
 
     @abstractmethod
     def encode(self, message: str) -> str:
