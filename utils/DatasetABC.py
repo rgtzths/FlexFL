@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 import json
+import numpy as np
+from sklearn.model_selection import train_test_split
+import wget
+import zipfile
 
 METADATA_FOLDER = "my_datasets/_metadata"
 DATA_FOLDER = "data"
@@ -9,11 +13,6 @@ DATA_FOLDER = "data"
 class DatasetABC(ABC):
 
     def __init__(self, **kwargs) -> None:
-        global np, train_test_split, wget, zipfile
-        import numpy as np
-        from sklearn.model_selection import train_test_split
-        import wget
-        import zipfile
         self.name = self.__class__.__name__
         self.metadata = {}
         self.load_metadata()

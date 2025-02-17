@@ -1,6 +1,6 @@
 import argparse
 import json
-from config import get_modules_and_args
+from config import get_modules_and_args, load_class
 
 FOLDERS: list[str] = [
     "utils",
@@ -30,18 +30,18 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--config', type=str, help="Path to config JSON file", required=False)
 
 parser.add_argument('-c', '--comm', type=str, help="Communication layer", choices=MODULES["comm"].keys(), default="Zenoh")
-parser.add_argument('-d', '--dataset', type=str, help="Dataset", choices=MODULES["datasets"].keys(), default="IOT_DNL")
+parser.add_argument('-d', '--dataset', type=str, help="Dataset", choices=MODULES["my_datasets"].keys(), default="IOT_DNL")
 parser.add_argument('-m', '--message_layer', type=str, help="Message layer", choices=MODULES["message_layers"].keys(), default="Raw")
 parser.add_argument('--nn', type=str, help="Neural network", choices=MODULES["neural_networks"].keys(), required=False)
 parser.add_argument('--fl', type=str, help="Federated learning algorithm", choices=MODULES["fl_algorithms"].keys(), default="DecentralizedSync")
 parser.add_argument('--ml', type=str, help="Machine learning framework", choices=MODULES["ml_frameworks"].keys(), default="TensorFlow")
 parser.add_argument('--wm', type=str, help="Worker manager", choices=MODULES["worker_managers"].keys(), default="All")
 
-for arg, type_ in ALL_ARGS.items():
+for arg, (type_, value) in ALL_ARGS.items():
     if type_ == bool:
-        parser.add_argument(f'--{arg}', action=argparse.BooleanOptionalAction, required=False)
+        parser.add_argument(f'--{arg}', action=argparse.BooleanOptionalAction, required=False, help=f"Default: {type_.__name__} = {value}")
     else:
-        parser.add_argument(f'--{arg}', type=type_, required=False)
+        parser.add_argument(f'--{arg}', type=type_, required=False, help=f"Default: {type_.__name__} = {value}")
 
 args = parser.parse_args()
 if args.config is not None:

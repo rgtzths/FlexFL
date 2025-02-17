@@ -1,13 +1,11 @@
+import kaggle
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
+
 from utils.DatasetABC import DatasetABC, DATA_FOLDER
-from utils.ImportsABC import ImportsABC
 
 
-class IOT_DNL(DatasetABC, ImportsABC):
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self.imports()
-    
+class IOT_DNL(DatasetABC):
 
     @property
     def is_classification(self) -> bool:
@@ -22,13 +20,6 @@ class IOT_DNL(DatasetABC, ImportsABC):
     @property
     def output_shape(self) -> tuple[int]:
         return (6,)
-    
-
-    def imports(self):
-        global kaggle, pd, StandardScaler
-        import kaggle
-        import pandas as pd
-        from sklearn.preprocessing import StandardScaler
 
 
     def download(self):
