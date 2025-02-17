@@ -1,8 +1,5 @@
-from utils.ImportsABC import ImportsABC, TYPE_CHECKING
+from utils.ImportsABC import ImportsABC
 from utils.CommABC import CommABC
-
-if TYPE_CHECKING:
-    ...
 
 class Zenoh(CommABC, ImportsABC):
     

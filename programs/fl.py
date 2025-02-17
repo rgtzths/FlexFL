@@ -5,7 +5,7 @@ from config import get_modules_and_args
 FOLDERS: list[str] = [
     "utils",
     "comm",
-    "datasets",
+    "my_datasets",
     "message_layers",
     "fl_algorithms",
     "ml_frameworks",
