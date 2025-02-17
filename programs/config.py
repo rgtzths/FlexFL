@@ -36,7 +36,7 @@ def get_args_from_node(node: ast.FunctionDef) -> dict[str, tuple[type, str]]:
     return args
 
 
-def get_args_from_file(filename: str) -> dict[str, type]:
+def get_args_from_file(filename: str) -> dict[str, tuple[type, str]]:
     with open(filename, "r", encoding="utf-8") as file:
         tree = ast.parse(file.read(), filename=filename)
     class_name = Path(filename).stem
@@ -56,10 +56,10 @@ def get_modules_and_args(folders: list[str]) -> tuple[dict[str, dict[str, str]],
         for module in folders 
     }
     args: dict[str, tuple[type, str]] = {
-        arg: type_
+        arg: val
         for module in modules.values()
         for class_ in module.values()
-        for arg, type_ in get_args_from_file(class_).items()
+        for arg, val in get_args_from_file(class_).items()
     }
     return modules, args
 

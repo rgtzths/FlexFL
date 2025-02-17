@@ -45,6 +45,22 @@ class DatasetABC(ABC):
         pass
 
 
+    @abstractmethod
+    def download(self):
+        """
+        Downloads the dataset
+        """
+        pass
+
+
+    @abstractmethod
+    def preprocess(self, val_size, test_size):
+        """
+        Preprocesses the dataset
+        """
+        pass
+
+
     def load_metadata(self):
         path = Path(f'{METADATA_FOLDER}/{self.name}.json')
         if path.exists():

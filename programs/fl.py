@@ -50,5 +50,7 @@ if args.config is not None:
     parser.set_defaults(**config)
 args = parser.parse_args()
 args = {k: v for k, v in vars(args).items() if v is not None}
+if "nn" not in args:
+    args["nn"] = args["dataset"]
 
 print(args)
