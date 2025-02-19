@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 class NeuralNetworkABC(ABC):
     """
-    Implement a function "{ml_prefix}_model" for each ml framework
+    Implement a function "{ml_prefix}_model" for each ml framework (do the imports inside the function)
     """
 
     def __init__(self, **kwargs) -> None:

@@ -17,7 +17,7 @@ MODULES, ALL_ARGS = get_modules_and_args(FOLDERS)
 
 ALIASES = {
     "DecentralizedSync": "ds",
-    "TensorFlow": "tf",
+    "Tensorflow": "tf",
 }
 
 for m, classes in list(MODULES.items()):
