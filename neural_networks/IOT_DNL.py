@@ -1,4 +1,4 @@
-from utils.NeuralNetworkABC import NeuralNetworkABC
+from my_builtins.NeuralNetworkABC import NeuralNetworkABC
 
 class IOT_DNL(NeuralNetworkABC):
         

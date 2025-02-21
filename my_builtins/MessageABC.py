@@ -10,7 +10,7 @@ class MessageABC(ABC):
     
 
     @abstractmethod
-    def encode(self, message: str) -> str:
+    def encode(self, message: any) -> bytes:
         """
         Encodes the message
         """
@@ -18,7 +18,7 @@ class MessageABC(ABC):
     
 
     @abstractmethod
-    def decode(self, message: str) -> str:
+    def decode(self, message: any) -> bytes:
         """
         Decodes the message
         """

@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 from itertools import cycle
 
-from utils.MLFrameworkABC import MLFrameworkABC
+from my_builtins.MLFrameworkABC import MLFrameworkABC
 
 OPTIMIZERS = {
     'adam': tf.keras.optimizers.Adam,

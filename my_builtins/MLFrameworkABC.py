@@ -2,8 +2,8 @@ from abc import ABC, abstractmethod
 import numpy as np
 import random
 
-from utils.DatasetABC import DatasetABC
-from utils.NeuralNetworkABC import NeuralNetworkABC
+from my_builtins.DatasetABC import DatasetABC
+from my_builtins.NeuralNetworkABC import NeuralNetworkABC
 
 
 class MLFrameworkABC(ABC):

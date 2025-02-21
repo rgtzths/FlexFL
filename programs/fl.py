@@ -3,8 +3,8 @@ import json
 from config import get_modules_and_args, load_class
 
 FOLDERS: list[str] = [
-    "utils",
-    "comm",
+    "my_builtins",
+    "comms",
     "my_datasets",
     "message_layers",
     "fl_algorithms",
@@ -29,7 +29,7 @@ for m, classes in list(MODULES.items()):
 parser = argparse.ArgumentParser()
 parser.add_argument('--config', type=str, help="Path to config JSON file", required=False)
 
-parser.add_argument('-c', '--comm', type=str, help="Communication layer", choices=MODULES["comm"].keys(), default="Zenoh")
+parser.add_argument('-c', '--comm', type=str, help="Communication layer", choices=MODULES["comms"].keys(), default="Zenoh")
 parser.add_argument('-d', '--dataset', type=str, help="Dataset", choices=MODULES["my_datasets"].keys(), default="IOT_DNL")
 parser.add_argument('-m', '--message_layer', type=str, help="Message layer", choices=MODULES["message_layers"].keys(), default="Raw")
 parser.add_argument('--nn', type=str, help="Neural network", choices=MODULES["neural_networks"].keys(), required=False)
