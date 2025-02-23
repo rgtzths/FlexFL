@@ -1,5 +1,7 @@
 import queue
 import zenoh
+from datetime import datetime
+import pickle
 
 from my_builtins.CommABC import CommABC
 
@@ -15,6 +17,7 @@ class Zenoh(CommABC):
         self.session = zenoh.open(self.zconf)
         self._id = None
         self._nodes = set()
+        self._start_time = datetime.now()
         self.total_nodes = 0
         self.q = queue.Queue()
         self.discover()
@@ -28,6 +31,11 @@ class Zenoh(CommABC):
     @property
     def nodes(self) -> set[int]:
         return self._nodes
+    
+
+    @property
+    def start_time(self) -> datetime:
+        return self._start_time
 
 
     def send(self, node_id: int, data: bytes) -> None:
@@ -36,7 +44,7 @@ class Zenoh(CommABC):
 
 
     def recv(self, node_id: int = None) -> tuple[int, bytes]:
-        assert node_id is None
+        assert node_id is None, "Support for specific node_id not implemented"
         return self.q.get()
     
 
@@ -47,7 +55,8 @@ class Zenoh(CommABC):
     def handle_id(self, query: zenoh.Query):
         self.total_nodes += 1
         self._nodes.add(self.total_nodes)
-        query.reply(query.key_expr, f"{self.total_nodes}")
+        payload = (self.total_nodes, self.start_time)
+        query.reply(query.key_expr, pickle.dumps(payload))
 
 
     def handle_liveliness(self, sample: zenoh.Sample):
@@ -67,7 +76,7 @@ class Zenoh(CommABC):
     def discover(self) -> None:
         replies = self.session.get(DISCOVER)
         for r in replies:
-            self._id = int(r.ok.payload.to_string())
+            self._id, self._start_time = pickle.loads(r.ok.payload.to_bytes())
             self.liveliness_token = self.session.liveliness().declare_token(f"{LIVELINESS}/{self.id}")
         if self.id is None:
             self._id = 0

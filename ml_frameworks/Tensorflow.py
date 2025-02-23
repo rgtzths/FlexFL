@@ -85,11 +85,11 @@ class Tensorflow(MLFrameworkABC):
         self.optimizer.apply_gradients(zip(grads_list, trainable_vars))
 
     
-    def train(self, epochs: int) -> None:
+    def train(self, epochs: int, verbose=False) -> None:
         self.model.fit(
             self.my_data,
             epochs=epochs,
-            verbose=0
+            verbose=1 if verbose else 0
         )
 
     

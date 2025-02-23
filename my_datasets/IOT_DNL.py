@@ -13,13 +13,8 @@ class IOT_DNL(DatasetABC):
     
 
     @property
-    def input_shape(self) -> tuple[int]:
-        return (11,)
-    
-
-    @property
-    def output_shape(self) -> tuple[int]:
-        return (6,)
+    def output_size(self) -> int:
+        return 6
 
 
     def download(self):

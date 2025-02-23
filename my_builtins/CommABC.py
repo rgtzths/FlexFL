@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 class CommABC(ABC):
     """
@@ -23,6 +24,15 @@ class CommABC(ABC):
     def nodes(self) -> set[int]:
         """
         Returns the set of nodes
+        """
+        pass
+
+    
+    @property
+    @abstractmethod
+    def start_time(self) -> datetime:
+        """
+        Returns the start time of the communication layer
         """
         pass
 

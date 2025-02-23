@@ -10,7 +10,6 @@ FOLDERS: list[str] = [
     "fl_algorithms",
     "ml_frameworks",
     "neural_networks",
-    "worker_managers",
 ]
 
 MODULES, ALL_ARGS = get_modules_and_args(FOLDERS)
@@ -21,10 +20,10 @@ ALIASES = {
 }
 
 for m, classes in list(MODULES.items()):
-    for class_name, obj in list(classes.items()):
-        MODULES[m][class_name.lower()] = obj
+    for class_name, path in list(classes.items()):
+        MODULES[m][class_name.lower()] = path
         if class_name in ALIASES:
-            MODULES[m][ALIASES[class_name]] = obj
+            MODULES[m][ALIASES[class_name]] = path
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--config', type=str, help="Path to config JSON file", required=False)
@@ -35,7 +34,6 @@ parser.add_argument('-m', '--message_layer', type=str, help="Message layer", cho
 parser.add_argument('--nn', type=str, help="Neural network", choices=MODULES["neural_networks"].keys(), required=False)
 parser.add_argument('--fl', type=str, help="Federated learning algorithm", choices=MODULES["fl_algorithms"].keys(), default="DecentralizedSync")
 parser.add_argument('--ml', type=str, help="Machine learning framework", choices=MODULES["ml_frameworks"].keys(), default="TensorFlow")
-parser.add_argument('--wm', type=str, help="Worker manager", choices=MODULES["worker_managers"].keys(), default="All")
 
 for arg, (type_, value) in ALL_ARGS.items():
     if type_ == bool:

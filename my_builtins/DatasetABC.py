@@ -29,18 +29,9 @@ class DatasetABC(ABC):
 
     @property
     @abstractmethod
-    def input_shape(self) -> tuple[int]:
+    def output_size(self) -> int:
         """
-        Returns the shape of the input for the neural network
-        """
-        pass
-
-
-    @property
-    @abstractmethod
-    def output_shape(self) -> tuple[int]:
-        """
-        Returns the shape of the output for the neural network
+        Returns the size of the output for the neural network
         """
         pass
 
@@ -71,8 +62,7 @@ class DatasetABC(ABC):
                 "name": self.name, 
                 "link": "", 
                 "type": "classification" if self.is_classification else "regression", 
-                "input_shape": list(self.input_shape),
-                "output_shape": list(self.output_shape),
+                "output_size": self.output_size,
                 "info": ""
             }
             self.save_metadata()

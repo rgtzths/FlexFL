@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Any
 
 class MessageABC(ABC):
     """
@@ -10,7 +11,7 @@ class MessageABC(ABC):
     
 
     @abstractmethod
-    def encode(self, message: any) -> bytes:
+    def encode(self, message: Any) -> bytes:
         """
         Encodes the message
         """
@@ -18,7 +19,7 @@ class MessageABC(ABC):
     
 
     @abstractmethod
-    def decode(self, message: any) -> bytes:
+    def decode(self, message: Any) -> bytes:
         """
         Decodes the message
         """

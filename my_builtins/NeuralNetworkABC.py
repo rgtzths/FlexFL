@@ -1,4 +1,7 @@
-from abc import ABC, abstractmethod
+from abc import ABC
+from typing import Any
+
+from my_builtins.DatasetABC import DatasetABC
 
 class NeuralNetworkABC(ABC):
     """
@@ -9,7 +12,8 @@ class NeuralNetworkABC(ABC):
         return
     
 
-    def get_model(self, ml_prefix, dataset) -> any:
+    def get_model(self, ml_prefix: str, dataset: DatasetABC) -> Any:
         input_shape = tuple(dataset.metadata['input_shape'])
-        output_shape = tuple(dataset.metadata['output_shape'])
-        return getattr(self, f"{ml_prefix}_model")(input_shape, output_shape)
+        output_size = dataset.metadata['output_size']
+        is_classification = dataset.is_classification
+        return getattr(self, f"{ml_prefix}_model")(input_shape, output_size, is_classification)

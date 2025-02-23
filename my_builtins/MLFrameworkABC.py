@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 import random
+from typing import Any
 
 from my_builtins.DatasetABC import DatasetABC
 from my_builtins.NeuralNetworkABC import NeuralNetworkABC
@@ -105,7 +106,7 @@ class MLFrameworkABC(ABC):
 
 
     @abstractmethod
-    def train(self, epochs: int) -> None:
+    def train(self, epochs: int, verbose=False) -> None:
         """
         Train the model
         """
@@ -113,7 +114,7 @@ class MLFrameworkABC(ABC):
 
 
     @abstractmethod
-    def predict(self, data: any) -> np.array:
+    def predict(self, data: Any) -> np.array:
         """
         Predict the data
         """
