@@ -5,6 +5,8 @@ from my_builtins.MessageABC import MessageABC
 
 class WorkerManager():
 
+    MASTER_ID = 0
+
     def __init__(self, *, 
         c: CommABC,
         m: MessageABC,

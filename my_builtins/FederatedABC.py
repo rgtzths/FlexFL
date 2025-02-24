@@ -6,6 +6,7 @@ from pathlib import Path
 from time import time
 import numpy as np
 from typing import Any
+import random
 
 from my_builtins.WorkerManager import WorkerManager
 from my_builtins.MLFrameworkABC import MLFrameworkABC
@@ -60,7 +61,7 @@ class FederatedABC(ABC):
 
 
     @abstractmethod
-    def get_worker_info(self) -> dict:
+    def master_setup(self):
         pass
 
 
@@ -70,17 +71,17 @@ class FederatedABC(ABC):
 
 
     @abstractmethod
-    def worker_run(self, work: Any):
-        pass
-
-
-    @abstractmethod
-    def master_setup(self):
+    def get_worker_info(self) -> dict:
         pass
 
 
     @abstractmethod
     def master_loop(self):
+        pass
+
+
+    @abstractmethod
+    def worker_run(self, work: Any):
         pass
 
 
@@ -112,15 +113,12 @@ class FederatedABC(ABC):
 
 
     def run(self):
-        start = time()
         if self.is_master:
             self.master_setup()
         else:
             self.worker_setup()
             self.wm.setup_worker_info(self.get_worker_info())
-        end = time()
-        print(f"Setup time: {end - start:.2f}s")
-        self.last_time = end
+        self.last_time = time()
         if self.is_master:
             self.master_loop()
         else:
@@ -149,26 +147,26 @@ class FederatedABC(ABC):
         print(f"Epoch {epoch}/{self.epochs} - Time: {delta_time:.2f}s")
         self.last_time = new_time
         print(', '.join(f'{name}: {value:.4f}' for name, value in metrics.items()))
-        new_score = metrics[self.metrics[0]]
+        self.new_score = metrics[self.metrics[0]]
         if (
             self.best_score is None or
-            (self.is_classification and new_score > self.best_score) or
-            (not self.is_classification and new_score < self.best_score)
+            (self.is_classification and self.new_score > self.best_score) or
+            (not self.is_classification and self.new_score < self.best_score)
         ):
-            self.best_score = new_score
+            self.best_score = self.new_score
             self.best_weights = self.ml.get_weights()
-        return new_score
+        return metrics
     
 
-    def early_stop(self, new_score: float) -> bool:
+    def early_stop(self) -> bool:
         if (
-            (self.is_classification and new_score >= self.target_score) or
-            (not self.is_classification and new_score <= self.target_score)
+            (self.is_classification and self.new_score >= self.target_score) or
+            (not self.is_classification and self.new_score <= self.target_score)
         ):
             return True
 
         if len(self.buffer) < self.patience:
-            self.buffer.append(new_score)
+            self.buffer.append(self.new_score)
             return False
         
         old_score = self.buffer.popleft()
@@ -179,8 +177,18 @@ class FederatedABC(ABC):
         ):
             self.compare_score = old_score
         
-        self.buffer.append(new_score)
+        self.buffer.append(self.new_score)
         if self.is_classification:
             return not any(score >= self.compare_score + self.delta for score in self.buffer)
         else:
             return not any(score <= self.compare_score - self.delta for score in self.buffer)
+        
+
+    def random_pool(self, size: int, workers_info: dict) -> list[int]:
+        workers = list(workers_info.keys())
+        return random.sample(workers, size)
+    
+
+    def random_worker(self, workers_info: dict, responses: dict) -> int:
+        workers = set(workers_info.keys()) - set(responses.keys())
+        return random.choice(list(workers)) if workers else None
