@@ -4,6 +4,8 @@ from collections import deque
 import json
 from pathlib import Path
 from time import time
+import numpy as np
+from typing import Any
 
 from my_builtins.WorkerManager import WorkerManager
 from my_builtins.MLFrameworkABC import MLFrameworkABC
@@ -34,6 +36,7 @@ class FederatedABC(ABC):
         patience: int = 5,
         delta: float = 0.01,
         main_metric: str = None,
+        min_workers: int = 2,
         **kwargs
     ) -> None:
         self.ml = ml
@@ -44,6 +47,7 @@ class FederatedABC(ABC):
         self.patience = patience
         self.delta = delta
         self.main_metric = main_metric
+        self.min_workers = min_workers
         
         self.buffer = deque(maxlen=patience)
         self.compare_score = None
@@ -56,34 +60,27 @@ class FederatedABC(ABC):
 
 
     @abstractmethod
-    def master_setup(self) -> None:
-        """
-        Setup the master environment
-        """
+    def get_worker_info(self) -> dict:
         pass
 
 
     @abstractmethod
-    def worker_setup(self) -> None:
-        """
-        Setup the worker environment
-        """
+    def worker_setup(self):
         pass
 
 
     @abstractmethod
-    def master_train(self) -> None:
-        """
-        Master train loop
-        """
+    def worker_run(self, work: Any):
         pass
 
 
     @abstractmethod
-    def worker_train(self) -> None:
-        """
-        Worker train loop
-        """
+    def master_setup(self):
+        pass
+
+
+    @abstractmethod
+    def master_loop(self):
         pass
 
 
@@ -112,7 +109,6 @@ class FederatedABC(ABC):
         Path(self.base_path).mkdir(parents=True, exist_ok=True)
         with open(f"{self.base_path}/args.json", "w") as f:
             json.dump(self.all_args, f, indent=4)
-        # TODO setup logger
 
 
     def run(self):
@@ -121,18 +117,70 @@ class FederatedABC(ABC):
             self.master_setup()
         else:
             self.worker_setup()
-        setup_time = time() - start
-        self.last_time = time()
+            self.wm.setup_worker_info(self.get_worker_info())
+        end = time()
+        print(f"Setup time: {end - start:.2f}s")
+        self.last_time = end
         if self.is_master:
-            self.master_train()
+            self.master_loop()
         else:
-            self.worker_train()
+            while True:
+                _, work = self.wm.recv()
+                if work is None:
+                    break
+                self.worker_run(work)
         self.end()
-
+                
 
     def end(self):
         if self.is_master:
             self.ml.set_weights(self.best_weights)
             self.ml.save_model(f"{self.base_path}/model")
-        # TODO gather logs
         self.wm.c.close()
+
+
+    def validate(self, epoch: int, x, y) -> float:
+        preds = self.ml.predict(x)
+        if self.is_classification:
+            preds = np.argmax(preds, axis=1)
+        metrics = self.evaluator(y, preds).get_metrics_by_list_names(self.metrics)
+        new_time = time()
+        delta_time = new_time - self.last_time
+        print(f"Epoch {epoch}/{self.epochs} - Time: {delta_time:.2f}s")
+        self.last_time = new_time
+        print(', '.join(f'{name}: {value:.4f}' for name, value in metrics.items()))
+        new_score = metrics[self.metrics[0]]
+        if (
+            self.best_score is None or
+            (self.is_classification and new_score > self.best_score) or
+            (not self.is_classification and new_score < self.best_score)
+        ):
+            self.best_score = new_score
+            self.best_weights = self.ml.get_weights()
+        return new_score
+    
+
+    def early_stop(self, new_score: float) -> bool:
+        if (
+            (self.is_classification and new_score >= self.target_score) or
+            (not self.is_classification and new_score <= self.target_score)
+        ):
+            return True
+
+        if len(self.buffer) < self.patience:
+            self.buffer.append(new_score)
+            return False
+        
+        old_score = self.buffer.popleft()
+        if (
+            self.compare_score is None or
+            (self.is_classification and old_score > self.compare_score) or
+            (not self.is_classification and old_score < self.compare_score)
+        ):
+            self.compare_score = old_score
+        
+        self.buffer.append(new_score)
+        if self.is_classification:
+            return not any(score >= self.compare_score + self.delta for score in self.buffer)
+        else:
+            return not any(score <= self.compare_score - self.delta for score in self.buffer)
