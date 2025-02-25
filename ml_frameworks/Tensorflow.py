@@ -49,12 +49,12 @@ class Tensorflow(MLFrameworkABC):
         self.model.compile(optimizer=self.optimizer, loss=self.loss)
 
 
-    def get_weights(self) -> np.array:
+    def get_weights(self) -> np.ndarray:
         weights = self.model.get_weights()
         return np.concatenate([w.flatten() for w in weights])
     
 
-    def set_weights(self, weights: np.array) -> None:
+    def set_weights(self, weights: np.ndarray) -> None:
         start = 0
         new_weights = []
         for w in self.model.get_weights():
@@ -64,7 +64,7 @@ class Tensorflow(MLFrameworkABC):
         self.model.set_weights(new_weights)
 
     
-    def get_gradients(self) -> np.array:
+    def get_gradients(self) -> np.ndarray:
         with tf.GradientTape() as tape:
             x, y = next(self.my_iterator)
             y_pred = self.model(x, training=True)
@@ -73,7 +73,7 @@ class Tensorflow(MLFrameworkABC):
         return np.concatenate([g.numpy().flatten() for g in gradients])
     
 
-    def apply_gradients(self, gradients: np.array) -> None:
+    def apply_gradients(self, gradients: np.ndarray) -> None:
         start = 0
         grads_list = []
         trainable_vars = self.model.trainable_variables

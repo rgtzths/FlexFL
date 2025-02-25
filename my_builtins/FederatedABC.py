@@ -55,18 +55,18 @@ class FederatedABC(ABC):
         self.best_score = None
         self.best_weights = None
         self.last_time = 0
+        self.is_classification = None
+        self.metrics = None
+        self.evaluator = None
+        self.new_score = None
+        self.is_master = None
 
         self.setup_metrics()
         self.setup_nodes()
 
 
     @abstractmethod
-    def master_setup(self):
-        pass
-
-
-    @abstractmethod
-    def worker_setup(self):
+    def setup(self):
         pass
 
 
@@ -113,10 +113,8 @@ class FederatedABC(ABC):
 
 
     def run(self):
-        if self.is_master:
-            self.master_setup()
-        else:
-            self.worker_setup()
+        self.setup()
+        if not self.is_master:
             self.wm.setup_worker_info(self.get_worker_info())
         self.last_time = time()
         if self.is_master:

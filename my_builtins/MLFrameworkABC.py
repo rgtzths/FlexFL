@@ -74,7 +74,7 @@ class MLFrameworkABC(ABC):
 
 
     @abstractmethod
-    def get_weights(self) -> np.array:
+    def get_weights(self) -> np.ndarray:
         """
         Get the model weights
         """
@@ -82,7 +82,7 @@ class MLFrameworkABC(ABC):
 
 
     @abstractmethod
-    def set_weights(self, weights: np.array) -> None:
+    def set_weights(self, weights: np.ndarray) -> None:
         """
         Set the model weights
         """
@@ -90,7 +90,7 @@ class MLFrameworkABC(ABC):
 
 
     @abstractmethod
-    def get_gradients(self) -> np.array:
+    def get_gradients(self) -> np.ndarray:
         """
         Get the model gradients
         """
@@ -98,7 +98,7 @@ class MLFrameworkABC(ABC):
 
 
     @abstractmethod
-    def apply_gradients(self, gradients: np.array) -> None:
+    def apply_gradients(self, gradients: np.ndarray) -> None:
         """
         Set the model gradients
         """
@@ -114,7 +114,7 @@ class MLFrameworkABC(ABC):
 
 
     @abstractmethod
-    def predict(self, data: Any) -> np.array:
+    def predict(self, data: Any) -> np.ndarray:
         """
         Predict the data
         """

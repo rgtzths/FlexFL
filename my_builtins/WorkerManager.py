@@ -17,6 +17,10 @@ class WorkerManager():
         self.worker_info = {}
 
 
+    def get_all_workers(self) -> list[int]:
+        return list(self.c.nodes - {0})
+
+
     def send(self, worker_id: int, payload: Any) -> None:
         data = self.m.encode(payload)
         self.c.send(worker_id, data)
@@ -24,6 +28,8 @@ class WorkerManager():
 
     def recv(self, worker_id: int=None) -> tuple[int, Any]:
         node_id, data = self.c.recv(worker_id)
+        if data is None:
+            return node_id, None
         data = self.m.decode(data)
         return node_id, data
     
