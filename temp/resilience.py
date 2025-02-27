@@ -16,7 +16,7 @@ print(f"Node {z.id} started")
 
 while True:
     time.sleep(5)
-    # continue
+    continue
     count += 1
 
     if z.id == 0:

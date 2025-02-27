@@ -6,7 +6,7 @@ from datetime import datetime
 from kafka import KafkaProducer, KafkaConsumer
 from kafka.admin import KafkaAdminClient
 from uuid import uuid4
-import argparse
+from typing import Any, Generator
 
 from my_builtins.CommABC import CommABC
 
@@ -89,7 +89,7 @@ class Kafka(CommABC):
             self.admin.close()
 
 
-    def get_msgs(self, res):
+    def get_msgs(self, res: dict[Any, list]) -> Generator:
         if len(res) == 0:
             return
         for _, messages in res.items():
@@ -100,7 +100,7 @@ class Kafka(CommABC):
     def discover(self):
         self.producer.send(DISCOVER, pickle.dumps(self._uuid))
         self.producer.flush()
-        res = self.consumer.poll(timeout_ms=5000, max_records=1)
+        res = self.consumer.poll(timeout_ms=3000, max_records=1)
         if len(res) == 0:
             self._id = 0
             self.admin = KafkaAdminClient(bootstrap_servers=self.kafka_broker)
@@ -149,11 +149,7 @@ class Kafka(CommABC):
         while self.running:
             for msg in self.get_msgs(self.live_sub.poll(timeout_ms=500)):
                 node_id= int.from_bytes(msg.value, "big")
-                timestamp = datetime.now()
-                if node_id not in self.hearbeats:
-                    self.hearbeats[node_id] = timestamp
-                else:
-                    self.hearbeats[node_id] = max(self.hearbeats[node_id], timestamp)
+                self.hearbeats[node_id] = datetime.now()
             for node_id, timestamp in list(self.hearbeats.items()):
                 if (datetime.now() - timestamp).total_seconds() > TIMEOUT:
                     self.admin.delete_topics([f"{TOPIC}_{self.id_mapping[node_id]}"])
