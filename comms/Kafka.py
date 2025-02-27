@@ -4,7 +4,9 @@ import time
 import threading
 from datetime import datetime
 from kafka import KafkaProducer, KafkaConsumer
+from kafka.admin import KafkaAdminClient
 from uuid import uuid4
+import argparse
 
 from my_builtins.CommABC import CommABC
 
@@ -38,6 +40,7 @@ class Kafka(CommABC):
         )
         self.discover_sub = None
         self.live_sub = None
+        self.admin = None
         self.id_mapping = {}
         self.hearbeats = {}
         self.threads: list[threading.Thread] = []
@@ -75,11 +78,15 @@ class Kafka(CommABC):
         self.running = False
         self.producer.close()
         self.consumer.close()
+        for thread in self.threads:
+            thread.join()
         if self.id == 0:
             self.discover_sub.close()
             self.live_sub.close()
-        for thread in self.threads:
-            thread.join()
+            topics = self.admin.list_topics()
+            topics = [topic for topic in topics if topic.startswith(TOPIC)]
+            self.admin.delete_topics(topics)
+            self.admin.close()
 
 
     def get_msgs(self, res):
@@ -96,6 +103,7 @@ class Kafka(CommABC):
         res = self.consumer.poll(timeout_ms=5000, max_records=1)
         if len(res) == 0:
             self._id = 0
+            self.admin = KafkaAdminClient(bootstrap_servers=self.kafka_broker)
             self.threads.append(threading.Thread(target=self.handle_discover))
             self.threads.append(threading.Thread(target=self.handle_liveliness))
         else:
@@ -148,7 +156,9 @@ class Kafka(CommABC):
                     self.hearbeats[node_id] = max(self.hearbeats[node_id], timestamp)
             for node_id, timestamp in list(self.hearbeats.items()):
                 if (datetime.now() - timestamp).total_seconds() > TIMEOUT:
+                    self.admin.delete_topics([f"{TOPIC}_{self.id_mapping[node_id]}"])
                     self._nodes.remove(node_id)
+                    self.id_mapping.pop(node_id)
                     self.hearbeats.pop(node_id)
                     self.q.put((node_id, None))
 
@@ -167,3 +177,15 @@ class Kafka(CommABC):
                 node_id = int.from_bytes(data[:4], "big")
                 data = data[4:]
                 self.q.put((node_id, data))
+
+
+    @staticmethod
+    def delete_all_topics(ip: str = "localhost", port: int = 9092):
+        kafka_broker = f"{ip}:{port}"
+        admin = KafkaAdminClient(bootstrap_servers=kafka_broker)
+        topics = admin.list_topics()
+        topics = [topic for topic in topics if not topic.startswith("__")]
+        print(f"Topics: {topics}")
+        admin.delete_topics(topics)
+        admin.close()
+        print("✅ All topics deleted successfully!")
