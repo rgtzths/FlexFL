@@ -7,14 +7,16 @@ load_dotenv()
 import time
 
 from comms.Zenoh import Zenoh
+from comms.Kafka import Kafka
 
 count = 0
-z = Zenoh()
+z = Kafka()
 
 print(f"Node {z.id} started")
 
 while True:
     time.sleep(5)
+    # continue
     count += 1
 
     if z.id == 0:
