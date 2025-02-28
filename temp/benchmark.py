@@ -9,14 +9,17 @@ sys.path.append(".")
 load_dotenv()
 
 import argparse
+from my_builtins.CommABC import CommABC
 from comms.Zenoh import Zenoh
 from comms.Kafka import Kafka
 from comms.MQTT import MQTT
+# from comms.MPI import MPI
 
 COMMS = {
     "zenoh": Zenoh,
     "kafka": Kafka,
     "mqtt": MQTT,
+    # "mpi": MPI,
 }
 
 LOOPS = 1000
@@ -25,7 +28,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--comms", type=str, default="zenoh")
 parser.add_argument("--anchor", action=argparse.BooleanOptionalAction, default=False)
 args = parser.parse_args()
-c = COMMS[args.comms](is_anchor=args.anchor)
+c: CommABC  = COMMS[args.comms](is_anchor=args.anchor)
 print(f"Node {c.id} started")
 
 payload = np.array([random.randint(0, 100) for _ in range(10000)], dtype=np.uint8)

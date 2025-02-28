@@ -7,21 +7,24 @@ load_dotenv()
 import time
 
 import argparse
+from my_builtins.CommABC import CommABC
 from comms.Zenoh import Zenoh
 from comms.Kafka import Kafka
 from comms.MQTT import MQTT
+# from comms.MPI import MPI
 
 COMMS = {
     "zenoh": Zenoh,
     "kafka": Kafka,
     "mqtt": MQTT,
+    # "mpi": MPI,
 }
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--comms", type=str, default="zenoh")
 parser.add_argument("--anchor", action=argparse.BooleanOptionalAction, default=False)
 args = parser.parse_args()
-c = COMMS[args.comms](is_anchor=args.anchor)
+c: CommABC = COMMS[args.comms](is_anchor=args.anchor)
 print(f"Node {c.id} started")
 
 count = 0
