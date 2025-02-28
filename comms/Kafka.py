@@ -14,37 +14,36 @@ TOPIC = "fl"
 DISCOVER = "fl_discover"
 LIVENESS = "fl_liveness"
 TIMEOUT = 2
+HEARTBEAT = 0.5
 
 class Kafka(CommABC):
     
     def __init__(self, *, 
-        ip: str = "localhost",
-        port: int = 9092,
+        kafka_ip: str = "localhost",
+        kafka_port: int = 9092,
+        is_anchor: bool = False,
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
-        self.kafka_broker = f"{ip}:{port}"
+        self.kafka_broker = f"{kafka_ip}:{kafka_port}"
         self._id = None
+        self.is_anchor = is_anchor
         self._uuid = uuid4()
         self._nodes = set()
         self._start_time = datetime.now()
         self.q = queue.Queue()
         self.total_nodes = 0
-        self.producer = KafkaProducer(bootstrap_servers=self.kafka_broker)
-        self.consumer = KafkaConsumer(
-            f"{TOPIC}_{self._uuid}",
-            group_id=f"fl_{self._uuid}",
-            bootstrap_servers=self.kafka_broker,
-            auto_offset_reset="earliest",
-            enable_auto_commit=True,
-        )
-        self.discover_sub = None
-        self.live_sub = None
-        self.admin = None
         self.id_mapping = {}
         self.hearbeats = {}
-        self.threads: list[threading.Thread] = []
         self.running = True
+        self.threads: list[threading.Thread] = []
+        self.admin: KafkaAdminClient = None
+        if self.is_anchor:
+            self.clear()
+        self.producer: KafkaProducer = None
+        self.consumer: KafkaConsumer = None
+        self.discover_sub: KafkaConsumer = None
+        self.live_sub: KafkaConsumer = None
         self.discover()
 
 
@@ -89,6 +88,13 @@ class Kafka(CommABC):
             self.admin.close()
 
 
+    def clear(self):
+        self.admin = KafkaAdminClient(bootstrap_servers=self.kafka_broker)
+        topics = self.admin.list_topics()
+        topics = [topic for topic in topics if not topic.startswith("__")]
+        self.admin.delete_topics(topics)
+
+
     def get_msgs(self, res: dict[Any, list]) -> Generator:
         if len(res) == 0:
             return
@@ -98,15 +104,27 @@ class Kafka(CommABC):
 
 
     def discover(self):
-        self.producer.send(DISCOVER, pickle.dumps(self._uuid))
-        self.producer.flush()
-        res = self.consumer.poll(timeout_ms=3000, max_records=1)
-        if len(res) == 0:
+        self.producer = KafkaProducer(bootstrap_servers=self.kafka_broker)
+        self.consumer = KafkaConsumer(
+            f"{TOPIC}_{self._uuid}",
+            group_id=f"fl_{self._uuid}",
+            bootstrap_servers=self.kafka_broker,
+            auto_offset_reset="earliest",
+            enable_auto_commit=True,
+        )
+        if self.is_anchor:
             self._id = 0
-            self.admin = KafkaAdminClient(bootstrap_servers=self.kafka_broker)
+            self._nodes.add(0)
             self.threads.append(threading.Thread(target=self.handle_discover))
             self.threads.append(threading.Thread(target=self.handle_liveliness))
         else:
+            self.producer.send(DISCOVER, pickle.dumps(self._uuid))
+            self.producer.flush()
+            res = self.consumer.poll(timeout_ms=10000, max_records=1)
+            if len(res) == 0:
+                print("No anchor found")
+                self.close()
+                exit(1)
             for msg in self.get_msgs(res):
                 self._id, uuid, self._start_time = pickle.loads(msg.value)
                 self.id_mapping[0] = uuid
@@ -126,7 +144,7 @@ class Kafka(CommABC):
             enable_auto_commit=True,
         )
         while self.running:
-            for msg in self.get_msgs(self.discover_sub.poll(timeout_ms=500)):
+            for msg in self.get_msgs(self.discover_sub.poll(timeout_ms=1000)):
                 uuid = pickle.loads(msg.value)
                 if uuid == self._uuid:
                     continue
@@ -147,8 +165,8 @@ class Kafka(CommABC):
             enable_auto_commit=True,
         )
         while self.running:
-            for msg in self.get_msgs(self.live_sub.poll(timeout_ms=500)):
-                node_id= int.from_bytes(msg.value, "big")
+            for msg in self.get_msgs(self.live_sub.poll(timeout_ms=1000)):
+                node_id = int.from_bytes(msg.value)
                 self.hearbeats[node_id] = datetime.now()
             for node_id, timestamp in list(self.hearbeats.items()):
                 if (datetime.now() - timestamp).total_seconds() > TIMEOUT:
@@ -161,27 +179,15 @@ class Kafka(CommABC):
 
     def send_heartbeat(self):
         while self.running:
-            self.producer.send(f"{LIVENESS}", self.id.to_bytes(4, "big"))
+            self.producer.send(LIVENESS, self.id.to_bytes(4))
             self.producer.flush()
-            time.sleep(0.5)
+            time.sleep(HEARTBEAT)
 
 
     def handle_recv(self):
         while self.running:
-            for msg in self.get_msgs(self.consumer.poll(timeout_ms=500)):
+            for msg in self.get_msgs(self.consumer.poll(timeout_ms=1000)):
                 data = msg.value
-                node_id = int.from_bytes(data[:4], "big")
+                node_id = int.from_bytes(data[:4])
                 data = data[4:]
                 self.q.put((node_id, data))
-
-
-    @staticmethod
-    def delete_all_topics(ip: str = "localhost", port: int = 9092):
-        kafka_broker = f"{ip}:{port}"
-        admin = KafkaAdminClient(bootstrap_servers=kafka_broker)
-        topics = admin.list_topics()
-        topics = [topic for topic in topics if not topic.startswith("__")]
-        print(f"Topics: {topics}")
-        admin.delete_topics(topics)
-        admin.close()
-        print("✅ All topics deleted successfully!")
