@@ -54,10 +54,14 @@ class WorkerManager():
                 continue
             responses.pop(node_id)
             if retry_fn is None:
+                yield node_id, None
                 continue
             new_id, new_data = retry_fn(self.worker_info, responses)
             if new_id is not None:
+                responses[new_id] = False
                 self.send(node_id, new_data)
+            else:
+                yield node_id, None
 
 
     def set_info(self, worker_id: int, info: dict) -> bool:
