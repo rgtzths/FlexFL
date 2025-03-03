@@ -49,9 +49,9 @@ while True:
 
     else:
         id_, data = c.recv()
-        time.sleep(5)
         data = data.decode()
         print(f"Received {data} from {id_}")
+        time.sleep(5)
         if count == 3:
             print("Worker died")
             c.close()

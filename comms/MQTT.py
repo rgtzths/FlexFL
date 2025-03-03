@@ -3,8 +3,6 @@ from datetime import datetime
 import pickle
 import paho.mqtt.client as mqtt
 from uuid import uuid4
-import threading
-import time
 
 from my_builtins.CommABC import CommABC
 
@@ -13,6 +11,7 @@ DISCOVER = "fl_discover"
 LIVELINESS = "fl_liveliness"
 TIMEOUT = 2
 HEARTBEAT = 0.5
+QOS = 2
 
 class MQTT(CommABC):
     
@@ -27,12 +26,11 @@ class MQTT(CommABC):
         self.port = mqtt_port
         self.is_anchor = is_anchor
         self._id = None
-        self._uuid = uuid4()
+        self._uuid = str(uuid4())
         self._nodes = set()
         self._start_time = datetime.now()
         self.total_nodes = 0
         self.q = queue.Queue()
-        self.keep_alives = queue.Queue()
         self.id_mapping = {}
         self.uuid_mapping = {}
         self.client = mqtt.Client(
@@ -59,7 +57,7 @@ class MQTT(CommABC):
 
     def send(self, node_id: int, data: bytes) -> None:
         data = self.id.to_bytes(4, "big") + data
-        self.client.publish(f"{TOPIC}/{self.id_mapping[node_id]}", data)
+        self.client.publish(f"{TOPIC}/{self.id_mapping[node_id]}", data, qos=QOS)
 
 
     def recv(self, node_id: int = None) -> tuple[int, bytes]:
@@ -68,49 +66,48 @@ class MQTT(CommABC):
     
 
     def close(self) -> None:
-        self.client.publish(LIVELINESS, pickle.dumps(self._uuid))
+        self.client.publish(LIVELINESS, pickle.dumps(self._uuid), qos=QOS)
         self.client.loop_stop()
         self.client.disconnect()
 
 
     def discover(self):
         self.client.on_message = self.on_message
-        self.client.will_set(LIVELINESS, pickle.dumps(self._uuid), qos=1, retain=True)
+        self.client.will_set(LIVELINESS, pickle.dumps(self._uuid), qos=QOS)
         self.client.connect(self.ip, self.port)
         self.client.subscribe(f"{TOPIC}/{self._uuid}")
         self.client.loop_start()
-
         if self.is_anchor:
             self._id = 0
             self._nodes.add(0)
             self.client.subscribe(DISCOVER)
             self.client.subscribe(LIVELINESS)
         else:
-            self.client.publish(DISCOVER, pickle.dumps(self._uuid))
+            self.client.publish(DISCOVER, pickle.dumps(self._uuid), qos=QOS)
             _, msg = self.q.get()
-            self._id, uuid, self._start_time = pickle.loads(msg)
-            self.id_mapping[0] = uuid
+            self._id, node_uuid, self._start_time = pickle.loads(msg)
+            self.id_mapping[0] = node_uuid
+            self.uuid_mapping[node_uuid] = 0
         self.id_mapping[self.id] = self._uuid
         self.uuid_mapping[self._uuid] = self.id
 
 
     def handle_discover(self, payload: bytes):
-        uuid = pickle.loads(payload)
+        node_uuid = pickle.loads(payload)
         self.total_nodes += 1
         self._nodes.add(self.total_nodes)
-        self.id_mapping[self.total_nodes] = uuid
-        self.uuid_mapping[uuid] = self.total_nodes
+        self.id_mapping[self.total_nodes] = node_uuid
+        self.uuid_mapping[node_uuid] = self.total_nodes
         new_payload = (self.total_nodes, self._uuid, self.start_time)
         self.send(self.total_nodes, pickle.dumps(new_payload))
 
 
     def handle_liveliness(self, payload: bytes):
         node_uuid = pickle.loads(payload)
-        if node_uuid not in self.uuid_mapping:
-            return
         node_id = self.uuid_mapping[node_uuid]
         self._nodes.remove(node_id)
         self.id_mapping.pop(node_id)
+        self.uuid_mapping.pop(node_uuid)
         self.q.put((node_id, None))
 
 
