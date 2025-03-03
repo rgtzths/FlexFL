@@ -35,7 +35,8 @@ class MQTT(CommABC):
         self.uuid_mapping = {}
         self.client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2, 
-            reconnect_on_failure=False
+            reconnect_on_failure=False,
+            transport="tcp"
         )
         self.discover()
 

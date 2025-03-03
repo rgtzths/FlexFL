@@ -43,6 +43,8 @@ while True:
             id_, data = c.recv()
             if data is None:
                 print(f"Worker {id_} died")
+                c.close()
+                exit(0)
             else:
                 data = data.decode()
                 print(f"Received {data} from {id_}")
