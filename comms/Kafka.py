@@ -4,7 +4,6 @@ import time
 import threading
 from datetime import datetime
 from uuid import uuid4
-from typing import Any, Generator
 from kafka import KafkaProducer, KafkaConsumer
 from kafka.admin import KafkaAdminClient
 
@@ -14,7 +13,7 @@ TOPIC = "fl"
 DISCOVER = "fl_discover"
 LIVENESS = "fl_liveness"
 TIMEOUT = 2
-HEARTBEAT = 1000
+HEARTBEAT = 500
 
 class Kafka(CommABC):
 
@@ -118,6 +117,7 @@ class Kafka(CommABC):
 
 
     def listen(self):
+        last_time = time.time()
         while self.running:
             res = self.consumer.poll(timeout_ms=HEARTBEAT)
             for topic, msgs in res.items():
@@ -130,7 +130,8 @@ class Kafka(CommABC):
                         self.handle_recv(msg.value)
             if self.is_anchor:
                 self.handle_liveliness()
-            else:
+            elif (time.time() - last_time) >= HEARTBEAT / 1000:
+                last_time = time.time()
                 self.producer.send(LIVENESS, self.id.to_bytes(4))
                 self.producer.flush()
 

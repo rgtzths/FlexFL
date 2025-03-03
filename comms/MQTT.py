@@ -11,7 +11,7 @@ DISCOVER = "fl_discover"
 LIVELINESS = "fl_liveliness"
 TIMEOUT = 2
 HEARTBEAT = 0.5
-QOS = 2
+QOS = 0
 
 class MQTT(CommABC):
     
