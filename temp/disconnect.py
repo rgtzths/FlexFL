@@ -29,11 +29,11 @@ print(f"Node {c.id} started")
 
 count = 0
 while True:
-    time.sleep(5)
     # continue
     count += 1
 
     if c.id == 0:
+        time.sleep(5)
         workers = c.nodes - {0}
         for n in workers:
             c.send(n, b"work")
@@ -49,6 +49,7 @@ while True:
 
     else:
         id_, data = c.recv()
+        time.sleep(5)
         data = data.decode()
         print(f"Received {data} from {id_}")
         if count == 3:
