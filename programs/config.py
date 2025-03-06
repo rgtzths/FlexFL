@@ -17,7 +17,7 @@ def get_classes(folder: str) -> dict[str, str]:
             with open(class_path, "r", encoding="utf-8") as file:
                 tree = ast.parse(file.read(), filename=class_path)
             for node in ast.walk(tree):
-                if isinstance(node, ast.ClassDef):
+                if isinstance(node, ast.ClassDef) and node.name == class_name:
                     classes[node.name] = str(class_path)
     return classes
 

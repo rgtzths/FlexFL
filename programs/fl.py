@@ -79,4 +79,8 @@ f = fl_class(
     all_args=args,
 )
 
-f.run()
+try:
+    f.run()
+except KeyboardInterrupt:
+    print("\nForcing end...")
+    f.force_end()

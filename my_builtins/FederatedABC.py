@@ -120,10 +120,18 @@ class FederatedABC(ABC):
                 
 
     def end(self):
-        if self.is_master:
+        if self.is_master and self.best_weights is not None:
             self.ml.set_weights(self.best_weights)
             self.ml.save_model(f"{self.base_path}/model")
         self.wm.c.close()
+
+
+    def force_end(self):
+        self.wm.send_n(
+            workers = self.wm.get_all_workers(), 
+            type_ = WorkerManager.EXIT_TYPE
+        )
+        self.end()
 
 
     def validate(self, epoch: int, x, y) -> float:

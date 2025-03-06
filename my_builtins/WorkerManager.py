@@ -139,9 +139,9 @@ class WorkerManager():
         return
     
 
-    def default_on_new_worker(self, node_id: int, worker_info: dict) -> None:
+    def default_on_new_worker(self, worker_id: int, worker_info: dict) -> None:
         return
     
 
-    def default_on_worker_disconnect(self, node_id: int) -> None:
+    def default_on_worker_disconnect(self, worker_id: int) -> None:
         return
