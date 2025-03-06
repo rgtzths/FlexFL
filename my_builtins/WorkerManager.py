@@ -53,10 +53,10 @@ class WorkerManager():
         return list(self.c.nodes - {0})
 
 
-    def send(self, worker_id: int, payload: Any = None, type_: str = None) -> None:
+    def send(self, node_id: int, payload: Any = None, type_: str = None) -> None:
         payload = {"type": type_, "data": payload}
         data = self.m.encode(payload)
-        self.c.send(worker_id, data)
+        self.c.send(node_id, data)
 
 
     def _recv(self, type_: str = None, return_on_disconnect: bool = False) -> tuple[int, Any]:

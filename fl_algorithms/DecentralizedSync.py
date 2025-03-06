@@ -1,6 +1,11 @@
+from enum import IntEnum, auto
 
 from my_builtins.FederatedABC import FederatedABC
 from my_builtins.WorkerManager import WorkerManager
+
+class Task(IntEnum):
+    WORK = auto()
+    WORK_DONE = auto()
 
 
 class DecentralizedSync(FederatedABC):
@@ -27,10 +32,18 @@ class DecentralizedSync(FederatedABC):
         for epoch in range(1, self.epochs+1):
             self.wm.wait_for_workers(self.min_workers)
             pool = self.wm.get_subpool(self.min_workers, self.random_pool)
-            self.wm.send_n(pool, self.ml.get_weights(), "work")
+            self.wm.send_n(
+                workers = pool, 
+                payload = self.ml.get_weights(),
+                type_ = Task.WORK
+            )
             weighted_sum = 0
             total_weight = 0
-            for worker_id, data in self.wm.recv_n(pool, type_="work_done", retry_fn=self.random_worker):
+            for worker_id, data in self.wm.recv_n(
+                workers = pool, 
+                type_ = Task.WORK_DONE,
+                retry_fn = self.random_worker
+            ):
                 node_weight = self.wm.get_info(worker_id)["n_samples"]
                 weighted_sum += data*node_weight
                 total_weight += node_weight
@@ -38,12 +51,19 @@ class DecentralizedSync(FederatedABC):
             self.validate(epoch, self.x_val, self.y_val)
             stop = self.early_stop() or epoch == self.epochs
             if stop:
-                self.wm.send_n(self.wm.get_all_workers(), type_=WorkerManager.EXIT_TYPE)
+                self.wm.send_n(
+                    workers = self.wm.get_all_workers(), 
+                    type_ = WorkerManager.EXIT_TYPE
+                )
                 break
 
     
-    def on_work(self, node_id, weights):
+    def on_work(self, sender_id, weights):
         self.ml.set_weights(weights)
         self.ml.train(self.epochs)
-        self.wm.send(WorkerManager.MASTER_ID, self.ml.get_weights(), "work_done")
+        self.wm.send(
+            node_id = WorkerManager.MASTER_ID, 
+            payload = self.ml.get_weights(), 
+            type_ = Task.WORK_DONE
+        )
 
