@@ -4,6 +4,7 @@ from my_builtins.CommABC import CommABC
 from my_builtins.MessageABC import MessageABC
 
 JOIN_TYPE = "__joining__"
+WAITING_TYPE = "__waiting__"
 
 class WorkerManager():
 
@@ -122,7 +123,7 @@ class WorkerManager():
 
     def wait_for_workers(self, n: int) -> None:
         while len(self.worker_info) < n:
-            self._recv()
+            self._recv(WAITING_TYPE)
             
 
     def setup_worker_info(self, info: dict) -> None:

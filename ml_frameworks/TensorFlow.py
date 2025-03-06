@@ -93,7 +93,7 @@ class TensorFlow(MLFrameworkABC):
 
     
     def predict(self, data):
-        return self.model.predict(data, batch_size=self.batch_size)
+        return self.model.predict(data, batch_size=self.batch_size, verbose=0)
     
 
     def save_model(self, path):
