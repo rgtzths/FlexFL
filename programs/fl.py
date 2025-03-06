@@ -2,6 +2,8 @@ import argparse
 import json
 from config import get_modules_and_args, load_class
 
+FORBIDDEN_ARGS = {"self", "args", "kwargs", "ml", "wm", "nn", "dataset", "c", "m", "all_args"}
+
 FOLDERS: list[str] = [
     "my_builtins",
     "comms",
@@ -16,7 +18,7 @@ MODULES, ALL_ARGS = get_modules_and_args(FOLDERS)
 
 ALIASES = {
     "DecentralizedSync": "ds",
-    "Tensorflow": "tf",
+    "TensorFlow": "tf",
 }
 
 for m, classes in list(MODULES.items()):
@@ -51,4 +53,30 @@ args = {k: v for k, v in vars(args).items() if v is not None}
 if "nn" not in args:
     args["nn"] = args["dataset"]
 
-print(args)
+class_args = {k: v for k, v in args.items() if k not in FORBIDDEN_ARGS}
+
+print("Importing modules...")
+fl_class = load_class(MODULES["fl_algorithms"][args["fl"]])
+nn_class = load_class(MODULES["neural_networks"][args["nn"]])
+dataset_class = load_class(MODULES["my_datasets"][args["dataset"]])
+comm_class = load_class(MODULES["comms"][args["comm"]])
+message_class = load_class(MODULES["message_layers"][args["message_layer"]])
+wm_class = load_class(MODULES["my_builtins"]["WorkerManager"])
+ml_class = load_class(MODULES["ml_frameworks"][args["ml"]])
+print("Modules imported")
+
+f = fl_class(
+    ml=ml_class(
+        nn=nn_class(**class_args),
+        dataset=dataset_class(**class_args),
+        **class_args,
+    ),
+    wm=wm_class(
+        c=comm_class(**class_args),
+        m=message_class(**class_args),
+        **class_args,
+    ),
+    all_args=args,
+)
+
+f.run()

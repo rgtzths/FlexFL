@@ -18,7 +18,7 @@ LOSSES = {
 }
 
 
-class Tensorflow(MLFrameworkABC):
+class TensorFlow(MLFrameworkABC):
 
 
     @property

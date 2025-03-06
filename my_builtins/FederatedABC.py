@@ -80,11 +80,6 @@ class FederatedABC(ABC):
         pass
 
 
-    @abstractmethod
-    def worker_run(self, work: Any):
-        pass
-
-
     def setup_metrics(self):
         self.is_classification = self.ml.dataset.is_classification
 
@@ -120,11 +115,7 @@ class FederatedABC(ABC):
         if self.is_master:
             self.master_loop()
         else:
-            while True:
-                _, work = self.wm.recv()
-                if work is None:
-                    break
-                self.worker_run(work)
+            self.wm.recv(WorkerManager.EXIT_TYPE)
         self.end()
                 
 
