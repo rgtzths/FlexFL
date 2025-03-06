@@ -39,7 +39,7 @@ class WorkerManager():
             self.callbacks[type_] = fn
 
 
-    def handle_recv(self, node_id: int, data: Any, type_: str) -> None:
+    def handle_recv(self, node_id: int, data: Any, type_: Any) -> None:
         if type_ in self.callbacks:
             self.callbacks[type_](node_id, data)
         elif type_ == JOIN_TYPE:
@@ -53,13 +53,13 @@ class WorkerManager():
         return list(self.c.nodes - {0})
 
 
-    def send(self, node_id: int, payload: Any = None, type_: str = None) -> None:
+    def send(self, node_id: int, payload: Any = None, type_: Any = None) -> None:
         payload = {"type": type_, "data": payload}
         data = self.m.encode(payload)
         self.c.send(node_id, data)
 
 
-    def _recv(self, type_: str = None, return_on_disconnect: bool = False) -> tuple[int, Any]:
+    def _recv(self, type_: Any = None, return_on_disconnect: bool = False) -> tuple[int, Any]:
         node_id, data = self.c.recv()
         if data is None:
             self.on_worker_disconnect(node_id)
@@ -81,14 +81,14 @@ class WorkerManager():
         return None
 
 
-    def recv(self, type_: str = None, return_on_disconnect: bool = False) -> tuple[int, Any]:
+    def recv(self, type_: Any = None, return_on_disconnect: bool = False) -> tuple[int, Any]:
         while True:
             res = self._recv(type_, return_on_disconnect)
             if res is not None:
                 return res
     
 
-    def send_n(self, workers: list[int], payload: Any = None, type_: str = None) -> None:
+    def send_n(self, workers: list[int], payload: Any = None, type_: Any = None) -> None:
         payload = {"type": type_, "data": payload}
         data = self.m.encode(payload)
         for i in workers:
@@ -97,7 +97,7 @@ class WorkerManager():
 
     def recv_n(self, 
         workers: list[int], 
-        type_: str = None, 
+        type_: Any = None, 
         retry_fn: Callable[[dict, dict], tuple[int, Any, str]] = None,
         return_on_disconnect: bool = False
     ) -> Generator:
