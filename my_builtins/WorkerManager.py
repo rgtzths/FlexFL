@@ -62,6 +62,7 @@ class WorkerManager():
     def _recv(self, type_: Any = None, return_on_disconnect: bool = False) -> tuple[int, Any]:
         node_id, data = self.c.recv()
         if data is None:
+            self.worker_info.pop(node_id)
             self.on_worker_disconnect(node_id)
             if return_on_disconnect:
                 return node_id, None

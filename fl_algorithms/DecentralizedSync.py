@@ -42,7 +42,7 @@ class DecentralizedSync(FederatedABC):
             for worker_id, data in self.wm.recv_n(
                 workers = pool, 
                 type_ = Task.WORK_DONE,
-                retry_fn = self.random_worker
+                retry_fn = self.retry_fn
             ):
                 node_weight = self.wm.get_info(worker_id)["n_samples"]
                 weighted_sum += data*node_weight
@@ -56,6 +56,13 @@ class DecentralizedSync(FederatedABC):
                     type_ = WorkerManager.EXIT_TYPE
                 )
                 break
+
+
+    def retry_fn(self, worker_info, responses):
+        new_worker = self.random_worker()
+        if new_worker is None:
+            return None, None, None
+        return new_worker, self.ml.get_weights(), Task.WORK
 
     
     def on_work(self, sender_id, weights):
