@@ -13,7 +13,7 @@ TOPIC = "fl"
 DISCOVER = "fl_discover"
 LIVENESS = "fl_liveness"
 TIMEOUT = 2
-HEARTBEAT = 500
+HEARTBEAT = 0.5
 
 class Kafka(CommABC):
 
@@ -119,21 +119,28 @@ class Kafka(CommABC):
     def listen(self):
         last_time = time.time()
         while self.running:
-            res = self.consumer.poll(timeout_ms=HEARTBEAT)
-            for topic, msgs in res.items():
-                for msg in msgs:
-                    if topic.topic == DISCOVER:
-                        self.handle_discover(msg.value)
-                    elif topic.topic == LIVENESS:
-                        self.handle_liveliness(msg.value)
-                    else:
-                        self.handle_recv(msg.value)
+            self.handle_msg()
             if self.is_anchor:
-                self.handle_liveliness()
-            elif (time.time() - last_time) >= HEARTBEAT / 1000:
+                if (time.time() - last_time) >= TIMEOUT:
+                    last_time = time.time()
+                    self.handle_liveliness()
+            elif (time.time() - last_time) >= HEARTBEAT:
                 last_time = time.time()
                 self.producer.send(LIVENESS, self.id.to_bytes(4))
                 self.producer.flush()
+
+
+    def handle_msg(self):
+        res = self.consumer.poll(timeout_ms=HEARTBEAT*1000)
+        for topic, msgs in res.items():
+            for msg in msgs:
+                if topic.topic == DISCOVER:
+                    self.handle_discover(msg.value)
+                elif topic.topic == LIVENESS:
+                    node_id = int.from_bytes(msg.value)
+                    self.hearbeats[node_id] = time.time()
+                else:
+                    self.handle_recv(msg.value)
 
 
     def handle_discover(self, payload: bytes):
@@ -146,12 +153,9 @@ class Kafka(CommABC):
         self.producer.flush()
 
 
-    def handle_liveliness(self, payload: bytes = None):
-        if payload is not None:
-            node_id = int.from_bytes(payload)
-            self.hearbeats[node_id] = datetime.now()
+    def handle_liveliness(self):
         for node_id, timestamp in list(self.hearbeats.items()):
-            if (datetime.now() - timestamp).total_seconds() > TIMEOUT:
+            if (time.time() - timestamp) > TIMEOUT:
                 self.admin.delete_topics([f"{TOPIC}_{self.id_mapping[node_id]}"])
                 self._nodes.remove(node_id)
                 self.id_mapping.pop(node_id)
