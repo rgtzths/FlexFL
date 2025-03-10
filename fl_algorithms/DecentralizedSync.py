@@ -18,7 +18,7 @@ class DecentralizedSync(FederatedABC):
         else:
             self.ml.load_worker_data(self.id, 8)
         self.wm.set_callbacks(
-            ("work", self.on_work)
+            (Task.WORK, self.on_work)
         )
 
 
