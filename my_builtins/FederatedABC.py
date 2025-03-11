@@ -138,7 +138,7 @@ class FederatedABC(ABC):
 
     def validate(self, epoch: int, split = "val", verbose = False) -> float:
         x = getattr(self.ml, f"x_{split}")
-        y = getattr(self.ml, f"y_{split}_np")
+        y = getattr(self.ml, f"y_{split}")
         preds = self.ml.predict(x)
         if self.is_classification:
             preds = np.argmax(preds, axis=1)

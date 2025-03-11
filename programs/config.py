@@ -2,7 +2,11 @@ from pathlib import Path
 import importlib.util
 import ast
 import sys
+import os
 from dotenv import load_dotenv
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 sys.path.append(".")
 load_dotenv()
