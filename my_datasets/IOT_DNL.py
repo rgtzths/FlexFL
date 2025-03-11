@@ -2,7 +2,7 @@ import kaggle
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
-from my_builtins.DatasetABC import DatasetABC, DATA_FOLDER
+from my_builtins.DatasetABC import DatasetABC
 
 
 class IOT_DNL(DatasetABC):
@@ -20,14 +20,14 @@ class IOT_DNL(DatasetABC):
     def download(self):
         kaggle.api.dataset_download_files(
             "speedwall10/iot-device-network-logs",
-            path=f"{DATA_FOLDER}/{self.name}",
+            path=f"{self.data_path}",
             quiet=False,
             unzip=True
         )
 
     
     def preprocess(self, val_size, test_size):
-        data = pd.read_csv(f"{DATA_FOLDER}/{self.name}/Preprocessed_data.csv")
+        data = pd.read_csv(f"{self.data_path}/Preprocessed_data.csv")
         data.dropna()
         x = data.drop('normality', axis=1)
         x = x.drop('frame.number', axis=1)

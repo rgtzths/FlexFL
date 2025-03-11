@@ -42,7 +42,7 @@ class MLFrameworkABC(ABC):
 
 
     @abstractmethod
-    def setup(self):
+    def setup(self) -> None:
         """
         Setup the ml environment, e.g. loss, optimizer
         """
@@ -53,14 +53,6 @@ class MLFrameworkABC(ABC):
     def load_data(self, split: str) -> None:
         """
         Load the split data and set n_samples
-        """
-        pass
-
-
-    @abstractmethod
-    def load_worker_data(self, worker_id: int, num_workers: int) -> None:
-        """
-        Load the data for the worker
         """
         pass
 

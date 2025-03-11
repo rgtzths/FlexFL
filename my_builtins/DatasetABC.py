@@ -5,6 +5,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 import wget
 import zipfile
+import os
 
 METADATA_FOLDER = "my_datasets/_metadata"
 DATA_FOLDER = "data"
@@ -12,8 +13,19 @@ DATA_FOLDER = "data"
 
 class DatasetABC(ABC):
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, *,
+            folder: str = None,
+            **kwargs) -> None:
         self.name = self.__class__.__name__
+        self.metadata_file = f"{METADATA_FOLDER}/{self.name}.json"
+        self.base_path = f"{DATA_FOLDER}/{self.name}"
+        self.default_folder = f"{self.base_path}/_data"
+        if folder is not None:
+            self.data_path = f"{self.base_path}/{folder}"
+        elif env_folder:=os.getenv('DATA_FOLDER') is not None:
+            self.data_path = f"{self.base_path}/{env_folder}"
+        else:
+            self.data_path = self.default_folder
         self.metadata = {}
         self.load_metadata()
 
@@ -53,7 +65,7 @@ class DatasetABC(ABC):
 
 
     def load_metadata(self):
-        path = Path(f'{METADATA_FOLDER}/{self.name}.json')
+        path = Path(self.metadata_file)
         if path.exists():
             with open(path, 'r') as file:
                 self.metadata = json.load(file)
@@ -69,31 +81,53 @@ class DatasetABC(ABC):
 
 
     def save_metadata(self):
-        path = Path(f'{METADATA_FOLDER}/{self.name}.json')
-        with open(path, 'w') as file:
+        with open(self.metadata_file, 'w') as file:
             json.dump(self.metadata, file, indent=4)
 
 
     def save_data(self, x, y, split):
-        folder = Path(f'{DATA_FOLDER}/{self.name}')
+        folder = Path(self.data_path)
         folder.mkdir(parents=True, exist_ok=True)
         np.save(folder/f'x_{split}.npy', x)
         np.save(folder/f'y_{split}.npy', y)
 
 
     def load_data(self, split):
-        folder = Path(f'{DATA_FOLDER}/{self.name}')
-        x = np.load(folder/f'x_{split}.npy')
-        y = np.load(folder/f'y_{split}.npy')
-        self.n_samples = x.shape[0]
+        x = np.load(f'{self.data_path}/x_{split}.npy')
+        y = np.load(f'{self.data_path}/y_{split}.npy')
         return x, y
     
 
-    def split_save(self, x, y, val_size, test_size, scaler=None):
+    def split_data(self, x, y, val_size, test_size):
+        total_size = val_size + test_size
+        assert total_size < 1, "val_size + test_size must be less than 1"
+        if total_size == 0:
+            return x, y, None, None, None, None
+        x_train, x_remaining, y_train, y_remaining = train_test_split(
+            x, y, 
+            test_size=total_size,
+            random_state=42, 
+            shuffle=True
+        )
+        if val_size > 0 and test_size > 0:
+            x_val, x_test, y_val, y_test = train_test_split(
+                x_remaining, y_remaining, 
+                test_size=test_size / total_size, 
+                random_state=42, 
+                shuffle=True
+            )
+            return x_train, y_train, x_val, y_val, x_test, y_test
+        elif val_size > 0:
+            return x_train, y_train, x_remaining, y_remaining, None, None
+        else:
+            return x_train, y_train, None, None, x_remaining, y_remaining
+
+    
+
+    def split_save(self, x, y, val_size = 0.15, test_size = 0.15, scaler=None):
         self.metadata['samples'] = x.shape[0]
         self.metadata['input_shape'] = x.shape[1:]
-        x_train, x, y_train, y = train_test_split(x, y, test_size=val_size+test_size, random_state=42, shuffle=True)
-        x_val, x_test, y_val, y_test = train_test_split(x, y, test_size=test_size/(val_size+test_size), random_state=42, shuffle=True)
+        x_train, y_train, x_val, y_val, x_test, y_test = self.split_data(x, y, val_size, test_size)
         if scaler is not None:
             x_train = scaler.fit_transform(x_train)
             x_val = scaler.transform(x_val)
@@ -112,33 +146,33 @@ class DatasetABC(ABC):
     def save_features(self, features):
         self.metadata['features'] = '|'.join(features)
         self.save_metadata()
-
-
-    def save_worker_data(self, x, y, worker_id, num_workers):
-        folder = Path(f'{DATA_FOLDER}/{self.name}/{num_workers}_workers')
-        folder.mkdir(parents=True, exist_ok=True)
-        np.save(folder/f'x_{worker_id}.npy', x)
-        np.save(folder/f'y_{worker_id}.npy', y)
-
-
-    def load_worker_data(self, worker_id, num_workers):
-        folder = Path(f'{DATA_FOLDER}/{self.name}/{num_workers}_workers')
-        x = np.load(folder/f'x_{worker_id}.npy')
-        y = np.load(folder/f'y_{worker_id}.npy')
-        self.n_samples = x.shape[0]
-        return x, y
     
 
-    def data_division(self, num_workers):
+    def data_division(self, num_workers, val_size = 0, test_size = 0):
+        for folder in  Path(self.base_path).glob('node_*'):
+            for file in folder.glob('*'):
+                file.unlink()
+            folder.rmdir()
+        x, y = self.load_data('val')
+        self.data_path = f"{self.base_path}/node_0"
+        self.save_data(x, y, 'val')
+        self.data_path = self.default_folder
         x, y = self.load_data('train')
         x = np.array_split(x, num_workers)
         y = np.array_split(y, num_workers)
         for i in range(num_workers):
-            self.save_worker_data(x[i], y[i], i, num_workers)
+            my_x, my_y = x[i], y[i]
+            x_train, y_train, x_val, y_val, x_test, y_test = self.split_data(my_x, my_y, val_size, test_size)
+            self.data_path = f"{self.base_path}/node_{i+1}"
+            self.save_data(x_train, y_train, 'train')
+            if val_size > 0:
+                self.save_data(x_val, y_val, 'val')
+            if test_size > 0:
+                self.save_data(x_test, y_test, 'test')
 
 
     def download_file(self, url):
-        destination = Path(f"{DATA_FOLDER}/{self.name}/temp.zip")
+        destination = Path(f"{self.default_folder}/temp.zip")
         destination.parent.mkdir(parents=True, exist_ok=True)
         wget.download(url, str(destination))
         print()

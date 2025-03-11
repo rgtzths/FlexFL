@@ -105,6 +105,8 @@ class FederatedABC(ABC):
         Path(self.base_path).mkdir(parents=True, exist_ok=True)
         with open(f"{self.base_path}/args.json", "w") as f:
             json.dump(self.all_args, f, indent=4)
+        if self.ml.dataset.default_folder == self.ml.dataset.data_path:
+            self.ml.dataset.data_path = f"{self.ml.dataset.base_path}/node_{self.id}"
 
 
     def run(self):
@@ -134,16 +136,19 @@ class FederatedABC(ABC):
         self.end()
 
 
-    def validate(self, epoch: int, x, y) -> float:
+    def validate(self, epoch: int, split = "val", verbose = False) -> float:
+        x = getattr(self.ml, f"x_{split}")
+        y = getattr(self.ml, f"y_{split}_np")
         preds = self.ml.predict(x)
         if self.is_classification:
             preds = np.argmax(preds, axis=1)
         metrics = self.evaluator(y, preds).get_metrics_by_list_names(self.metrics)
         new_time = time()
         delta_time = new_time - self.last_time
-        print(f"Epoch {epoch}/{self.epochs} - Time: {delta_time:.2f}s")
         self.last_time = new_time
-        print(', '.join(f'{name}: {value:.4f}' for name, value in metrics.items()))
+        if verbose:
+            print(f"\nEpoch {epoch}/{self.epochs} - Time: {delta_time:.2f}s")
+            print(', '.join(f'{name}: {value:.4f}' for name, value in metrics.items()))
         self.new_score = metrics[self.metrics[0]]
         if (
             self.best_score is None or

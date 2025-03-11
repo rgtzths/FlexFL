@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from itertools import cycle
+from typing import Any
 
 from my_builtins.MLFrameworkABC import MLFrameworkABC
 
@@ -35,26 +36,26 @@ class TensorFlow(MLFrameworkABC):
     def load_data(self, split: str):
         x, y = self.dataset.load_data(split)
         self.n_samples = x.shape[0]
-        return x, y
-
-
-    def load_worker_data(self, worker_id: int, num_workers: int) -> None:
-        x, y = self.dataset.load_worker_data(worker_id, num_workers)
-        self.my_data = tf.data.Dataset.from_tensor_slices((x, y)).batch(self.batch_size)
-        self.my_iterator = cycle(self.my_data)
-        self.n_samples = x.shape[0]
+        x_ = tf.data.Dataset.from_tensor_slices(x).batch(self.batch_size)
+        y_ = tf.data.Dataset.from_tensor_slices(y).batch(self.batch_size)
+        data = tf.data.Dataset.zip((x_, y_))
+        setattr(self, f"x_{split}", x_)
+        setattr(self, f"y_{split}", y_)
+        setattr(self, f"y_{split}_np", y)
+        setattr(self, f"{split}_data", data)
+        setattr(self, f"{split}_iterator", cycle(data))
 
 
     def compile_model(self):
         self.model.compile(optimizer=self.optimizer, loss=self.loss)
 
 
-    def get_weights(self) -> np.ndarray:
+    def get_weights(self):
         weights = self.model.get_weights()
         return np.concatenate([w.flatten() for w in weights])
     
 
-    def set_weights(self, weights: np.ndarray) -> None:
+    def set_weights(self, weights: np.ndarray):
         start = 0
         new_weights = []
         for w in self.model.get_weights():
@@ -64,16 +65,16 @@ class TensorFlow(MLFrameworkABC):
         self.model.set_weights(new_weights)
 
     
-    def get_gradients(self) -> np.ndarray:
+    def get_gradients(self):
         with tf.GradientTape() as tape:
-            x, y = next(self.my_iterator)
+            x, y = next(self.train_iterator)
             y_pred = self.model(x, training=True)
             loss = self.loss(y, y_pred)
         gradients = tape.gradient(loss, self.model.trainable_variables)
         return np.concatenate([g.numpy().flatten() for g in gradients])
     
 
-    def apply_gradients(self, gradients: np.ndarray) -> None:
+    def apply_gradients(self, gradients: np.ndarray):
         start = 0
         grads_list = []
         trainable_vars = self.model.trainable_variables
@@ -84,9 +85,9 @@ class TensorFlow(MLFrameworkABC):
         self.optimizer.apply_gradients(zip(grads_list, trainable_vars))
 
     
-    def train(self, epochs: int, verbose=False) -> None:
+    def train(self, epochs: int, verbose=False):
         self.model.fit(
-            self.my_data,
+            self.train_data,
             epochs=epochs,
             verbose=1 if verbose else 0
         )
