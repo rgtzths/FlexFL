@@ -31,6 +31,7 @@ class MPI(CommABC):
     
 
     def send(self, node_id: int, data: bytes) -> None:
+        assert node_id in self.nodes, f"Node {node_id} not found"
         self.comm.send(data, dest=node_id, tag=0)
 
 

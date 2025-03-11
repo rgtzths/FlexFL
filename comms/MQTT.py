@@ -57,6 +57,7 @@ class MQTT(CommABC):
     
 
     def send(self, node_id: int, data: bytes) -> None:
+        assert node_id in self.nodes, f"Node {node_id} not found"
         data = self.id.to_bytes(4, "big") + data
         self.client.publish(f"{TOPIC}/{self.id_mapping[node_id]}", data, qos=QOS)
 

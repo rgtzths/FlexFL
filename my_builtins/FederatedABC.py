@@ -60,6 +60,7 @@ class FederatedABC(ABC):
         self.evaluator = None
         self.new_score = None
         self.is_master = None
+        self.running = True
 
         self.setup_metrics()
         self.setup_nodes()
@@ -184,6 +185,11 @@ class FederatedABC(ABC):
             return not any(score >= self.compare_score + self.delta for score in self.buffer)
         else:
             return not any(score <= self.compare_score - self.delta for score in self.buffer)
+        
+
+    def run_loop(self):
+        while self.running:
+            self.wm.loop_once()
         
 
     def random_pool(self, size: int, workers_info: dict) -> list[int]:

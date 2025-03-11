@@ -39,6 +39,7 @@ class Zenoh(CommABC):
 
 
     def send(self, node_id: int, data: bytes) -> None:
+        assert node_id in self.nodes, f"Node {node_id} not found"
         data = self.id.to_bytes(4) + data
         self.session.put(f"fl/{node_id}", data)
 

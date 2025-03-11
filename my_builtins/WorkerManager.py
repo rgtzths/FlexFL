@@ -23,6 +23,7 @@ class WorkerManager():
         self.on_joining: Callable[[], None] = self.default_on_joining
         self.on_new_worker: Callable[[int, dict], None] = self.default_on_new_worker
         self.on_worker_disconnect: Callable[[int], None] = self.default_on_worker_disconnect
+        self.buffer: dict[Any, list[tuple[int, Any]]] = {}
 
 
     @property
@@ -46,7 +47,9 @@ class WorkerManager():
             self.worker_info[node_id] = data
             self.on_new_worker(node_id, data)
         else:
-            raise ValueError(f"No callback for type {type_}")
+            if type_ not in self.buffer:
+                self.buffer[type_] = []
+            self.buffer[type_].append((node_id, data))
 
 
     def get_all_workers(self) -> list[int]:
@@ -54,6 +57,8 @@ class WorkerManager():
 
 
     def send(self, node_id: int, payload: Any = None, type_: Any = None) -> None:
+        if node_id not in self.c.nodes:
+            return
         payload = {"type": type_, "data": payload}
         data = self.m.encode(payload)
         self.c.send(node_id, data)
@@ -84,6 +89,12 @@ class WorkerManager():
 
     def recv(self, type_: Any = None, return_on_disconnect: bool = False) -> tuple[int, Any]:
         while True:
+            if type_ is None:
+                for type_, data in list(self.buffer.items()):
+                    if len(data) > 0:
+                        return data.pop(0)
+            elif type_ in self.buffer and len(self.buffer[type_]) > 0:
+                return self.buffer[type_].pop(0)
             res = self._recv(type_, return_on_disconnect)
             if res is not None:
                 return res
@@ -93,7 +104,8 @@ class WorkerManager():
         payload = {"type": type_, "data": payload}
         data = self.m.encode(payload)
         for i in workers:
-            self.c.send(i, data)
+            if i in self.c.nodes:
+                self.c.send(i, data)
 
 
     def recv_n(self, 
@@ -122,9 +134,13 @@ class WorkerManager():
                 yield node_id, None
 
 
+    def loop_once(self) -> None:
+        self._recv(WAITING_TYPE)
+
+
     def wait_for_workers(self, n: int) -> None:
         while len(self.worker_info) < n:
-            self._recv(WAITING_TYPE)
+            self.loop_once()
             
 
     def setup_worker_info(self, info: dict) -> None:

@@ -66,7 +66,7 @@ class DecentralizedSync(FederatedABC):
 
 
     def retry_fn(self, worker_info, responses):
-        new_worker = self.random_worker()
+        new_worker = self.random_worker(worker_info, responses)
         if new_worker is None:
             return None, None, None
         return new_worker, self.ml.get_weights(), Task.WORK

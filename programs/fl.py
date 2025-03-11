@@ -7,10 +7,10 @@ FORBIDDEN_ARGS = {"self", "args", "kwargs", "ml", "wm", "nn", "dataset", "c", "m
 
 FOLDERS: list[str] = [
     "my_builtins",
+    "fl_algorithms",
     "comms",
     "my_datasets",
     "message_layers",
-    "fl_algorithms",
     "ml_frameworks",
     "neural_networks",
 ]
