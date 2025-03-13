@@ -1,4 +1,3 @@
-import random
 
 from my_builtins.FederatedABC import FederatedABC
 from my_builtins.WorkerManager import WorkerManager
@@ -43,44 +42,45 @@ class DecentralizedSync(FederatedABC):
 
 
     def master_loop(self):
-        self.wm.wait_for_workers(self.min_workers)
-        for epoch in range(1, self.epochs+1):
-            pool = self.wm.get_subpool(self.min_workers, self.random_pool)
-            self.wm.send_n(
-                workers = pool, 
-                payload = None,
-                type_ = Task.WORK
-            )
-            for worker_id, payload in self.wm.recv_n(
-                workers = pool, 
-                type_ = Task.WORK_DONE,
-                retry_fn = self.retry_fn
-            ):
-                # TODO do something with weights
-                weights_diff = None
-                self.wm.send(
-                    node_id = worker_id,
-                    payload = weights_diff,
-                    type_ = Task.WEIGHTS_DIFF
-                )
-            self.validate(epoch, split="val", verbose=True)
-            stop = self.early_stop() or epoch == self.epochs
-            if stop:
-                self.wm.send_n(
-                    workers = self.wm.get_all_workers(), 
-                    type_ = WorkerManager.EXIT_TYPE
-                )
-                break
+        ...
+        # for epoch in range(1, self.epochs+1):
+        #     self.wm.wait_for_workers(self.min_workers)
+        #     pool = self.wm.get_subpool(self.min_workers, self.random_pool)
+        #     self.wm.send_n(
+        #         workers = pool, 
+        #         payload = None,
+        #         type_ = Task.WORK
+        #     )
+        #     for worker_id, payload in self.wm.recv_n(
+        #         workers = pool, 
+        #         type_ = Task.WORK_DONE,
+        #         retry_fn = self.retry_fn
+        #     ):
+        #         # TODO do something with weights
+        #         weights_diff = None
+        #         self.wm.send(
+        #             node_id = worker_id,
+        #             payload = weights_diff,
+        #             type_ = Task.WEIGHTS_DIFF
+        #         )
+        #     self.validate(epoch, split="val", verbose=True)
+        #     stop = self.early_stop() or epoch == self.epochs
+        #     if stop:
+        #         self.wm.send_n(
+        #             workers = self.wm.get_all_workers(), 
+        #             type_ = WorkerManager.EXIT_TYPE
+        #         )
+        #         break
 
 
-    def retry_fn(self, worker_info, responses):
-        while True:
-            ids = set(worker_info.keys()) - set(k for k, v in responses.items() if not v)
-            if len(ids) == 0:
-                self.wm.loop_once()
-                continue
-            new_worker = random.choice(list(ids))
-            return new_worker, None, Task.WORK
+    # def retry_fn(self, worker_info, responses):
+    #     while True:
+    #         ids = set(worker_info.keys()) - set(k for k, v in responses.items() if not v)
+    #         if len(ids) == 0:
+    #             self.wm.loop_once()
+    #             continue
+    #         new_worker = random.choice(list(ids))
+    #         return new_worker, None, Task.WORK
 
 
     def on_new_worker(self, worker_id, info):

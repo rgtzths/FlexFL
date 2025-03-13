@@ -6,16 +6,17 @@ class Task:
     WORK = 0
     WORK_DONE = 1
 
-
 class DecentralizedSync(FederatedABC):
 
 
     def __init__(self, *, 
         local_epochs: int = 3,
+        epoch_threshold: float = 0.7,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.local_epochs = local_epochs
+        self.epoch_threshold = epoch_threshold
 
 
     def setup(self):
@@ -36,9 +37,10 @@ class DecentralizedSync(FederatedABC):
 
 
     def master_loop(self):
-        for epoch in range(1, self.epochs+1):
+        epoch = 0
+        while True:
             self.wm.wait_for_workers(self.min_workers)
-            pool = self.wm.get_subpool(self.min_workers, self.random_pool)
+            pool = self.wm.get_subpool(self.min_workers, self.subpool_fn)
             self.wm.send_n(
                 workers = pool, 
                 payload = self.ml.get_weights(),
@@ -46,29 +48,34 @@ class DecentralizedSync(FederatedABC):
             )
             weighted_sum = 0
             total_weight = 0
-            for worker_id, data in self.wm.recv_n(
+            for i, (worker_id, data) in enumerate(self.wm.recv_n(
                 workers = pool, 
                 type_ = Task.WORK_DONE,
-                retry_fn = self.retry_fn
-            ):
+                reschedule_fn = self.reschedule_fn
+            )):
                 node_weight = self.wm.get_info(worker_id)["n_samples"]
                 weighted_sum += data*node_weight
                 total_weight += node_weight
+            if i+1 < int(self.min_workers*self.epoch_threshold):
+                continue
+            epoch += 1
             self.ml.set_weights(weighted_sum/total_weight)
             self.validate(epoch, split="val", verbose=True)
             stop = self.early_stop() or epoch == self.epochs
             if stop:
-                self.wm.send_n(
-                    workers = self.wm.get_all_workers(), 
-                    type_ = WorkerManager.EXIT_TYPE
-                )
+                self.wm.end()
                 break
 
 
-    def retry_fn(self, worker_info, responses):
-        new_worker = self.random_worker(worker_info, responses)
-        if new_worker is None:
+    def subpool_fn(self, size, worker_info):
+        return self.round_robin_pool(size, set(worker_info.keys()))
+
+
+    def reschedule_fn(self, worker_info, responses):
+        workers = set(worker_info.keys()) - set(responses.keys())
+        if len(workers) == 0:
             return None, None, None
+        new_worker = self.round_robin_single(workers)
         return new_worker, self.ml.get_weights(), Task.WORK
 
     

@@ -51,10 +51,12 @@ if args.config is not None:
     parser.set_defaults(**config)
 args = parser.parse_args()
 args = {k: v for k, v in vars(args).items() if v is not None}
+
 if "nn" not in args:
     args["nn"] = args["dataset"]
-if "OMPI_COMM_WORLD_RANK" in os.environ:
+if "OMPI_COMM_WORLD_SIZE" in os.environ:
     args["comm"] = "MPI"
+    args["min_workers"] = int(os.environ["OMPI_COMM_WORLD_SIZE"]) - 1
 
 class_args = {k: v for k, v in args.items() if k not in FORBIDDEN_ARGS}
 

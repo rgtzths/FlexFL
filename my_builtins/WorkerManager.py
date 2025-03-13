@@ -111,27 +111,34 @@ class WorkerManager():
     def recv_n(self, 
         workers: list[int], 
         type_: Any = None, 
-        retry_fn: Callable[[dict, dict], tuple[int, Any, str]] = None,
+        reschedule_fn: Callable[[dict, dict], tuple[int, Any, str]] = None,
         return_on_disconnect: bool = False
     ) -> Generator:
         responses = {i: False for i in workers}
         while not all(responses.values()):
             node_id, data = self.recv(type_, True)
+            if node_id not in responses and data is None:
+                continue
             if data is not None:
                 responses[node_id] = True
                 yield node_id, data
                 continue
             responses.pop(node_id)
-            if retry_fn is None:
-                if return_on_disconnect:
-                    yield node_id, None
-                continue
-            new_id, new_data, new_type = retry_fn(self.worker_info, responses)
-            if new_id is not None:
-                responses[new_id] = False
-                self.send(node_id, new_data, new_type)
-            elif return_on_disconnect:
+            if reschedule_fn is not None:
+                new_id, new_data, new_type = reschedule_fn(self.worker_info, responses)
+                if new_id is not None:
+                    responses[new_id] = False
+                    self.send(node_id, new_data, new_type)
+                    continue
+            if return_on_disconnect:
                 yield node_id, None
+
+
+    def end(self) -> None:
+        self.send_n(
+            workers = self.get_all_workers(), 
+            type_ = WorkerManager.EXIT_TYPE
+        )
 
 
     def loop_once(self) -> None:
@@ -140,6 +147,11 @@ class WorkerManager():
 
     def wait_for_workers(self, n: int) -> None:
         while len(self.worker_info) < n:
+            self.loop_once()
+
+
+    def wait_for(self, condition: Callable[[], bool]) -> None:
+        while not condition():
             self.loop_once()
             
 

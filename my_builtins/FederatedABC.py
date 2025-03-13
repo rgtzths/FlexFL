@@ -6,7 +6,6 @@ from pathlib import Path
 from time import time
 import numpy as np
 from typing import Any
-import random
 
 from my_builtins.WorkerManager import WorkerManager
 from my_builtins.MLFrameworkABC import MLFrameworkABC
@@ -61,6 +60,8 @@ class FederatedABC(ABC):
         self.new_score = None
         self.is_master = None
         self.running = True
+
+        self.rr = set()
 
         self.setup_metrics()
         self.setup_nodes()
@@ -190,13 +191,28 @@ class FederatedABC(ABC):
     def run_loop(self):
         while self.running:
             self.wm.loop_once()
+
+
+    def round_robin_single(self, workers: set) -> int:
+        assert len(workers) > 0, "No workers available"
+        workers_ =  workers - self.rr
+        if len(workers_) == 0:
+            self.rr = set()
+            workers_ = workers
+        workers_ = sorted(list(workers_))
+        self.rr.add(workers_[0])
+        return workers_[0]
         
 
-    def random_pool(self, size: int, workers_info: dict) -> list[int]:
-        workers = list(workers_info.keys())
-        return random.sample(workers, size)
-    
-
-    def random_worker(self, workers_info: dict, responses: dict) -> int:
-        workers = set(workers_info.keys()) - set(responses.keys())
-        return random.choice(list(workers)) if workers else None
+    def round_robin_pool(self, size: int, workers: set) -> list[int]:
+        assert len(workers) >= size, "Not enough workers available"
+        chosen = []
+        workers_ = workers - self.rr
+        if len(workers_) < size:
+            chosen = sorted(list(workers_))
+            self.rr = set()
+            for w in chosen:
+                self.rr.add(w)
+        for _ in range(size - len(chosen)):
+            chosen.append(self.round_robin_single(workers))
+        return chosen
