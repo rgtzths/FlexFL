@@ -85,12 +85,12 @@ class DecentralizedAsync(FederatedABC):
         )
         self.iteration += 1
         self.handle_iteration()
+        if not self.running:
+            return
         self.send_work()
 
 
     def send_work(self):
-        if not self.running:
-            return
         avaliable_workers = set(self.wm.worker_info.keys()) - self.working
         new_worker = self.round_robin_single(avaliable_workers)
         self.working.add(new_worker)
@@ -105,6 +105,8 @@ class DecentralizedAsync(FederatedABC):
         if worker_id not in self.working:
             return
         self.working.remove(worker_id)
+        if not self.running:
+            return
         self.wm.wait_for_workers(self.min_workers)
         self.send_work()
 
