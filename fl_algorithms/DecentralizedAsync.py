@@ -66,7 +66,6 @@ class DecentralizedAsync(FederatedABC):
             self.running = False
             
 
-
     def on_work(self, sender_id, weights):
         self.ml.set_weights(weights)
         self.ml.train(self.local_epochs)
