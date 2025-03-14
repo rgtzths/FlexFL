@@ -151,7 +151,7 @@ class FederatedABC(ABC):
             preds = np.argmax(preds, axis=1)
         metrics = self.evaluator(y, preds).get_metrics_by_list_names(self.metrics)
         new_time = time()
-        delta_time = new_time - self.last_time
+        delta_time = abs(new_time - self.last_time)
         self.last_time = new_time
         if verbose:
             print(f"\nEpoch {epoch}/{self.epochs} - Time: {delta_time:.2f}s")

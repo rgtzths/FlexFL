@@ -57,7 +57,8 @@ if "nn" not in args:
     args["nn"] = args["dataset"]
 if "OMPI_COMM_WORLD_SIZE" in os.environ:
     args["comm"] = "MPI"
-    args["min_workers"] = int(os.environ["OMPI_COMM_WORLD_SIZE"]) - 1
+    if "min_workers" not in args:
+        args["min_workers"] = int(os.environ["OMPI_COMM_WORLD_SIZE"]) - 1
 
 class_args = {k: v for k, v in args.items() if k not in FORBIDDEN_ARGS}
 

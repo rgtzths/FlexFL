@@ -55,9 +55,9 @@ class DecentralizedAsync(FederatedABC):
 
 
     def handle_iteration(self):
-        if self.iteration % self.epochs != 0:
+        if self.iteration % self.min_workers != 0:
             return
-        epoch = self.iteration // self.epochs
+        epoch = self.iteration // self.min_workers
         self.ml.set_weights(self.weights)
         self.validate(epoch, split="val", verbose=True)
         stop = self.early_stop() or epoch == self.epochs
@@ -84,10 +84,8 @@ class DecentralizedAsync(FederatedABC):
             self.weights, worker_weights, self.lerp_factor
         )
         self.iteration += 1
-        self.handle_iteration()
-        if not self.running:
-            return
         self.send_work()
+        self.handle_iteration()
 
 
     def send_work(self):
