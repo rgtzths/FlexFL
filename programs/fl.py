@@ -19,6 +19,7 @@ MODULES, ALL_ARGS = get_modules_and_args(FOLDERS)
 
 ALIASES = {
     "DecentralizedSync": "ds",
+    "DecentralizedAsync": "da",
     "TensorFlow": "tf",
 }
 
@@ -82,6 +83,7 @@ f = fl_class(
         **class_args,
     ),
     all_args=args,
+    **class_args,
 )
 
 try:

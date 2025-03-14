@@ -3,35 +3,34 @@ from my_builtins.FederatedABC import FederatedABC
 from my_builtins.WorkerManager import WorkerManager
 
 class Task:
-    WEIGHTS = 0
-    WORK = 1
-    WORK_DONE = 2
-    WEIGHTS_DIFF = 3
+    WORK = 0
+    WORK_DONE = 1
 
-class DecentralizedSync(FederatedABC):
+class DecentralizedAsync(FederatedABC):
 
 
     def __init__(self, *, 
         local_epochs: int = 3,
-        alpha: float = 0.3,
+        lerp_factor: float = 0.3,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.local_epochs = local_epochs
-        self.running = True
+        self.lerp_factor = lerp_factor
+        self.iteration = 0
+        self.working = set()
 
 
     def setup(self):
         self.ml.compile_model()
         if self.is_master:
             self.ml.load_data("val")
-            self.wm.on_new_worker = self.on_new_worker
+            self.wm.on_worker_disconnect = self.on_worker_disconnect
         else:
             self.ml.load_data("train")
         self.wm.set_callbacks(
-            (Task.WEIGHTS, self.on_weights),
             (Task.WORK, self.on_work),
-            (Task.WEIGHTS_DIFF, self.on_weights_diff)
+            (Task.WORK_DONE, self.on_work_done)
         )
 
 
@@ -42,60 +41,34 @@ class DecentralizedSync(FederatedABC):
 
 
     def master_loop(self):
-        ...
-        # for epoch in range(1, self.epochs+1):
-        #     self.wm.wait_for_workers(self.min_workers)
-        #     pool = self.wm.get_subpool(self.min_workers, self.random_pool)
-        #     self.wm.send_n(
-        #         workers = pool, 
-        #         payload = None,
-        #         type_ = Task.WORK
-        #     )
-        #     for worker_id, payload in self.wm.recv_n(
-        #         workers = pool, 
-        #         type_ = Task.WORK_DONE,
-        #         retry_fn = self.retry_fn
-        #     ):
-        #         # TODO do something with weights
-        #         weights_diff = None
-        #         self.wm.send(
-        #             node_id = worker_id,
-        #             payload = weights_diff,
-        #             type_ = Task.WEIGHTS_DIFF
-        #         )
-        #     self.validate(epoch, split="val", verbose=True)
-        #     stop = self.early_stop() or epoch == self.epochs
-        #     if stop:
-        #         self.wm.send_n(
-        #             workers = self.wm.get_all_workers(), 
-        #             type_ = WorkerManager.EXIT_TYPE
-        #         )
-        #         break
-
-
-    # def retry_fn(self, worker_info, responses):
-    #     while True:
-    #         ids = set(worker_info.keys()) - set(k for k, v in responses.items() if not v)
-    #         if len(ids) == 0:
-    #             self.wm.loop_once()
-    #             continue
-    #         new_worker = random.choice(list(ids))
-    #         return new_worker, None, Task.WORK
-
-
-    def on_new_worker(self, worker_id, info):
-        self.wm.send(
-            node_id = worker_id,
-            payload = self.ml.get_weights(),
-            type_ = Task.WEIGHTS
+        self.wm.wait_for_workers(self.min_workers)
+        pool = self.wm.get_subpool(self.min_workers, self.subpool_fn)
+        self.weights = self.ml.get_weights()
+        self.wm.send_n(
+            workers = pool, 
+            payload = self.weights,
+            type_ = Task.WORK
         )
+        self.working = set(pool)
+        self.run_loop()
+        self.wm.wait_for(self.finished)
 
 
-    def on_weights(self, sender_id, payload):
-        self.ml.set_weights(payload)
+    def handle_iteration(self):
+        if self.iteration % self.epochs != 0:
+            return
+        epoch = self.iteration // self.epochs
+        self.ml.set_weights(self.weights)
+        self.validate(epoch, split="val", verbose=True)
+        stop = self.early_stop() or epoch == self.epochs
+        if stop:
+            self.wm.end()
+            self.running = False
+            
 
 
-    def on_work(self, sender_id, payload):
+    def on_work(self, sender_id, weights):
+        self.ml.set_weights(weights)
         self.ml.train(self.local_epochs)
         self.wm.send(
             node_id = WorkerManager.MASTER_ID, 
@@ -103,11 +76,52 @@ class DecentralizedSync(FederatedABC):
             type_ = Task.WORK_DONE
         )
 
+
+    def on_work_done(self, sender_id, worker_weights):
+        self.working.remove(sender_id)
+        if not self.running:
+            return
+        self.weights = self.linear_interpolation(
+            self.weights, worker_weights, self.lerp_factor
+        )
+        self.iteration += 1
+        self.handle_iteration()
+        self.send_work()
+
+
+    def send_work(self):
+        if not self.running:
+            return
+        avaliable_workers = set(self.wm.worker_info.keys()) - self.working
+        new_worker = self.round_robin_single(avaliable_workers)
+        self.working.add(new_worker)
+        self.wm.send(
+            node_id = new_worker,
+            payload = self.weights,
+            type_ = Task.WORK
+        )
+
+
+    def on_worker_disconnect(self, worker_id):
+        if worker_id not in self.working:
+            return
+        self.working.remove(worker_id)
+        self.wm.wait_for_workers(self.min_workers)
+        self.send_work()
+
+
+    def linear_interpolation(self, a, b, factor):
+        return a + (b - a)*factor
+
+
+    def subpool_fn(self, size, worker_info):
+        return self.round_robin_pool(size, set(worker_info.keys()))
     
-    def on_weights_diff(self, sender_id, weights_diff):
-        # TODO update weights
-        new_weights =  None
-        self.ml.set_weights(new_weights)
+
+    def finished(self):
+        return len(self.working) == 0
+
+
 
 
     

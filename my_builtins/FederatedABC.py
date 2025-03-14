@@ -121,6 +121,11 @@ class FederatedABC(ABC):
         else:
             self.wm.recv(WorkerManager.EXIT_TYPE)
         self.end()
+
+
+    def run_loop(self):
+        while self.running:
+            self.wm.loop_once()
                 
 
     def end(self):
@@ -186,11 +191,6 @@ class FederatedABC(ABC):
             return not any(score >= self.compare_score + self.delta for score in self.buffer)
         else:
             return not any(score <= self.compare_score - self.delta for score in self.buffer)
-        
-
-    def run_loop(self):
-        while self.running:
-            self.wm.loop_once()
 
 
     def round_robin_single(self, workers: set) -> int:

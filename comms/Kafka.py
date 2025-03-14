@@ -18,12 +18,12 @@ HEARTBEAT = 0.5
 class Kafka(CommABC):
 
     def __init__(self, *, 
-        kafka_ip: str = "localhost",
+        ip: str = "localhost",
         kafka_port: int = 9092,
         is_anchor: bool = False,
         **kwargs
     ) -> None:
-        self.kafka_broker = f"{kafka_ip}:{kafka_port}"
+        self.kafka_broker = f"{ip}:{kafka_port}"
         self._id = None
         self.is_anchor = is_anchor
         self._uuid = str(uuid4())

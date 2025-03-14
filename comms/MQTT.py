@@ -16,13 +16,13 @@ QOS = 0
 class MQTT(CommABC):
     
     def __init__(self, *, 
-        mqtt_ip: str = "localhost",
+        ip: str = "localhost",
         mqtt_port: int = 1883,
         is_anchor: bool = False,
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
-        self.ip = mqtt_ip
+        self.ip = ip
         self.port = mqtt_port
         self.is_anchor = is_anchor
         self._id = None
