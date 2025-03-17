@@ -8,7 +8,6 @@ class Task:
 
 class DecentralizedAsync(FederatedABC):
 
-
     def __init__(self, *, 
         local_epochs: int = 3,
         lerp_factor: float = 0.3,
@@ -35,9 +34,7 @@ class DecentralizedAsync(FederatedABC):
 
 
     def get_worker_info(self) -> dict:
-        return {
-            "n_samples": self.ml.n_samples,
-        }
+        return {}
 
 
     def master_loop(self):
@@ -55,6 +52,7 @@ class DecentralizedAsync(FederatedABC):
 
 
     def handle_iteration(self):
+        self.iteration += 1
         if self.iteration % self.min_workers != 0:
             return
         epoch = self.iteration // self.min_workers
@@ -83,7 +81,6 @@ class DecentralizedAsync(FederatedABC):
         self.weights = self.linear_interpolation(
             self.weights, worker_weights, self.lerp_factor
         )
-        self.iteration += 1
         self.send_work()
         self.handle_iteration()
 
@@ -119,8 +116,3 @@ class DecentralizedAsync(FederatedABC):
 
     def finished(self):
         return len(self.working) == 0
-
-
-
-
-    

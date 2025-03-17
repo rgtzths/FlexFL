@@ -8,10 +8,9 @@ class Task:
 
 class DecentralizedSync(FederatedABC):
 
-
     def __init__(self, *, 
         local_epochs: int = 3,
-        epoch_threshold: float = 0.7,
+        epoch_threshold: float = 0.5,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -51,7 +50,6 @@ class DecentralizedSync(FederatedABC):
             for i, (worker_id, data) in enumerate(self.wm.recv_n(
                 workers = pool, 
                 type_ = Task.WORK_DONE,
-                reschedule_fn = self.reschedule_fn
             )):
                 node_weight = self.wm.get_info(worker_id)["n_samples"]
                 weighted_sum += data*node_weight
@@ -69,14 +67,6 @@ class DecentralizedSync(FederatedABC):
 
     def subpool_fn(self, size, worker_info):
         return self.round_robin_pool(size, set(worker_info.keys()))
-
-
-    def reschedule_fn(self, worker_info, responses):
-        workers = set(worker_info.keys()) - set(responses.keys())
-        if len(workers) == 0:
-            return None, None, None
-        new_worker = self.round_robin_single(workers)
-        return new_worker, self.ml.get_weights(), Task.WORK
 
     
     def on_work(self, sender_id, weights):
