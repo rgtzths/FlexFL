@@ -19,7 +19,7 @@ class IOT_DNL(DatasetABC):
 
     @property
     def scaler(self):
-        return StandardScaler()
+        return StandardScaler
 
 
     def download(self):

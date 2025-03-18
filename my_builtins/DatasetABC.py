@@ -160,7 +160,8 @@ class DatasetABC(ABC):
                 file.unlink()
             folder.rmdir()
         x, y = self.load_data('val')
-        x = self.scaler.fit_transform(x)
+        scaler = self.scaler()
+        x = scaler.fit_transform(x)
         self.data_path = f"{self.base_path}/node_0"
         self.save_data(x, y, 'val')
         self.data_path = self.default_folder
@@ -170,14 +171,15 @@ class DatasetABC(ABC):
         for i in range(num_workers):
             my_x, my_y = x[i], y[i]
             x_train, y_train, x_val, y_val, x_test, y_test = self.split_data(my_x, my_y, val_size, test_size)
-            x_train = self.scaler.fit_transform(x_train)
+            scaler = self.scaler()
+            x_train = scaler.fit_transform(x_train)
             self.data_path = f"{self.base_path}/node_{i+1}"
             self.save_data(x_train, y_train, 'train')
             if val_size > 0:
-                x_val = self.scaler.transform(x_val)
+                x_val = scaler.transform(x_val)
                 self.save_data(x_val, y_val, 'val')
             if test_size > 0:
-                x_test = self.scaler.transform(x_test)
+                x_test = scaler.transform(x_test)
                 self.save_data(x_test, y_test, 'test')
 
 

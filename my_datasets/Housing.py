@@ -18,7 +18,7 @@ class Housing(DatasetABC):
 
     @property
     def scaler(self):
-        return StandardScaler()
+        return StandardScaler
 
 
     def download(self):
