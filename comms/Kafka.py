@@ -12,8 +12,8 @@ from my_builtins.CommABC import CommABC
 TOPIC = "fl"
 DISCOVER = "fl_discover"
 LIVENESS = "fl_liveness"
-TIMEOUT = 2
-HEARTBEAT = 0.5
+TIMEOUT = 3
+HEARTBEAT = 1
 
 class Kafka(CommABC):
 
@@ -33,6 +33,7 @@ class Kafka(CommABC):
         self.total_nodes = 0
         self.id_mapping = {}
         self.hearbeats = {}
+        self.last_time = None
         self.running = True
         self.thread: threading.Thread = None
         self.admin = None
@@ -61,6 +62,8 @@ class Kafka(CommABC):
     def send(self, node_id: int, data: bytes) -> None:
         assert node_id in self.nodes, f"Node {node_id} not found"
         data = self.id.to_bytes(4) + data
+        if node_id == 0:
+            self.last_time = time.time()
         self.producer.send(
             topic=f"{TOPIC}_{self.id_mapping[node_id]}", 
             value=data, 
@@ -100,7 +103,6 @@ class Kafka(CommABC):
         )
         if self.is_anchor:
             self._id = 0
-            self._nodes.add(0)
             self.consumer.subscribe([f"{TOPIC}_{self._uuid}", DISCOVER, LIVENESS])
         else:
             self.consumer.subscribe([f"{TOPIC}_{self._uuid}"])
@@ -108,25 +110,26 @@ class Kafka(CommABC):
             self.producer.flush()
             res = self.consumer.poll(timeout_ms=10000, max_records=1)
             if len(res) == 0:
-                raise Exception("No response from anchor node")
+                raise TimeoutError("Timeout waiting for anchor node")
             msg = res.popitem()[1][0].value
             self._id, node_uuid, self._start_time = pickle.loads(msg)
             self.id_mapping[0] = node_uuid
+        self._nodes.add(0)
         self.id_mapping[self.id] = self._uuid
         self.thread = threading.Thread(target=self.listen)
         self.thread.start()
 
 
     def listen(self):
-        last_time = time.time()
+        self.last_time = time.time()
         while self.running:
             self.handle_msg()
             if self.is_anchor:
-                if (time.time() - last_time) >= TIMEOUT:
-                    last_time = time.time()
+                if (time.time() - self.last_time) >= TIMEOUT:
+                    self.last_time = time.time()
                     self.handle_liveliness()
-            elif (time.time() - last_time) >= HEARTBEAT:
-                last_time = time.time()
+            elif (time.time() - self.last_time) >= HEARTBEAT:
+                self.last_time = time.time()
                 self.producer.send(LIVENESS, self.id.to_bytes(4))
                 self.producer.flush()
 
@@ -139,7 +142,8 @@ class Kafka(CommABC):
                     self.handle_discover(msg.value)
                 elif topic.topic == LIVENESS:
                     node_id = int.from_bytes(msg.value)
-                    self.hearbeats[node_id] = time.time()
+                    if node_id in self.nodes:
+                        self.hearbeats[node_id] = time.time()
                 else:
                     self.handle_recv(msg.value)
 
@@ -166,8 +170,12 @@ class Kafka(CommABC):
 
     def handle_recv(self, payload: bytes):
         node_id = int.from_bytes(payload[:4])
+        if node_id not in self.nodes:
+            raise ValueError(f"Received message from unknown node {node_id}")
         data = payload[4:]
         self.q.put((node_id, data))
+        if self.id == 0:
+            self.hearbeats[node_id] = time.time()
 
             
         

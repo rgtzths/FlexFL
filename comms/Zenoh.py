@@ -70,6 +70,8 @@ class Zenoh(CommABC):
     def handle_recv(self, sample: zenoh.Sample):
         data: bytes = sample.payload.to_bytes()
         node_id = int.from_bytes(data[:4])
+        if node_id not in self.nodes:
+            raise ValueError(f"Received message from unknown node {node_id}")
         data = data[4:]
         self.q.put((node_id, data))
 
@@ -81,7 +83,7 @@ class Zenoh(CommABC):
             self.liveliness_token = self.session.liveliness().declare_token(f"{LIVELINESS}/{self.id}")
         if self.id is None:
             self._id = 0
-            self._nodes.add(0)
             self.session.declare_queryable(DISCOVER, self.handle_id)
             self.liveliness_sub = self.session.liveliness().declare_subscriber(f"{LIVELINESS}/**", history=True, handler=self.handle_liveliness)
+        self._nodes.add(0)
         self.sub = self.session.declare_subscriber(f"fl/{self._id}", self.handle_recv)

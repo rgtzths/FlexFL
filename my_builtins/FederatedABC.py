@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 from time import time
 import numpy as np
-from typing import Any
 
 from my_builtins.WorkerManager import WorkerManager
 from my_builtins.MLFrameworkABC import MLFrameworkABC
@@ -101,12 +100,13 @@ class FederatedABC(ABC):
 
     
     def setup_nodes(self):
-        self.is_master = self.wm.c.id == 0
         self.id = self.wm.c.id
+        self.is_master = self.id == 0
         self.base_path = f"{RESULTS_FOLDER}/{self.wm.c.start_time.strftime('%Y-%m-%d_%H:%M:%S')}"
         Path(self.base_path).mkdir(parents=True, exist_ok=True)
-        with open(f"{self.base_path}/args.json", "w") as f:
-            json.dump(self.all_args, f, indent=4)
+        if self.is_master:
+            with open(f"{self.base_path}/args.json", "w") as f:
+                json.dump(self.all_args, f, indent=4)
         if self.ml.dataset.default_folder == self.ml.dataset.data_path:
             self.ml.dataset.data_path = f"{self.ml.dataset.base_path}/node_{self.id}"
 

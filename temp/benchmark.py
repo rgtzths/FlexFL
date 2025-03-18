@@ -31,7 +31,7 @@ args = parser.parse_args()
 c: CommABC  = COMMS[args.comms](is_anchor=args.anchor)
 print(f"Node {c.id} started")
 
-payload = np.array([random.randint(0, 100) for _ in range(10000)], dtype=np.uint8)
+payload = np.array([random.randint(0, 100) for _ in range(10000)], dtype=np.float32)
 payload = pickle.dumps(payload)
 
 if c.id == 0:
@@ -39,7 +39,7 @@ if c.id == 0:
         time.sleep(1)
         if len(c.nodes) == 2:
             break
-    print("Starting benchmark")
+    print(f"Starting benchmark: Ping Pong with {LOOPS} loops")
     start = time.time()
 
     for _ in range(LOOPS):
@@ -47,6 +47,7 @@ if c.id == 0:
         _, data = c.recv()
     end = time.time()
     print(f"Time taken: {end - start}")
+    print(f"Avg time for each msg: {(end - start) / (LOOPS * 2)}")
 
 else:
     for _ in range(LOOPS):

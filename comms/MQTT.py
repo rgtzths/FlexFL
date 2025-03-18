@@ -81,7 +81,6 @@ class MQTT(CommABC):
         self.client.loop_start()
         if self.is_anchor:
             self._id = 0
-            self._nodes.add(0)
             self.client.subscribe(DISCOVER)
             self.client.subscribe(LIVELINESS)
         else:
@@ -90,6 +89,7 @@ class MQTT(CommABC):
             self._id, node_uuid, self._start_time = pickle.loads(msg)
             self.id_mapping[0] = node_uuid
             self.uuid_mapping[node_uuid] = 0
+        self._nodes.add(0)
         self.id_mapping[self.id] = self._uuid
         self.uuid_mapping[self._uuid] = self.id
 
@@ -121,6 +121,8 @@ class MQTT(CommABC):
             self.handle_liveliness(payload)
         else:
             node_id = int.from_bytes(payload[:4])
+            if node_id not in self.nodes:
+                raise ValueError(f"Received message from unknown node {node_id}")
             data = payload[4:]
             self.q.put((node_id, data))
         
