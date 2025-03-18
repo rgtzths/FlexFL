@@ -43,10 +43,6 @@ class PyTorch(MLFrameworkABC):
         self.model.to(self.device)
 
 
-    def compile_model(self):
-        return
-
-
     def load_data(self, split: str):
         x, y = self.dataset.load_data(split)
         self.n_samples = x.shape[0]

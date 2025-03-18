@@ -19,7 +19,6 @@ class DecentralizedSync(FederatedABC):
 
 
     def setup(self):
-        self.ml.compile_model()
         if self.is_master:
             self.ml.load_data("val")
         else:

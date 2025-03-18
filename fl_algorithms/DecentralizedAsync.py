@@ -22,7 +22,6 @@ class DecentralizedAsync(FederatedABC):
 
 
     def setup(self):
-        self.ml.compile_model()
         if self.is_master:
             self.ml.load_data("val")
             self.wm.on_worker_disconnect = self.on_worker_disconnect

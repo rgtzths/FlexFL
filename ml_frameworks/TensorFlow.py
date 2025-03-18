@@ -31,6 +31,7 @@ class TensorFlow(MLFrameworkABC):
         tf.random.set_seed(self.seed)
         self.optimizer = OPTIMIZERS[self.optimizer_name](learning_rate=self.learning_rate)
         self.loss = LOSSES[self.loss_name]()
+        self.model.compile(optimizer=self.optimizer, loss=self.loss)
 
 
     def load_data(self, split: str):
@@ -42,10 +43,6 @@ class TensorFlow(MLFrameworkABC):
         setattr(self, f"y_{split}", y)
         setattr(self, f"{split}_data", data)
         setattr(self, f"{split}_iterator", cycle(data))
-
-
-    def compile_model(self):
-        self.model.compile(optimizer=self.optimizer, loss=self.loss)
 
 
     def get_weights(self):

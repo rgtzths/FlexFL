@@ -58,14 +58,6 @@ class MLFrameworkABC(ABC):
 
 
     @abstractmethod
-    def compile_model(self) -> None:
-        """
-        Compile the model
-        """
-        pass
-
-
-    @abstractmethod
     def get_weights(self) -> np.ndarray:
         """
         Get the model weights
