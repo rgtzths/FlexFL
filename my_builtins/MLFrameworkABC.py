@@ -28,8 +28,8 @@ class MLFrameworkABC(ABC):
         random.seed(seed)
         np.random.seed(seed)
         self.model = nn.get_model(self.prefix, dataset)
-        self.setup()
         self.n_samples = None
+        self.setup()
 
 
     @property
