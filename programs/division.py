@@ -12,8 +12,8 @@ MODULES, ALL_ARGS = get_modules_and_args(FOLDERS)
 parser = argparse.ArgumentParser()
 parser.add_argument("-d", "--dataset", type=str, required=True, help="Dataset name (\"all\" to preprocess all datasets)", choices=["all", *MODULES["my_datasets"].keys()])
 parser.add_argument("-n", "--num_workers", type=int, required=True, help="Number of workers")
-parser.add_argument("-v", "--val_size", type=float, default=0, help="Default: float = 0.15")
-parser.add_argument("-t", "--test_size", type=float, default=0, help="Default: float = 0.15")
+parser.add_argument("-v", "--val_size", type=float, default=0, help="Default: float = 0")
+parser.add_argument("-t", "--test_size", type=float, default=0, help="Default: float = 0")
 args = parser.parse_args()
 
 datasets = list(MODULES["my_datasets"].keys()) if args.dataset == "all" else [args.dataset]

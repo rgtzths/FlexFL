@@ -15,6 +15,11 @@ class IOT_DNL(DatasetABC):
     @property
     def output_size(self) -> int:
         return 6
+    
+
+    @property
+    def scaler(self):
+        return StandardScaler()
 
 
     def download(self):
@@ -34,4 +39,4 @@ class IOT_DNL(DatasetABC):
         x = x.drop('frame.time', axis=1)
         y = data['normality']
         self.save_features(x.columns)
-        self.split_save(x, y, val_size, test_size, StandardScaler())
+        self.split_save(x, y, val_size, test_size)

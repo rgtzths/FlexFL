@@ -14,6 +14,11 @@ class Housing(DatasetABC):
     @property
     def output_size(self) -> int:
         return 1
+    
+
+    @property
+    def scaler(self):
+        return StandardScaler()
 
 
     def download(self):
@@ -22,4 +27,4 @@ class Housing(DatasetABC):
     
     def preprocess(self, val_size, test_size):
         x, y = fetch_california_housing(return_X_y=True)
-        self.split_save(x, y, val_size, test_size, StandardScaler())
+        self.split_save(x, y, val_size, test_size)

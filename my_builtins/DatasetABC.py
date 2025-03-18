@@ -3,6 +3,7 @@ from pathlib import Path
 import json
 import numpy as np
 from sklearn.model_selection import train_test_split
+from typing import Any
 import wget
 import zipfile
 import os
@@ -45,6 +46,14 @@ class DatasetABC(ABC):
     def output_size(self) -> int:
         """
         Returns the size of the output for the neural network
+        """
+        pass
+
+
+    @property
+    def scaler(self) -> Any:
+        """
+        Returns the scaler object
         """
         pass
 
@@ -125,14 +134,10 @@ class DatasetABC(ABC):
 
     
 
-    def split_save(self, x, y, val_size = 0.15, test_size = 0.15, scaler=None):
+    def split_save(self, x, y, val_size = 0.15, test_size = 0.15):
         self.metadata['samples'] = x.shape[0]
         self.metadata['input_shape'] = x.shape[1:]
         x_train, y_train, x_val, y_val, x_test, y_test = self.split_data(x, y, val_size, test_size)
-        if scaler is not None:
-            x_train = scaler.fit_transform(x_train)
-            x_val = scaler.transform(x_val)
-            x_test = scaler.transform(x_test)
         self.save_data(x_train, y_train, 'train')
         self.save_data(x_val, y_val, 'val')
         self.save_data(x_test, y_test, 'test')
@@ -155,6 +160,7 @@ class DatasetABC(ABC):
                 file.unlink()
             folder.rmdir()
         x, y = self.load_data('val')
+        x = self.scaler.fit_transform(x)
         self.data_path = f"{self.base_path}/node_0"
         self.save_data(x, y, 'val')
         self.data_path = self.default_folder
@@ -164,11 +170,14 @@ class DatasetABC(ABC):
         for i in range(num_workers):
             my_x, my_y = x[i], y[i]
             x_train, y_train, x_val, y_val, x_test, y_test = self.split_data(my_x, my_y, val_size, test_size)
+            x_train = self.scaler.fit_transform(x_train)
             self.data_path = f"{self.base_path}/node_{i+1}"
             self.save_data(x_train, y_train, 'train')
             if val_size > 0:
+                x_val = self.scaler.transform(x_val)
                 self.save_data(x_val, y_val, 'val')
             if test_size > 0:
+                x_test = self.scaler.transform(x_test)
                 self.save_data(x_test, y_test, 'test')
 
 
