@@ -159,28 +159,41 @@ class DatasetABC(ABC):
             for file in folder.glob('*'):
                 file.unlink()
             folder.rmdir()
+        self.division_master()
+        x, y = self.division_iid(num_workers)
+        for i in range(num_workers):
+            self.division_worker(x[i], y[i], i+1, val_size, test_size)
+
+
+    def division_master(self):
+        self.data_path = self.default_folder
         x, y = self.load_data('val')
         scaler = self.scaler()
         x = scaler.fit_transform(x)
         self.data_path = f"{self.base_path}/node_0"
         self.save_data(x, y, 'val')
+
+
+    def division_iid(self, num_workers):
         self.data_path = self.default_folder
         x, y = self.load_data('train')
         x = np.array_split(x, num_workers)
         y = np.array_split(y, num_workers)
-        for i in range(num_workers):
-            my_x, my_y = x[i], y[i]
-            x_train, y_train, x_val, y_val, x_test, y_test = self.split_data(my_x, my_y, val_size, test_size)
-            scaler = self.scaler()
-            x_train = scaler.fit_transform(x_train)
-            self.data_path = f"{self.base_path}/node_{i+1}"
-            self.save_data(x_train, y_train, 'train')
-            if val_size > 0:
-                x_val = scaler.transform(x_val)
-                self.save_data(x_val, y_val, 'val')
-            if test_size > 0:
-                x_test = scaler.transform(x_test)
-                self.save_data(x_test, y_test, 'test')
+        return x, y
+    
+
+    def division_worker(self, x, y, worker_id, val_size, test_size):
+        x_train, y_train, x_val, y_val, x_test, y_test = self.split_data(x, y, val_size, test_size)
+        scaler = self.scaler()
+        x_train = scaler.fit_transform(x_train)
+        self.data_path = f"{self.base_path}/node_{worker_id}"
+        self.save_data(x_train, y_train, 'train')
+        if val_size > 0:
+            x_val = scaler.transform(x_val)
+            self.save_data(x_val, y_val, 'val')
+        if test_size > 0:
+            x_test = scaler.transform(x_test)
+            self.save_data(x_test, y_test, 'test')
 
 
     def download_file(self, url):
