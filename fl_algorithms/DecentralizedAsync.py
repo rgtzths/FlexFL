@@ -1,3 +1,4 @@
+import numpy as np
 
 from my_builtins.FederatedABC import FederatedABC
 from my_builtins.WorkerManager import WorkerManager
@@ -10,12 +11,12 @@ class DecentralizedAsync(FederatedABC):
 
     def __init__(self, *, 
         local_epochs: int = 3,
-        lerp_factor: float = 0.3,
+        alpha: float = 0.3,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.local_epochs = local_epochs
-        self.lerp_factor = lerp_factor
+        self.alpha = alpha
         self.iteration = 0
         self.working = set()
 
@@ -79,7 +80,7 @@ class DecentralizedAsync(FederatedABC):
         if not self.running:
             return
         self.weights = self.linear_interpolation(
-            self.weights, worker_weights, self.lerp_factor
+            self.weights, worker_weights, self.alpha
         )
         self.send_work()
         self.handle_iteration()
@@ -106,7 +107,7 @@ class DecentralizedAsync(FederatedABC):
         self.send_work()
 
 
-    def linear_interpolation(self, a, b, factor):
+    def linear_interpolation(self, a: np.ndarray, b: np.ndarray, factor: float) -> np.ndarray:
         return a + (b - a)*factor
 
 

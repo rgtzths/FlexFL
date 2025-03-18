@@ -143,10 +143,11 @@ class FederatedABC(ABC):
         self.end()
 
 
-    def validate(self, epoch: int, split = "val", verbose = False) -> float:
+    def validate(self, epoch: int, split = "val", verbose = False) -> tuple[dict[str, float], float]:
         x = getattr(self.ml, f"x_{split}")
         y = getattr(self.ml, f"y_{split}")
         preds = self.ml.predict(x)
+        loss = self.ml.calculate_loss(y, preds)
         if self.is_classification:
             preds = np.argmax(preds, axis=1)
         metrics = self.evaluator(y, preds).get_metrics_by_list_names(self.metrics)
@@ -155,7 +156,7 @@ class FederatedABC(ABC):
         self.last_time = new_time
         if verbose:
             print(f"\nEpoch {epoch}/{self.epochs} - Time: {delta_time:.2f}s")
-            print(', '.join(f'{name}: {value:.4f}' for name, value in metrics.items()))
+            print(', '.join(f'{name}: {value:.4f}' for name, value in metrics.items()) + f' - Loss: {loss:.4f}')
         self.new_score = metrics[self.metrics[0]]
         if (
             self.best_score is None or
@@ -164,7 +165,7 @@ class FederatedABC(ABC):
         ):
             self.best_score = self.new_score
             self.best_weights = self.ml.get_weights()
-        return metrics
+        return metrics, loss
     
 
     def early_stop(self) -> bool:

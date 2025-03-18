@@ -21,6 +21,7 @@ ALIASES = {
     "DecentralizedSync": "ds",
     "DecentralizedAsync": "da",
     "TensorFlow": "tf",
+    "PyTorch": "torch",
 }
 
 for m, classes in list(MODULES.items()):

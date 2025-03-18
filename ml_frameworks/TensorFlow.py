@@ -95,6 +95,10 @@ class TensorFlow(MLFrameworkABC):
         return self.model.predict(data, batch_size=self.batch_size, verbose=0)
     
 
+    def calculate_loss(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
+        return self.loss(y_true, y_pred).numpy()
+    
+
     def save_model(self, path):
         self.model.save(f"{path}.keras")
 

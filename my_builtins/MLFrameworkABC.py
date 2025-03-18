@@ -27,8 +27,8 @@ class MLFrameworkABC(ABC):
         self.seed = seed
         random.seed(seed)
         np.random.seed(seed)
-        self.setup()
         self.model = nn.get_model(self.prefix, dataset)
+        self.setup()
         self.n_samples = None
 
 
@@ -109,6 +109,14 @@ class MLFrameworkABC(ABC):
     def predict(self, data: Any) -> np.ndarray:
         """
         Predict the data
+        """
+        pass
+
+
+    @abstractmethod
+    def calculate_loss(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
+        """
+        Calculate the loss
         """
         pass
 
