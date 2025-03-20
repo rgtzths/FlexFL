@@ -24,6 +24,7 @@ flx-division = "flx.cli.division:main"
 flx-preprocess = "flx.cli.preprocess:main"
 flx-res = "flx.cli.auto_restart:main"
 
+
 [project.optional-dependencies]
 all = [
     "tensorflow[and-cuda]>=2.19.0",
