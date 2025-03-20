@@ -8,6 +8,7 @@ import numpy as np
 
 from my_builtins.WorkerManager import WorkerManager
 from my_builtins.MLFrameworkABC import MLFrameworkABC
+from my_builtins.Logger import Logger
 
 RESULTS_FOLDER = "results"
 
@@ -52,7 +53,7 @@ class FederatedABC(ABC):
         self.compare_score = None
         self.best_score = None
         self.best_weights = None
-        self.last_time = 0
+        self.epoch_start = time()
         self.is_classification = None
         self.metrics = None
         self.evaluator = None
@@ -109,6 +110,7 @@ class FederatedABC(ABC):
                 json.dump(self.all_args, f, indent=4)
         if self.ml.dataset.default_folder == self.ml.dataset.data_path:
             self.ml.dataset.data_path = f"{self.ml.dataset.base_path}/node_{self.id}"
+        Logger.setup(f"{self.base_path}/log_{self.id}.jsonl")
 
 
     def run(self):
@@ -133,6 +135,7 @@ class FederatedABC(ABC):
             self.ml.set_weights(self.best_weights)
             self.ml.save_model(f"{self.base_path}/model")
         self.wm.c.close()
+        Logger.end()
 
 
     def force_end(self):
@@ -152,8 +155,7 @@ class FederatedABC(ABC):
             preds = np.argmax(preds, axis=1)
         metrics = self.evaluator(y, preds).get_metrics_by_list_names(self.metrics)
         new_time = time()
-        delta_time = abs(new_time - self.last_time)
-        self.last_time = new_time
+        delta_time = new_time - self.epoch_start
         if verbose:
             print(f"\nEpoch {epoch}/{self.epochs} - Time: {delta_time:.2f}s")
             print(', '.join(f'{name}: {value:.4f}' for name, value in metrics.items()) + f' - Loss: {loss:.4f}')
@@ -165,6 +167,7 @@ class FederatedABC(ABC):
         ):
             self.best_score = self.new_score
             self.best_weights = self.ml.get_weights()
+        Logger.log(Logger.EPOCH, epoch=epoch, time=delta_time, loss=loss, **metrics)
         return metrics, loss
     
 

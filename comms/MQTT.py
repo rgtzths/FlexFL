@@ -5,6 +5,7 @@ import paho.mqtt.client as mqtt
 from uuid import uuid4
 
 from my_builtins.CommABC import CommABC
+from my_builtins.Logger import Logger
 
 TOPIC = "fl"
 DISCOVER = "fl_discover"
@@ -56,12 +57,14 @@ class MQTT(CommABC):
         return self._start_time
     
 
+    @Logger.send
     def send(self, node_id: int, data: bytes) -> None:
         assert node_id in self.nodes, f"Node {node_id} not found"
         data = self.id.to_bytes(4, "big") + data
         self.client.publish(f"{TOPIC}/{self.id_mapping[node_id]}", data, qos=QOS)
 
 
+    @Logger.recv
     def recv(self, node_id: int = None) -> tuple[int, bytes]:
         assert node_id is None, "Support for specific node_id not implemented"
         return self.q.get()
@@ -97,6 +100,7 @@ class MQTT(CommABC):
     def handle_discover(self, payload: bytes):
         node_uuid = pickle.loads(payload)
         self.total_nodes += 1
+        Logger.log(Logger.JOIN, node_id=self.total_nodes)
         self._nodes.add(self.total_nodes)
         self.id_mapping[self.total_nodes] = node_uuid
         self.uuid_mapping[node_uuid] = self.total_nodes
@@ -107,6 +111,7 @@ class MQTT(CommABC):
     def handle_liveliness(self, payload: bytes):
         node_uuid = pickle.loads(payload)
         node_id = self.uuid_mapping[node_uuid]
+        Logger.log(Logger.LEAVE, node_id=node_id)
         self._nodes.remove(node_id)
         self.id_mapping.pop(node_id)
         self.uuid_mapping.pop(node_uuid)

@@ -41,7 +41,7 @@ parser.add_argument('--fl', type=str, help="Federated learning algorithm", choic
 parser.add_argument('--ml', type=str, help="Machine learning framework", choices=MODULES["ml_frameworks"].keys(), default="TensorFlow")
 
 for arg, (type_, value) in ALL_ARGS.items():
-    if type_ == bool:
+    if type_ is bool:
         parser.add_argument(f'--{arg}', action=argparse.BooleanOptionalAction, required=False, help=f"Default: {type_.__name__} = {value}")
     else:
         parser.add_argument(f'--{arg}', type=type_, required=False, help=f"Default: {type_.__name__} = {value}")

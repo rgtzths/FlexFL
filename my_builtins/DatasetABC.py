@@ -51,6 +51,7 @@ class DatasetABC(ABC):
 
 
     @property
+    @abstractmethod
     def scaler(self) -> Any:
         """
         Returns the scaler object

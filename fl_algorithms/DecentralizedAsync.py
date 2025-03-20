@@ -1,4 +1,5 @@
 import numpy as np
+from time import time
 
 from my_builtins.FederatedABC import FederatedABC
 from my_builtins.WorkerManager import WorkerManager
@@ -39,6 +40,7 @@ class DecentralizedAsync(FederatedABC):
 
     def master_loop(self):
         self.wm.wait_for_workers(self.min_workers)
+        self.epoch_start = time()
         pool = self.wm.get_subpool(self.min_workers, self.subpool_fn)
         self.weights = self.ml.get_weights()
         self.wm.send_n(
@@ -62,6 +64,7 @@ class DecentralizedAsync(FederatedABC):
         if stop:
             self.wm.end()
             self.running = False
+        self.epoch_start = time()
             
 
     def on_work(self, sender_id, weights):

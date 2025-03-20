@@ -93,7 +93,7 @@ class TensorFlow(MLFrameworkABC):
     
 
     def calculate_loss(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
-        return self.loss(y_true, y_pred).numpy()
+        return float(self.loss(y_true, y_pred).numpy())
     
 
     def save_model(self, path):

@@ -4,6 +4,7 @@ from datetime import datetime
 import pickle
 
 from my_builtins.CommABC import CommABC
+from my_builtins.Logger import Logger
 
 DISCOVER = "fl_discover"
 LIVELINESS = "fl_liveliness"
@@ -38,12 +39,14 @@ class Zenoh(CommABC):
         return self._start_time
 
 
+    @Logger.send
     def send(self, node_id: int, data: bytes) -> None:
         assert node_id in self.nodes, f"Node {node_id} not found"
         data = self.id.to_bytes(4) + data
         self.session.put(f"fl/{node_id}", data)
 
 
+    @Logger.recv
     def recv(self, node_id: int = None) -> tuple[int, bytes]:
         assert node_id is None, "Support for specific node_id not implemented"
         return self.q.get()
@@ -55,6 +58,7 @@ class Zenoh(CommABC):
 
     def handle_id(self, query: zenoh.Query):
         self.total_nodes += 1
+        Logger.log(Logger.JOIN, node_id=self.total_nodes)
         self._nodes.add(self.total_nodes)
         payload = (self.total_nodes, self.start_time)
         query.reply(query.key_expr, pickle.dumps(payload))
@@ -63,6 +67,7 @@ class Zenoh(CommABC):
     def handle_liveliness(self, sample: zenoh.Sample):
         node_id = int(f"{sample.key_expr}".split("/")[-1])
         if sample.kind == zenoh.SampleKind.DELETE:
+            Logger.log(Logger.LEAVE, node_id=node_id)
             self._nodes.remove(node_id)
             self.q.put((node_id, None))
 

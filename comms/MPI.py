@@ -2,6 +2,7 @@ from mpi4py import MPI as MPI4py
 from datetime import datetime
 
 from my_builtins.CommABC import CommABC
+from my_builtins.Logger import Logger
 
 class MPI(CommABC):
 
@@ -30,11 +31,13 @@ class MPI(CommABC):
         return self._start_time
     
 
+    @Logger.send
     def send(self, node_id: int, data: bytes) -> None:
         assert node_id in self.nodes, f"Node {node_id} not found"
         self.comm.send(data, dest=node_id, tag=0)
 
 
+    @Logger.recv
     def recv(self, node_id: int = None) -> tuple[int, bytes]:
         if node_id is None:
             data = self.comm.recv(source=MPI4py.ANY_SOURCE, tag=0, status=self.status)

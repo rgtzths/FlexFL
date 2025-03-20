@@ -1,3 +1,4 @@
+from time import time
 
 from my_builtins.FederatedABC import FederatedABC
 from my_builtins.WorkerManager import WorkerManager
@@ -38,6 +39,7 @@ class DecentralizedSync(FederatedABC):
         epoch = 0
         while True:
             self.wm.wait_for_workers(self.min_workers)
+            self.epoch_start = time()
             pool = self.wm.get_subpool(self.min_workers, self.subpool_fn)
             self.wm.send_n(
                 workers = pool, 
