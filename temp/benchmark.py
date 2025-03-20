@@ -9,10 +9,10 @@ sys.path.append(".")
 load_dotenv()
 
 import argparse
-from my_builtins.CommABC import CommABC
-from comms.Zenoh import Zenoh
-from comms.Kafka import Kafka
-from comms.MQTT import MQTT
+from flx.builtins.CommABC import CommABC
+from flx.comms.Zenoh import Zenoh
+from flx.comms.Kafka import Kafka
+from flx.comms.MQTT import MQTT
 # from comms.MPI import MPI
 
 COMMS = {
