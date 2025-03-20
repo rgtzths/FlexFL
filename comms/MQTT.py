@@ -57,17 +57,18 @@ class MQTT(CommABC):
         return self._start_time
     
 
-    @Logger.send
     def send(self, node_id: int, data: bytes) -> None:
         assert node_id in self.nodes, f"Node {node_id} not found"
+        Logger.log(Logger.SEND, sender=self.id, receiver=node_id, payload_size=len(data))
         data = self.id.to_bytes(4, "big") + data
         self.client.publish(f"{TOPIC}/{self.id_mapping[node_id]}", data, qos=QOS)
 
 
-    @Logger.recv
     def recv(self, node_id: int = None) -> tuple[int, bytes]:
         assert node_id is None, "Support for specific node_id not implemented"
-        return self.q.get()
+        node_id, data = self.q.get()
+        Logger.log(Logger.RECV, sender=node_id, receiver=self.id, payload_size=len(data))
+        return node_id, data
     
 
     def close(self) -> None:

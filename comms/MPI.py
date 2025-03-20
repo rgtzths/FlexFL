@@ -31,18 +31,20 @@ class MPI(CommABC):
         return self._start_time
     
 
-    @Logger.send
     def send(self, node_id: int, data: bytes) -> None:
         assert node_id in self.nodes, f"Node {node_id} not found"
+        Logger.log(Logger.SEND, sender=self.id, receiver=node_id, payload_size=len(data))
         self.comm.send(data, dest=node_id, tag=0)
 
 
-    @Logger.recv
     def recv(self, node_id: int = None) -> tuple[int, bytes]:
         if node_id is None:
             data = self.comm.recv(source=MPI4py.ANY_SOURCE, tag=0, status=self.status)
-            return self.status.Get_source(), data
-        return node_id, self.comm.recv(source=node_id, tag=0)
+            node_id = self.status.Get_source()
+        else:
+            data = self.comm.recv(source=node_id, tag=0)
+        Logger.log(Logger.RECV, sender=node_id, receiver=self.id, payload_size=len(data))
+        return node_id, data
     
 
     def close(self) -> None:

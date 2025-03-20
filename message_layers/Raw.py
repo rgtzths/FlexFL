@@ -9,11 +9,11 @@ class Raw(MessageABC):
     Raw encoding/decoding
     """
 
-    @Logger.encode
+    @Logger.time(Logger.ENCODE)
     def encode(self, message: Any) -> bytes:
         return pickle.dumps(message)
 
 
-    @Logger.decode
+    @Logger.time(Logger.DECODE) 
     def decode(self, message: bytes) -> Any:
         return pickle.loads(message)
