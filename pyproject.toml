@@ -1,7 +1,7 @@
 [project]
 name = "FlexFL"
-version = "0.1.0"
-description = "Resilient Federated Learning Framework"
+version = "0.1.1"
+description = "Flexible Federated Learning Framework"
 readme = "README.md"
 authors = [
     { name = "Leonardo Almeida", email = "leonardoalmeida7777@gmail.com" }
