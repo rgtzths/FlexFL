@@ -1,0 +1,17 @@
+{
+    "name": "IOT_DNL",
+    "link": "",
+    "type": "classification",
+    "input_shape": [
+        11
+    ],
+    "output_size": 6,
+    "info": "",
+    "features": "frame.len|eth.src|eth.dst|ip.src|ip.dst|ip.proto|ip.len|tcp.len|tcp.srcport|tcp.dstport|Value",
+    "samples": 477426,
+    "split": {
+        "train": "70.00%: 334198",
+        "val": "15.00%: 71614",
+        "test": "15.00%: 71614"
+    }
+}

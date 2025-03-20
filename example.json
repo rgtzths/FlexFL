@@ -1,6 +1,0 @@
-{
-    "dataset": "UNSW",
-    "ml": "tf",
-    "comm": "mpi",
-    "fl": "ds"
-}

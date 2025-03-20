@@ -1,10 +1,8 @@
-Data/**
-Results/**
+data/**
+results/**
 
-test.py
-
-
-!.keep
+test*
+!.gitkeep
 
 
 # Byte-compiled / optimized / DLL files
