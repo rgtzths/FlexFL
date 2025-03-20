@@ -1,7 +1,7 @@
 from sklearn.preprocessing import StandardScaler
 from sklearn.datasets import fetch_california_housing
 
-from flx.builtins.DatasetABC import DatasetABC
+from flexfl.builtins.DatasetABC import DatasetABC
 
 
 class Housing(DatasetABC):

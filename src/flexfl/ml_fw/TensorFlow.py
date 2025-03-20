@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 from itertools import cycle
 
-from flx.builtins.MLFrameworkABC import MLFrameworkABC
+from flexfl.builtins.MLFrameworkABC import MLFrameworkABC
 
 OPTIMIZERS = {
     'adam': tf.keras.optimizers.Adam,

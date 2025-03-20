@@ -3,8 +3,8 @@ import zenoh
 from datetime import datetime
 import pickle
 
-from flx.builtins.CommABC import CommABC
-from flx.builtins.Logger import Logger
+from flexfl.builtins.CommABC import CommABC
+from flexfl.builtins.Logger import Logger
 
 DISCOVER = "fl_discover"
 LIVELINESS = "fl_liveliness"

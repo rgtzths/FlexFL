@@ -1,8 +1,8 @@
 import pickle
 from typing import Any
 
-from flx.builtins.MessageABC import MessageABC
-from flx.builtins.Logger import Logger
+from flexfl.builtins.MessageABC import MessageABC
+from flexfl.builtins.Logger import Logger
 
 class Raw(MessageABC):
     """

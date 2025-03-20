@@ -1,5 +1,5 @@
 [project]
-name = "FLX"
+name = "FlexFL"
 version = "0.1.0"
 description = "Resilient Federated Learning Framework"
 readme = "README.md"
@@ -19,10 +19,10 @@ dependencies = [
 
 
 [project.scripts]
-flx = "flx.cli.fl:main"
-flx-division = "flx.cli.division:main"
-flx-preprocess = "flx.cli.preprocess:main"
-flx-res = "flx.cli.auto_restart:main"
+flexfl = "flexfl.cli.fl:main"
+flexfl-division = "flexfl.cli.division:main"
+flexfl-preprocess = "flexfl.cli.preprocess:main"
+flexfl-res = "flexfl.cli.auto_restart:main"
 
 
 [project.optional-dependencies]

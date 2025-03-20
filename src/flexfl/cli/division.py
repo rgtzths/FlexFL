@@ -1,6 +1,6 @@
 import argparse
 
-from flx.cli.utils import get_modules_and_args, load_class
+from flexfl.cli.utils import get_modules_and_args, load_class
 
 
 def main():

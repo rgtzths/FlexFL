@@ -4,8 +4,8 @@ import pickle
 import paho.mqtt.client as mqtt
 from uuid import uuid4
 
-from flx.builtins.CommABC import CommABC
-from flx.builtins.Logger import Logger
+from flexfl.builtins.CommABC import CommABC
+from flexfl.builtins.Logger import Logger
 
 TOPIC = "fl"
 DISCOVER = "fl_discover"

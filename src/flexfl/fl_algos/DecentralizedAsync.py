@@ -1,8 +1,8 @@
 import numpy as np
 from time import time
 
-from flx.builtins.FederatedABC import FederatedABC
-from flx.builtins.WorkerManager import WorkerManager
+from flexfl.builtins.FederatedABC import FederatedABC
+from flexfl.builtins.WorkerManager import WorkerManager
 
 class Task:
     WORK = 0

@@ -2,7 +2,7 @@ import kaggle
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
-from flx.builtins.DatasetABC import DatasetABC
+from flexfl.builtins.DatasetABC import DatasetABC
 
 
 class IOT_DNL(DatasetABC):

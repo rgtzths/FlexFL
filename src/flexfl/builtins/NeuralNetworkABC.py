@@ -1,7 +1,7 @@
 from abc import ABC
 from typing import Any
 
-from flx.builtins.DatasetABC import DatasetABC
+from flexfl.builtins.DatasetABC import DatasetABC
 
 class NeuralNetworkABC(ABC):
     """

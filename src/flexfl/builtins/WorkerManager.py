@@ -1,7 +1,7 @@
 from typing import Any, Callable, Generator
 
-from flx.builtins.CommABC import CommABC
-from flx.builtins.MessageABC import MessageABC
+from flexfl.builtins.CommABC import CommABC
+from flexfl.builtins.MessageABC import MessageABC
 
 JOIN_TYPE = "__joining__"
 WAITING_TYPE = "__waiting__"

@@ -7,8 +7,8 @@ from uuid import uuid4
 from kafka import KafkaProducer, KafkaConsumer
 from kafka.admin import KafkaAdminClient
 
-from flx.builtins.CommABC import CommABC
-from flx.builtins.Logger import Logger
+from flexfl.builtins.CommABC import CommABC
+from flexfl.builtins.Logger import Logger
 
 TOPIC = "fl"
 DISCOVER = "fl_discover"

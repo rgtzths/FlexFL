@@ -3,8 +3,8 @@ import numpy as np
 import random
 from typing import Any
 
-from flx.builtins.DatasetABC import DatasetABC
-from flx.builtins.NeuralNetworkABC import NeuralNetworkABC
+from flexfl.builtins.DatasetABC import DatasetABC
+from flexfl.builtins.NeuralNetworkABC import NeuralNetworkABC
 
 
 class MLFrameworkABC(ABC):

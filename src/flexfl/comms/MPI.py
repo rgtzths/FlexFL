@@ -1,8 +1,8 @@
 from mpi4py import MPI as MPI4py
 from datetime import datetime
 
-from flx.builtins.CommABC import CommABC
-from flx.builtins.Logger import Logger
+from flexfl.builtins.CommABC import CommABC
+from flexfl.builtins.Logger import Logger
 
 class MPI(CommABC):
 

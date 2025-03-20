@@ -6,9 +6,9 @@ from pathlib import Path
 from time import time
 import numpy as np
 
-from flx.builtins.WorkerManager import WorkerManager
-from flx.builtins.MLFrameworkABC import MLFrameworkABC
-from flx.builtins.Logger import Logger
+from flexfl.builtins.WorkerManager import WorkerManager
+from flexfl.builtins.MLFrameworkABC import MLFrameworkABC
+from flexfl.builtins.Logger import Logger
 
 RESULTS_FOLDER = "results"
 

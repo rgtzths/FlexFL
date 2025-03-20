@@ -1,4 +1,4 @@
-from flx.builtins.NeuralNetworkABC import NeuralNetworkABC
+from flexfl.builtins.NeuralNetworkABC import NeuralNetworkABC
 
 class IOT_DNL(NeuralNetworkABC):
         

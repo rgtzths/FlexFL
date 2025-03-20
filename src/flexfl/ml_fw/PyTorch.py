@@ -5,7 +5,7 @@ import numpy as np
 from itertools import cycle
 import os
 
-from flx.builtins.MLFrameworkABC import MLFrameworkABC
+from flexfl.builtins.MLFrameworkABC import MLFrameworkABC
 
 
 OPTIMIZERS = {
