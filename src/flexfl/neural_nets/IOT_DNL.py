@@ -1,13 +1,29 @@
 from flexfl.builtins.NeuralNetworkABC import NeuralNetworkABC
 
 class IOT_DNL(NeuralNetworkABC):
+
+    def keras_model(self, input_shape, output_size, is_classification):
+        import keras
+        layers = [
+            keras.layers.Input(shape=input_shape),
+            keras.layers.Dense(64, activation='relu'),
+            keras.layers.Dropout(0.1),
+            keras.layers.Dense(64, activation='relu'),
+            keras.layers.Dropout(0.1),
+            keras.layers.Dense(64, activation='relu'),
+            keras.layers.Dropout(0.1),
+            keras.layers.Dense(64, activation='relu'),
+            keras.layers.Dense(output_size)
+        ]
+        if is_classification:
+            layers.append(keras.layers.Softmax())
+        return keras.models.Sequential(layers)
+
         
     def tf_model(self, input_shape, output_size, is_classification):
         import tensorflow as tf
-        return tf.keras.models.Sequential([
-            # input layer
+        layers = [
             tf.keras.layers.Input(shape=input_shape),
-            # hidden layers
             tf.keras.layers.Dense(64, activation='relu'),
             tf.keras.layers.Dropout(0.1),
             tf.keras.layers.Dense(64, activation='relu'),
@@ -15,9 +31,11 @@ class IOT_DNL(NeuralNetworkABC):
             tf.keras.layers.Dense(64, activation='relu'),
             tf.keras.layers.Dropout(0.1),
             tf.keras.layers.Dense(64, activation='relu'),
-            # output layer
-            tf.keras.layers.Dense(output_size, activation='softmax') if is_classification else tf.keras.layers.Dense(output_size)
-        ])
+            tf.keras.layers.Dense(output_size)
+        ]
+        if is_classification:
+            layers.append(tf.keras.layers.Softmax())
+        return tf.keras.models.Sequential(layers)
     
 
     def torch_model(self, input_shape, output_size, is_classification):

@@ -67,7 +67,6 @@ class MQTT(CommABC):
     def recv(self, node_id: int = None) -> tuple[int, bytes]:
         assert node_id is None, "Support for specific node_id not implemented"
         node_id, data = self.q.get()
-        Logger.log(Logger.RECV, sender=node_id, receiver=self.id, payload_size=len(data))
         return node_id, data
     
 
@@ -130,6 +129,7 @@ class MQTT(CommABC):
             if node_id not in self.nodes:
                 raise ValueError(f"Received message from unknown node {node_id}")
             data = payload[4:]
+            Logger.log(Logger.RECV, sender=node_id, receiver=self.id, payload_size=len(data))
             self.q.put((node_id, data))
         
 

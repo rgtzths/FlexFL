@@ -17,6 +17,7 @@ class MLFrameworkABC(ABC):
         learning_rate: float = 0.001,
         batch_size: int = 1024,
         seed: int = 42,
+        use_gpu: bool = False,
         **kwargs
     ) -> None:
         self.dataset = dataset
@@ -25,6 +26,7 @@ class MLFrameworkABC(ABC):
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.seed = seed
+        self.use_gpu = use_gpu
         random.seed(seed)
         np.random.seed(seed)
         self.model = nn.get_model(self.prefix, dataset)

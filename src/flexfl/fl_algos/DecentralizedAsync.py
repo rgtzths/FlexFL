@@ -39,10 +39,10 @@ class DecentralizedAsync(FederatedABC):
 
 
     def master_loop(self):
+        self.weights = self.ml.get_weights()
         self.wm.wait_for_workers(self.min_workers)
         self.epoch_start = time()
         pool = self.wm.get_subpool(self.min_workers, self.subpool_fn)
-        self.weights = self.ml.get_weights()
         self.wm.send_n(
             workers = pool, 
             payload = self.weights,

@@ -9,7 +9,8 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "kaggle>=1.7.4.2",
-    "numpy>=2.1.3",
+    "keras>=3.9.0",
+    "numpy>=2.0.2",
     "pandas>=2.2.3",
     "permetrics>=2.0.0",
     "python-dotenv>=1.0.1",
@@ -27,26 +28,26 @@ flexfl-res = "flexfl.cli.auto_restart:main"
 
 [project.optional-dependencies]
 all = [
-    "tensorflow[and-cuda]>=2.19.0",
+    "jax[cpu]>=0.5.3",
+    "tensorflow-cpu>=2.18.0",
+    "tf2onnx>=1.16.1",
+    "torch>=2.6.0",
     "kafka-python>=2.1.2",
     "mpi4py>=4.0.3",
     "paho-mqtt>=2.1.0",
     "eclipse-zenoh==1.1.1",
 ]
-tf = [
-    "tensorflow[and-cuda]>=2.19.0",
-]
-kafka = [
+comms = [
     "kafka-python>=2.1.2",
-]
-mpi = [
     "mpi4py>=4.0.3",
-]
-mqtt = [
+    "eclipse-zenoh==1.1.1",
     "paho-mqtt>=2.1.0",
 ]
-zenoh = [
-    "eclipse-zenoh==1.1.1",
+ml = [
+    "jax[cpu]>=0.5.3",
+    "tensorflow-cpu>=2.18.0",
+    "tf2onnx>=1.16.1",
+    "torch>=2.6.0",
 ]
 
 

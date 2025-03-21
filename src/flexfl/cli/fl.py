@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import logging
 
 from flexfl.cli.utils import get_modules_and_args, load_class
 
@@ -42,7 +43,7 @@ def main():
     parser.add_argument('-m', '--message_layer', type=str, help="Message layer", choices=MODULES["msg_layers"].keys(), default="Raw")
     parser.add_argument('--nn', type=str, help="Neural network", choices=MODULES["neural_nets"].keys(), required=False)
     parser.add_argument('--fl', type=str, help="Federated learning algorithm", choices=MODULES["fl_algos"].keys(), default="DecentralizedSync")
-    parser.add_argument('--ml', type=str, help="Machine learning framework", choices=MODULES["ml_fw"].keys(), default="TensorFlow")
+    parser.add_argument('--ml', type=str, help="Machine learning framework", choices=MODULES["ml_fw"].keys(), default="Keras")
 
     for arg, (type_, value) in ALL_ARGS.items():
         if type_ is bool:
@@ -58,12 +59,21 @@ def main():
     args = parser.parse_args()
     args = {k: v for k, v in vars(args).items() if v is not None}
 
+    # extras
     if "nn" not in args:
         args["nn"] = args["dataset"]
     if "OMPI_COMM_WORLD_SIZE" in os.environ:
         args["comm"] = "MPI"
         if "min_workers" not in args:
             args["min_workers"] = int(os.environ["OMPI_COMM_WORLD_SIZE"]) - 1
+    if "backend" in args:
+        os.environ["KERAS_BACKEND"] = args["backend"]
+    if not args.get("use_gpu", False):
+        os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+    # mute warnings
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+    logging.getLogger("jax._src.xla_bridge").setLevel(logging.ERROR)
 
     class_args = {k: v for k, v in args.items() if k not in FORBIDDEN_ARGS}
 
