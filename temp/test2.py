@@ -1,31 +1,55 @@
-from dotenv import load_dotenv
 import os
-load_dotenv()
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-
-
-from flexfl.datasets.IOT_DNL import IOT_DNL
-from flexfl.neural_nets.IOT_DNL import IOT_DNL as IOT_DNL_NN
-from flexfl.msg_layers.Raw import Raw
-from flexfl.ml_fw.TensorFlow import TensorFlow
-from flexfl.comms.MPI import MPI
-from flexfl.fl_algos.DecentralizedAsync import DecentralizedAsync
-from flexfl.builtins.WorkerManager import WorkerManager
+os.environ["KERAS_BACKEND"] = "torch"
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+import keras
+import tensorflow as tf
+import numpy as np
+from itertools import cycle
 
 
-f = DecentralizedAsync(
-    ml=TensorFlow(
-        nn=IOT_DNL_NN(),
-        dataset=IOT_DNL(),
-    ),
-    wm=WorkerManager(
-        c=MPI(),
-        m=Raw()
-    ),
-    min_workers=4,
-    all_args={}
-)
+def get_gradients(model, train_iterator, loss):
+    with tf.GradientTape() as tape:
+        x, y = next(train_iterator)
+        y_pred = model(x, training=True)
+        loss = loss(y, y_pred)
+    gradients = tape.gradient(loss, model.trainable_variables)
+    return np.concatenate([g.numpy().flatten() for g in gradients])
 
-f.run()
+
+def apply_gradients(gradients: np.ndarray, model, optimizer):
+    start = 0
+    grads_list = []
+    trainable_vars = model.trainable_variables
+    for var in trainable_vars:
+        size = np.prod(var.shape)
+        grads_list.append(tf.convert_to_tensor(gradients[start:start + size].reshape(var.shape)))
+        start += size
+    optimizer.apply_gradients(zip(grads_list, trainable_vars))
+
+
+model = keras.models.Sequential([
+    keras.layers.Input(shape=(11,)),
+    keras.layers.Dense(64, activation='relu'),
+    keras.layers.Dropout(0.1),
+    keras.layers.Dense(64, activation='relu'),
+    keras.layers.Dropout(0.1),
+    keras.layers.Dense(64, activation='relu'),
+    keras.layers.Dropout(0.1),
+    keras.layers.Dense(64, activation='relu'),
+    keras.layers.Dense(6)
+])
+
+x = np.load("data/IOT_DNL/node_1/x_train.npy")
+y = np.load("data/IOT_DNL/node_1/y_train.npy")
+train_data = tf.data.Dataset.from_tensor_slices((x, y)).batch(32)
+train_iterator = cycle(train_data)
+
+# sparse cate
+loss = keras.losses.SparseCategoricalCrossentropy()
+optimizer = keras.optimizers.Adam()
+
+
+for i in range(10):
+    gradients = get_gradients(model, train_iterator, loss)
+    apply_gradients(gradients, model, optimizer)
+    print(f"Epoch {i+1} done")

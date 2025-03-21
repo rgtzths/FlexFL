@@ -45,9 +45,9 @@ class PyTorch(MLFrameworkABC):
 
 
     def load_data(self, split: str):
-        x, y = self.dataset.load_data(split)
-        self.n_samples = x.shape[0]
-        x_tensor = torch.tensor(x, dtype=torch.float32).to(self.device)
+        x_tensor, y = self.dataset.load_data(split, loader="torch")
+        x_tensor = x_tensor.to(self.device)
+        self.n_samples = y.shape[0]
         y_tensor = torch.tensor(y, dtype=torch.long).to(self.device)
         dataset = torch.utils.data.TensorDataset(x_tensor, y_tensor)
         data_loader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=True)

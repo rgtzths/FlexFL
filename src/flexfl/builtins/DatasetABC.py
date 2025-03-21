@@ -110,6 +110,9 @@ class DatasetABC(ABC):
         if loader == "tf":
             import tensorflow as tf
             x = tf.data.Dataset.from_tensor_slices(x)
+        elif loader == "torch":
+            import torch
+            x = torch.tensor(x, dtype=torch.float32)
         return x, y
     
 
