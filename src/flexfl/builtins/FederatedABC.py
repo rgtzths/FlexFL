@@ -34,7 +34,7 @@ def smape(y_true, y_pred):
 METRICS_FN: dict[str, Callable[[np.ndarray, np.ndarray], float]] = {
     'mcc': matthews_corrcoef,
     'acc': accuracy_score,
-    'f1': f1_score,
+    'f1': lambda y_true, y_pred: f1_score(y_true, y_pred, average='weighted'),
     'mape': smape,
     'mse': mean_squared_error,
     'mae': mean_absolute_error
