@@ -35,6 +35,14 @@ class Keras(MLFrameworkABC):
         return "keras"
     
 
+    def set_seed(self, seed: int):
+        if self.backend == "tensorflow":
+            tf.random.set_seed(seed)
+        elif self.backend == "torch":
+            import torch
+            torch.manual_seed(seed)
+    
+
     def setup(self):
         self.model: keras.Model = self.model
         self.optimizer: keras.optimizers.Optimizer = OPTIMIZERS[self.optimizer_name](learning_rate=self.learning_rate)

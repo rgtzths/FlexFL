@@ -30,6 +30,10 @@ class PyTorch(MLFrameworkABC):
         return "torch"
     
 
+    def set_seed(self, seed: int):
+        torch.manual_seed(seed)
+    
+
     def get_device(self):
         if os.environ.get("CUDA_VISIBLE_DEVICES") == -1:
             return torch.device("cpu")
@@ -37,7 +41,6 @@ class PyTorch(MLFrameworkABC):
     
 
     def setup(self):
-        torch.manual_seed(self.seed)
         self.device = self.get_device()
         self.optimizer = OPTIMIZERS[self.optimizer_name](self.model.parameters(), lr=self.learning_rate)
         self.loss = LOSSES[self.loss_name]()

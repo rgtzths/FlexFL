@@ -1,1 +1,1 @@
-sudo apt install -y libopenmpi-dev
+sudo apt install -y python3-dev libopenmpi-dev

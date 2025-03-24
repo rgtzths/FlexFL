@@ -154,8 +154,7 @@ class FederatedABC(ABC):
         if self.is_classification:
             preds = np.argmax(preds, axis=1)
         metrics = self.evaluator(y, preds).get_metrics_by_list_names(self.metrics)
-        new_time = time()
-        delta_time = new_time - self.epoch_start
+        delta_time = time() - self.epoch_start
         if verbose:
             print(f"\nEpoch {epoch}/{self.epochs} - Time: {delta_time:.2f}s")
             print(', '.join(f'{name}: {value:.4f}' for name, value in metrics.items()) + f' - Loss: {loss:.4f}')
@@ -168,6 +167,7 @@ class FederatedABC(ABC):
             self.best_score = self.new_score
             self.best_weights = self.ml.get_weights()
         Logger.log(Logger.EPOCH, epoch=epoch, time=delta_time, loss=loss, **metrics)
+        self.epoch_start = time()
         return metrics, loss
     
 

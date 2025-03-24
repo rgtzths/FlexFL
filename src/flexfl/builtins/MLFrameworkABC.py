@@ -29,6 +29,7 @@ class MLFrameworkABC(ABC):
         self.use_gpu = use_gpu
         random.seed(seed)
         np.random.seed(seed)
+        self.set_seed(seed)
         self.model = nn.get_model(self.prefix, dataset)
         self.n_samples = None
         self.setup()
@@ -39,6 +40,14 @@ class MLFrameworkABC(ABC):
     def prefix(self) -> str:
         """
         Returns the prefix for the ml framework
+        """
+        pass
+
+
+    @abstractmethod
+    def set_seed(self, seed: int) -> None:
+        """
+        Set the seed
         """
         pass
 

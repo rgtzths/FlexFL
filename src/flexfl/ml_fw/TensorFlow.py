@@ -26,8 +26,11 @@ class TensorFlow(MLFrameworkABC):
         return "tf"
     
 
+    def set_seed(self, seed: int):
+        tf.random.set_seed(seed)
+    
+
     def setup(self):
-        tf.random.set_seed(self.seed)
         self.optimizer = OPTIMIZERS[self.optimizer_name](learning_rate=self.learning_rate)
         self.loss = LOSSES[self.loss_name]()
         self.model.compile(optimizer=self.optimizer, loss=self.loss)

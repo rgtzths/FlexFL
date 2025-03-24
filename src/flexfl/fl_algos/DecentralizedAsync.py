@@ -64,7 +64,6 @@ class DecentralizedAsync(FederatedABC):
         if stop:
             self.wm.end()
             self.running = False
-        self.epoch_start = time()
             
 
     def on_work(self, sender_id, weights):
