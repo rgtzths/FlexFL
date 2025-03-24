@@ -64,6 +64,7 @@ class TensorFlow(MLFrameworkABC):
 
     
     def get_gradients(self):
+        raise NotImplementedError
         with tf.GradientTape() as tape:
             x, y = next(self.train_iterator)
             y_pred = self.model(x, training=True)
@@ -73,6 +74,7 @@ class TensorFlow(MLFrameworkABC):
     
 
     def apply_gradients(self, gradients: np.ndarray):
+        raise NotImplementedError
         start = 0
         grads_list = []
         trainable_vars = self.model.trainable_variables

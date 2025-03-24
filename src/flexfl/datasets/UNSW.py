@@ -5,7 +5,7 @@ from sklearn.preprocessing import StandardScaler
 from flexfl.builtins.DatasetABC import DatasetABC
 
 
-class IOT_DNL(DatasetABC):
+class UNSW(DatasetABC):
 
     @property
     def is_classification(self) -> bool:
@@ -19,7 +19,7 @@ class IOT_DNL(DatasetABC):
 
     def download(self):
         kaggle.api.dataset_download_files(
-            "speedwall10/iot-device-network-logs",
+            "sankurisrinath/nf-unsw-nb15-v2csv",
             path=f"{self.default_folder}",
             quiet=False,
             unzip=True
@@ -27,11 +27,9 @@ class IOT_DNL(DatasetABC):
 
     
     def preprocess(self, val_size, test_size):
-        data = pd.read_csv(f"{self.default_folder}/Preprocessed_data.csv")
+        data = pd.read_csv(f"{self.default_folder}/NF-UNSW-NB15-v2.csv")
         data.dropna()
-        x = data.drop('normality', axis=1)
-        x = x.drop('frame.number', axis=1)
-        x = x.drop('frame.time', axis=1)
-        y = data['normality']
+        y = data['Label']
+        x = data.drop(columns=['Label', "IPV4_SRC_ADDR", "L4_SRC_PORT", "IPV4_DST_ADDR", "L4_DST_PORT", "Attack"])
         self.save_features(x.columns)
         self.split_save(x, y, val_size, test_size)

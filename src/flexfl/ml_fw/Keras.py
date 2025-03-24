@@ -78,11 +78,11 @@ class Keras(MLFrameworkABC):
 
 
     def get_gradients(self):
-        pass
+        raise NotImplementedError
 
 
     def apply_gradients(self, gradients: np.ndarray):
-        pass
+        raise NotImplementedError
 
 
     def train(self, epochs: int, verbose=False):

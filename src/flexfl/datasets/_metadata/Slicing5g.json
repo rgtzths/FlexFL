@@ -1,0 +1,17 @@
+{
+    "name": "Slicing5g",
+    "link": "",
+    "type": "classification",
+    "output_size": 3,
+    "info": "",
+    "features": "Use CaseType (Input 1)|LTE/5G UE Category (Input 2)|Technology Supported (Input 3)|Day (Input4)|Time (Input 5)|QCI (Input 6)|Packet Loss Rate (Reliability)|Packet Delay Budget (Latency)",
+    "samples": 466739,
+    "input_shape": [
+        8
+    ],
+    "split": {
+        "train": "70.00%: 326717",
+        "val": "15.00%: 70011",
+        "test": "15.00%: 70011"
+    }
+}

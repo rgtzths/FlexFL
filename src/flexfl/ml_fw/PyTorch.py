@@ -77,6 +77,7 @@ class PyTorch(MLFrameworkABC):
 
 
     def get_gradients(self):
+        raise NotImplementedError
         x, y = next(self.train_iterator)
         x, y = x.to(self.device), y.to(self.device)
         self.optimizer.zero_grad()
@@ -87,6 +88,7 @@ class PyTorch(MLFrameworkABC):
     
 
     def apply_gradients(self, gradients: np.ndarray):
+        raise NotImplementedError
         start = 0
         for param in self.model.parameters():
             size = np.prod(param.shape)

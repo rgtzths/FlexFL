@@ -23,6 +23,7 @@ class DatasetABC(ABC):
         self.metadata_file = f"{METADATA_FOLDER}/{self.name}.json"
         self.base_path = f"{DATA_FOLDER}/{self.name}"
         self.default_folder = f"{self.base_path}/_data"
+        self.output_size = 1
         if data_folder is not None:
             self.data_path = f"{self.base_path}/{data_folder}"
         elif env_folder := os.getenv('DATA_FOLDER') is not None:
@@ -38,15 +39,6 @@ class DatasetABC(ABC):
     def is_classification(self) -> bool:
         """
         Returns True if the dataset is a classification dataset
-        """
-        pass
-
-
-    @property
-    @abstractmethod
-    def output_size(self) -> int:
-        """
-        Returns the size of the output for the neural network
         """
         pass
 
@@ -145,6 +137,9 @@ class DatasetABC(ABC):
     def split_save(self, x, y, val_size = 0.15, test_size = 0.15):
         self.metadata['samples'] = x.shape[0]
         self.metadata['input_shape'] = x.shape[1:]
+        if self.is_classification:
+            self.output_size = len(np.unique(y))
+        self.metadata['output_size'] = self.output_size
         x_train, y_train, x_val, y_val, x_test, y_test = self.split_data(x, y, val_size, test_size)
         self.save_data(x_train, y_train, 'train')
         self.save_data(x_val, y_val, 'val')

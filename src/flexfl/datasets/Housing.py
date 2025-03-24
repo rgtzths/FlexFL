@@ -12,11 +12,6 @@ class Housing(DatasetABC):
     
 
     @property
-    def output_size(self) -> int:
-        return 1
-    
-
-    @property
     def scaler(self):
         return StandardScaler
 
