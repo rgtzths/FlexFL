@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
-from permetrics import RegressionMetric, ClassificationMetric
 from collections import deque
 import json
 from pathlib import Path
 from time import time
 import numpy as np
+from sklearn.metrics import matthews_corrcoef, accuracy_score, f1_score, mean_squared_error, mean_absolute_error
+from typing import Callable
 
 from flexfl.builtins.WorkerManager import WorkerManager
 from flexfl.builtins.MLFrameworkABC import MLFrameworkABC
@@ -14,15 +15,29 @@ RESULTS_FOLDER = "results"
 
 METRICS = {
     'classification': [
-        'MCC',
-        'AS',
-        'F1S'
+        'mcc',
+        'acc',
+        'f1'
     ],
     'regression': [
-        'SMAPE',
-        'MSE',
-        'MAE'
+        'mape',
+        'mse',
+        'mae'
     ]
+}
+
+def smape(y_true, y_pred):
+    denominator = (np.abs(y_true) + np.abs(y_pred)) / 2
+    smape_values = np.where(denominator == 0, 0, np.abs(y_true - y_pred) / denominator)
+    return np.mean(smape_values)
+
+METRICS_FN: dict[str, Callable[[np.ndarray, np.ndarray], float]] = {
+    'mcc': matthews_corrcoef,
+    'acc': accuracy_score,
+    'f1': f1_score,
+    'mape': smape,
+    'mse': mean_squared_error,
+    'mae': mean_absolute_error
 }
 
 class FederatedABC(ABC):
@@ -56,7 +71,6 @@ class FederatedABC(ABC):
         self.epoch_start = time()
         self.is_classification = None
         self.metrics = None
-        self.evaluator = None
         self.new_score = None
         self.is_master = None
         self.running = True
@@ -84,17 +98,11 @@ class FederatedABC(ABC):
 
     def setup_metrics(self):
         self.is_classification = self.ml.dataset.is_classification
-
-        if self.main_metric is None:
-            self.main_metric = METRICS['classification'][0] if self.is_classification else METRICS['regression'][0]
         if self.target_score is None:
             self.target_score = 1.0 if self.is_classification else 0.0
-        
-        all_metrics, self.evaluator = (
-            (METRICS['classification'], ClassificationMetric) 
-            if self.is_classification else
-            (METRICS['regression'], RegressionMetric)
-        )
+        all_metrics = METRICS['classification'] if self.is_classification else METRICS['regression']
+        if self.main_metric is None:
+            self.main_metric = all_metrics[0]
         assert self.main_metric in all_metrics, f"main_metric must be one of {all_metrics}"
         all_metrics.remove(self.main_metric)
         self.metrics = [self.main_metric] + all_metrics
@@ -153,7 +161,7 @@ class FederatedABC(ABC):
         loss = self.ml.calculate_loss(y, preds)
         if self.is_classification:
             preds = np.argmax(preds, axis=1)
-        metrics = self.evaluator(y, preds).get_metrics_by_list_names(self.metrics)
+        metrics = {name: METRICS_FN[name](y, preds) for name in self.metrics}
         delta_time = time() - self.epoch_start
         if verbose:
             print(f"\nEpoch {epoch}/{self.epochs} - Time: {delta_time:.2f}s")

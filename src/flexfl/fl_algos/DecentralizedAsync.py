@@ -3,6 +3,7 @@ from time import time
 
 from flexfl.builtins.FederatedABC import FederatedABC
 from flexfl.builtins.WorkerManager import WorkerManager
+from flexfl.builtins.Logger import Logger
 
 class Task:
     WORK = 0
@@ -41,6 +42,7 @@ class DecentralizedAsync(FederatedABC):
     def master_loop(self):
         self.weights = self.ml.get_weights()
         self.wm.wait_for_workers(self.min_workers)
+        Logger.log(Logger.START)
         self.epoch_start = time()
         pool = self.wm.get_subpool(self.min_workers, self.subpool_fn)
         self.wm.send_n(
@@ -62,6 +64,7 @@ class DecentralizedAsync(FederatedABC):
         self.validate(epoch, split="val", verbose=True)
         stop = self.early_stop() or epoch == self.epochs
         if stop:
+            Logger.log(Logger.END)
             self.wm.end()
             self.running = False
             

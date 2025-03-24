@@ -1,5 +1,6 @@
 import os
-os.environ["KERAS_BACKEND"] = "torch"
+BACKEND = "torch"
+os.environ["KERAS_BACKEND"] = BACKEND
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 import keras
 import tensorflow as tf
@@ -7,14 +8,13 @@ import numpy as np
 from itertools import cycle
 
 
-def get_gradients(model, train_iterator, loss):
+def get_gradients(model: keras.Model, train_iterator, loss: keras.losses.Loss):
     with tf.GradientTape() as tape:
         x, y = next(train_iterator)
         y_pred = model(x, training=True)
         loss = loss(y, y_pred)
     gradients = tape.gradient(loss, model.trainable_variables)
     return np.concatenate([g.numpy().flatten() for g in gradients])
-
 
 def apply_gradients(gradients: np.ndarray, model, optimizer):
     start = 0
@@ -25,6 +25,7 @@ def apply_gradients(gradients: np.ndarray, model, optimizer):
         grads_list.append(tf.convert_to_tensor(gradients[start:start + size].reshape(var.shape)))
         start += size
     optimizer.apply_gradients(zip(grads_list, trainable_vars))
+
 
 
 model = keras.models.Sequential([
@@ -51,5 +52,6 @@ optimizer = keras.optimizers.Adam()
 
 for i in range(10):
     gradients = get_gradients(model, train_iterator, loss)
+    print("Gradients calculated")
     apply_gradients(gradients, model, optimizer)
     print(f"Epoch {i+1} done")

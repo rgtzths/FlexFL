@@ -110,6 +110,15 @@ wheels = [
 ]
 
 [[package]]
+name = "et-xmlfile"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/38/af70d7ab1ae9d4da450eeec1fa3918940a5fafb9055e934af8d6eb0c2313/et_xmlfile-2.0.0.tar.gz", hash = "sha256:dab3f4764309081ce75662649be815c4c9081e88f0837825f90fd28317d4da54", size = 17234 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c1/8b/5fe2cc11fee489817272089c4203e679c63b570a5aaeb18d852ae3cbba6a/et_xmlfile-2.0.0-py3-none-any.whl", hash = "sha256:7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa", size = 18059 },
+]
+
+[[package]]
 name = "filelock"
 version = "3.18.0"
 source = { registry = "https://pypi.org/simple" }
@@ -135,8 +144,8 @@ dependencies = [
     { name = "kaggle" },
     { name = "keras" },
     { name = "numpy" },
+    { name = "openpyxl" },
     { name = "pandas" },
-    { name = "permetrics" },
     { name = "python-dotenv" },
     { name = "rich" },
     { name = "scikit-learn" },
@@ -180,10 +189,10 @@ requires-dist = [
     { name = "mpi4py", marker = "extra == 'all'", specifier = ">=4.0.3" },
     { name = "mpi4py", marker = "extra == 'comms'", specifier = ">=4.0.3" },
     { name = "numpy", specifier = ">=2.0.2" },
+    { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "paho-mqtt", marker = "extra == 'all'", specifier = ">=2.1.0" },
     { name = "paho-mqtt", marker = "extra == 'comms'", specifier = ">=2.1.0" },
     { name = "pandas", specifier = ">=2.2.3" },
-    { name = "permetrics", specifier = ">=2.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "rich", specifier = ">=13.9.4" },
     { name = "scikit-learn", specifier = ">=1.6.1" },
@@ -686,6 +695,18 @@ wheels = [
 ]
 
 [[package]]
+name = "openpyxl"
+version = "3.1.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "et-xmlfile" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3d/f9/88d94a75de065ea32619465d2f77b29a0469500e99012523b91cc4141cd1/openpyxl-3.1.5.tar.gz", hash = "sha256:cf0e3cf56142039133628b5acffe8ef0c12bc902d2aadd3e0fe5878dc08d1050", size = 186464 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c0/da/977ded879c29cbd04de313843e76868e6e13408a94ed6b987245dc7c8506/openpyxl-3.1.5-py2.py3-none-any.whl", hash = "sha256:5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2", size = 250910 },
+]
+
+[[package]]
 name = "opt-einsum"
 version = "3.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -785,19 +806,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/25/b0/98d6ae2e1abac4f35230aa756005e8654649d305df9a28b16b9ae4353bff/pandas-2.2.3-cp313-cp313t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:1db71525a1538b30142094edb9adc10be3f3e176748cd7acc2240c2f2e5aa3a4", size = 11871013 },
     { url = "https://files.pythonhosted.org/packages/cc/57/0f72a10f9db6a4628744c8e8f0df4e6e21de01212c7c981d31e50ffc8328/pandas-2.2.3-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:15c0e1e02e93116177d29ff83e8b1619c93ddc9c49083f237d4312337a61165d", size = 15711620 },
     { url = "https://files.pythonhosted.org/packages/ab/5f/b38085618b950b79d2d9164a711c52b10aefc0ae6833b96f626b7021b2ed/pandas-2.2.3-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:ad5b65698ab28ed8d7f18790a0dc58005c7629f227be9ecc1072aa74c0c1d43a", size = 13098436 },
-]
-
-[[package]]
-name = "permetrics"
-version = "2.0.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-    { name = "scipy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c3/2d/3e572d9a08bb79023a56bea7575edba8abbafad73509437c1ffebceabd8f/permetrics-2.0.0.tar.gz", hash = "sha256:c7d79d654fa54aa31b293b10bfd22c34c50cd80f0d05b7ca38e295c99b10d53e", size = 56903 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/26/03/113d55caacf415f9fb29ed3af940592a54b725b62d1f4c3d5297ddf14c10/permetrics-2.0.0-py3-none-any.whl", hash = "sha256:2b7252fff81e2e2dec67ca7db3826f4d6ec65072cfa76b8e41bc534ab53f331e", size = 52621 },
 ]
 
 [[package]]

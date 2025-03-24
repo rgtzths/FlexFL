@@ -1,6 +1,6 @@
 import kaggle
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 
 from flexfl.builtins.DatasetABC import DatasetABC
 
@@ -29,7 +29,7 @@ class UNSW(DatasetABC):
     def preprocess(self, val_size, test_size):
         data = pd.read_csv(f"{self.default_folder}/NF-UNSW-NB15-v2.csv")
         data.dropna()
-        y = data['Label']
+        y = data['Label'].astype(int)
         x = data.drop(columns=['Label', "IPV4_SRC_ADDR", "L4_SRC_PORT", "IPV4_DST_ADDR", "L4_DST_PORT", "Attack"])
         self.save_features(x.columns)
         self.split_save(x, y, val_size, test_size)

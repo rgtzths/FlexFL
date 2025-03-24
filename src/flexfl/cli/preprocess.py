@@ -21,7 +21,7 @@ def main():
     datasets = list(MODULES["datasets"].keys()) if args.dataset == "all" else [args.dataset]
 
     for dataset in datasets: 
-        folder = Path(f"Data/{dataset}")
+        folder = Path(f"data/{dataset}")
         dataset = load_class(MODULES["datasets"][dataset])()
         print(f"\nDataset: {dataset.name}")
         if not folder.exists():

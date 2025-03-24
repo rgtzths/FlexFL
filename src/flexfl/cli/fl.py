@@ -41,7 +41,7 @@ def main():
     parser.add_argument('--config', type=str, help="Path to config JSON file", required=False)
 
     parser.add_argument('-c', '--comm', type=str, help="Communication layer", choices=MODULES["comms"].keys(), default="Zenoh")
-    parser.add_argument('-d', '--dataset', type=str, help="Dataset", choices=MODULES["datasets"].keys(), default="IOT_DNL")
+    parser.add_argument('-d', '--dataset', type=str, help="Dataset", choices=MODULES["datasets"].keys(), default="UNSW")
     parser.add_argument('-m', '--message_layer', type=str, help="Message layer", choices=MODULES["msg_layers"].keys(), default="Raw")
     parser.add_argument('--nn', type=str, help="Neural network", choices=MODULES["neural_nets"].keys())
     parser.add_argument('--fl', type=str, help="Federated learning algorithm", choices=MODULES["fl_algos"].keys(), default="DecentralizedSync")

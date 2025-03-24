@@ -1,32 +1,42 @@
-
-from typing import TypedDict, Optional, Any
-
-
-# class M:
-
-#     def __init__(self, *,
-#         arg1: float = 1.0,
-#         arg2: str = "a",
-#         **kwargs
-#     ):
-#         self.arg1 = arg1
-#         self.arg2 = arg2
-
-class M(TypedDict, total=False):
-    arg1: float
-    arg2: str
+import numpy as np
+import pandas as pd
+from permetrics import ClassificationMetric
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import matthews_corrcoef
 
 
-class N(M):
+def mcc(y_true, y_pred):
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+    return (tp * tn - fp * fn) / np.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
 
-    def __init__(self, *,
-        arg3: int = 42,
-        **kwargs: M | dict[str, Any]
-    ):
-        super().__init__(**kwargs)
-        self.arg3 = arg3
+y_preds = pd.read_csv("temp/preds.txt", header=None).values.astype(int)
+y_true = pd.read_csv("temp/y.txt", header=None).values.astype(int)
 
+# n_samples = 250000
+# y_preds = y_preds[:n_samples]
+# y_true = y_true[:n_samples]
 
+print(matthews_corrcoef(y_true, y_preds))
 
+# print(y_preds.shape, y_true.shape)
 
-N()
+# evaluator = ClassificationMetric(y_true, y_preds)
+
+# mcc_ = evaluator.get_metric_by_name("MCC")
+# print(mcc_)  
+
+# print(y_preds.shape, y_true.shape)
+# mcc_ = mcc(y_true, y_preds)
+# print(mcc_)
+
+# print("5 fold")
+# total = 0
+# for i in range(5):
+#     y_p = y_preds[i*50000:(i+1)*50000]
+#     y_t = y_true[i*50000:(i+1)*50000]
+#     mcc_ = mcc(y_t, y_p)
+#     print(mcc_)
+#     total += mcc_
+
+# print("Average")
+# print(total/5)

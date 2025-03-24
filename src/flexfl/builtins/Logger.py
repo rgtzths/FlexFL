@@ -12,6 +12,8 @@ class Logger:
     ENCODE = "encode"
     DECODE = "decode"
     EPOCH = "epoch"
+    START = "start"
+    END = "end"
 
     @staticmethod
     def setup(file_path: str):

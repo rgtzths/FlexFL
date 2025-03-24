@@ -2,6 +2,7 @@ from time import time
 
 from flexfl.builtins.FederatedABC import FederatedABC
 from flexfl.builtins.WorkerManager import WorkerManager
+from flexfl.builtins.Logger import Logger
 
 class Task:
     WORK = 0
@@ -37,6 +38,7 @@ class DecentralizedSync(FederatedABC):
 
     def master_loop(self):
         self.wm.wait_for_workers(self.min_workers)
+        Logger.log(Logger.START)
         self.epoch_start = time()
         epoch = 0
         while True:
@@ -63,6 +65,7 @@ class DecentralizedSync(FederatedABC):
             self.validate(epoch, split="val", verbose=True)
             stop = self.early_stop() or epoch == self.epochs
             if stop:
+                Logger.log(Logger.END)
                 self.wm.end()
                 break
 
