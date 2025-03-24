@@ -2,8 +2,6 @@ import argparse
 import json
 import os
 import logging
-import rich
-from rich.progress import Progress
 
 from flexfl.cli.utils import get_modules_and_args, load_class
 
@@ -46,7 +44,6 @@ def main():
     parser.add_argument('--nn', type=str, help="Neural network", choices=MODULES["neural_nets"].keys())
     parser.add_argument('--fl', type=str, help="Federated learning algorithm", choices=MODULES["fl_algos"].keys(), default="DecentralizedSync")
     parser.add_argument('--ml', type=str, help="Machine learning framework", choices=MODULES["ml_fw"].keys(), default="Keras")
-    parser.add_argument('-v', '--verbose', action="store_true", help="Verbose mode", default=False)
 
     for arg, (type_, value) in ALL_ARGS.items():
         if type_ is bool:
@@ -61,6 +58,7 @@ def main():
         parser.set_defaults(**config)
     args = parser.parse_args()
     args = {k: v for k, v in vars(args).items() if v is not None}
+    args.pop("config", None)
 
     # extras
     if "nn" not in args:
@@ -74,43 +72,25 @@ def main():
     if not args.get("use_gpu", False):
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
-    should_print = os.getenv("OMPI_COMM_WORLD_RANK", "0") == "0"
-    if args["verbose"] and should_print:
-        print("Arguments:")
-        rich.print_json(data=args)
+    class_args = {k: v for k, v in args.items() if k not in FORBIDDEN_ARGS}
 
     # mute warnings
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     logging.getLogger("jax._src.xla_bridge").setLevel(logging.ERROR)
 
-    class_args = {k: v for k, v in args.items() if k not in FORBIDDEN_ARGS}
+    verbose = os.getenv("OMPI_COMM_WORLD_RANK", "0") == "0"
 
-    if should_print:
-        with Progress() as p:
-            task = p.add_task("Loading Modules...", total=7)
-            ml_class = load_class(MODULES["ml_fw"][args["ml"]])
-            p.update(task, advance=1)
-            comm_class = load_class(MODULES["comms"][args["comm"]])
-            p.update(task, advance=1)
-            fl_class = load_class(MODULES["fl_algos"][args["fl"]])
-            p.update(task, advance=1)
-            nn_class = load_class(MODULES["neural_nets"][args["nn"]])
-            p.update(task, advance=1)
-            dataset_class = load_class(MODULES["datasets"][args["dataset"]])
-            p.update(task, advance=1)
-            message_class = load_class(MODULES["msg_layers"][args["message_layer"]])
-            p.update(task, advance=1)
-            wm_class = load_class(MODULES["builtins"]["WorkerManager"])
-            p.update(task, advance=1)
-        print("Starting...")
-    else:
-        comm_class = load_class(MODULES["comms"][args["comm"]])
-        fl_class = load_class(MODULES["fl_algos"][args["fl"]])
-        nn_class = load_class(MODULES["neural_nets"][args["nn"]])
-        dataset_class = load_class(MODULES["datasets"][args["dataset"]])
-        message_class = load_class(MODULES["msg_layers"][args["message_layer"]])
-        wm_class = load_class(MODULES["builtins"]["WorkerManager"])
-        ml_class = load_class(MODULES["ml_fw"][args["ml"]])
+    if verbose:
+        print("Importing modules...")
+    comm_class = load_class(MODULES["comms"][args["comm"]])
+    fl_class = load_class(MODULES["fl_algos"][args["fl"]])
+    nn_class = load_class(MODULES["neural_nets"][args["nn"]])
+    dataset_class = load_class(MODULES["datasets"][args["dataset"]])
+    message_class = load_class(MODULES["msg_layers"][args["message_layer"]])
+    wm_class = load_class(MODULES["builtins"]["WorkerManager"])
+    ml_class = load_class(MODULES["ml_fw"][args["ml"]])
+    if verbose:
+        print("Modules imported.")
 
     f = fl_class(
         ml=ml_class(

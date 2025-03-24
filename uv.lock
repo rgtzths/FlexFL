@@ -147,7 +147,6 @@ dependencies = [
     { name = "openpyxl" },
     { name = "pandas" },
     { name = "python-dotenv" },
-    { name = "rich" },
     { name = "scikit-learn" },
     { name = "wget" },
 ]
@@ -194,7 +193,6 @@ requires-dist = [
     { name = "paho-mqtt", marker = "extra == 'comms'", specifier = ">=2.1.0" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
-    { name = "rich", specifier = ">=13.9.4" },
     { name = "scikit-learn", specifier = ">=1.6.1" },
     { name = "tensorflow-cpu", marker = "extra == 'all'", specifier = ">=2.18.0" },
     { name = "tensorflow-cpu", marker = "extra == 'ml'", specifier = ">=2.18.0" },
