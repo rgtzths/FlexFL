@@ -113,12 +113,14 @@ class FederatedABC(ABC):
         self.is_master = self.id == 0
         self.base_path = f"{RESULTS_FOLDER}/{self.wm.c.start_time.strftime('%Y-%m-%d_%H:%M:%S')}"
         Path(self.base_path).mkdir(parents=True, exist_ok=True)
-        if self.is_master:
-            with open(f"{self.base_path}/args.json", "w") as f:
-                json.dump(self.all_args, f, indent=4)
         if self.ml.dataset.default_folder == self.ml.dataset.data_path:
             self.ml.dataset.data_path = f"{self.ml.dataset.base_path}/node_{self.id}"
         Logger.setup(f"{self.base_path}/log_{self.id}.jsonl")
+        if self.is_master:
+            with open(f"{self.base_path}/args.json", "w") as f:
+                json.dump(self.all_args, f, indent=4)
+        else:
+            Logger.setup_failure()
 
 
     def run(self):
