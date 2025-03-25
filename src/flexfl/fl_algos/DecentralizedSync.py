@@ -74,6 +74,7 @@ class DecentralizedSync(FederatedABC):
         return self.round_robin_pool(size, set(worker_info.keys()))
 
     
+    @Logger.time(Logger.WORKING)
     def on_work(self, sender_id, weights):
         self.ml.set_weights(weights)
         self.ml.train(self.local_epochs)

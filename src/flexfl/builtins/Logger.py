@@ -1,7 +1,6 @@
 import logging
 import json
 from datetime import datetime
-from time import time
 
 class Logger:
 
@@ -14,6 +13,7 @@ class Logger:
     EPOCH = "epoch"
     START = "start"
     END = "end"
+    WORKING = "working"
 
     @staticmethod
     def setup(file_path: str):
@@ -43,13 +43,15 @@ class Logger:
     def time(event: str):
         def decorator(func):
             def wrapper(*args, **kwargs):
-                start = time()
+                start = datetime.now()
                 res = func(*args, **kwargs)
-                end = time()
-                Logger.log(
-                    event,
-                    time=end-start
-                )
+                end = datetime.now()
+                logging.info(json.dumps({
+                    'event': event,
+                    'start': start.isoformat(),
+                    'end': end.isoformat(),
+                    'duration(ms)': (end - start).total_seconds() * 1000
+                }))
                 return res
             return wrapper
         return decorator
