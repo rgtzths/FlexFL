@@ -56,15 +56,9 @@ class Logger:
     def time(event: str):
         def decorator(func):
             def wrapper(*args, **kwargs):
-                start = datetime.now()
+                Logger.log(f"{event}_start")
                 res = func(*args, **kwargs)
-                end = datetime.now()
-                logging.info(json.dumps({
-                    'event': event,
-                    'start': start.isoformat(),
-                    'end': end.isoformat(),
-                    'duration(ms)': (end - start).total_seconds() * 1000
-                }))
+                Logger.log(f"{event}_end")
                 return res
             return wrapper
         return decorator
