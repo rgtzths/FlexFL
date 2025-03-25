@@ -224,7 +224,6 @@ class FederatedABC(ABC):
         workers_ = workers - self.rr
         if len(workers_) < size:
             chosen = sorted(list(workers_))
-            self.rr = set()
             for w in chosen:
                 self.rr.add(w)
         for _ in range(size - len(chosen)):
