@@ -56,7 +56,6 @@ class CentralizedSync(FederatedABC):
                 stop = self.early_stop() or epoch == self.epochs
                 if stop:
                     Logger.log(Logger.END)
-                    self.wm.end()
             weighted_sum = 0
             total_weight = 0
             for i, (worker_id, data) in enumerate(self.wm.recv_n(
@@ -75,6 +74,7 @@ class CentralizedSync(FederatedABC):
             batch += self.min_workers
             epoch = batch//total_batches
             self.ml.apply_gradients(weighted_sum/total_weight)
+        self.wm.end()
 
 
     def subpool_fn(self, size, worker_info):

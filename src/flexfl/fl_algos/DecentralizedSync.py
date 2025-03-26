@@ -55,7 +55,6 @@ class DecentralizedSync(FederatedABC):
                 stop = self.early_stop() or epoch == self.epochs
                 if stop:
                     Logger.log(Logger.END)
-                    self.wm.end()
             weighted_sum = 0
             total_weight = 0
             for i, (worker_id, data) in enumerate(self.wm.recv_n(
@@ -73,6 +72,7 @@ class DecentralizedSync(FederatedABC):
                 continue
             epoch += 1
             self.ml.set_weights(weighted_sum/total_weight)
+        self.wm.end()
 
 
     def subpool_fn(self, size, worker_info):

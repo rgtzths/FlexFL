@@ -53,6 +53,7 @@ class CentralizedAsync(FederatedABC):
         self.working = set(pool)
         self.run_loop()
         self.wm.wait_for(self.finished)
+        self.wm.end()
 
 
     def handle_iteration(self):
@@ -64,7 +65,6 @@ class CentralizedAsync(FederatedABC):
         stop = self.early_stop() or epoch == self.epochs
         if stop:
             Logger.log(Logger.END)
-            self.wm.end()
             self.running = False
             
 

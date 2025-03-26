@@ -225,8 +225,7 @@ class FederatedABC(ABC):
         workers_ = workers - self.rr
         if len(workers_) < size:
             chosen = sorted(list(workers_))
-            for w in chosen:
-                self.rr.add(w)
+            self.rr = set()
         for _ in range(size - len(chosen)):
             chosen.append(self.round_robin_single(workers))
         return chosen
