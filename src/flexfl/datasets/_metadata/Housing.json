@@ -1,0 +1,16 @@
+{
+    "name": "Housing",
+    "link": "",
+    "type": "regression",
+    "input_shape": [
+        8
+    ],
+    "output_size": 1,
+    "info": "",
+    "samples": 20640,
+    "split": {
+        "train": "70.00%: 14448",
+        "val": "15.00%: 3096",
+        "test": "15.00%: 3096"
+    }
+}
