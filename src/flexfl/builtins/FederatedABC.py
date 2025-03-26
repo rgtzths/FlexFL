@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 import json
 from pathlib import Path
-from time import time
+import time
 import numpy as np
 from sklearn.metrics import matthews_corrcoef, accuracy_score, f1_score, mean_squared_error, mean_absolute_error
 from typing import Callable
@@ -68,7 +68,7 @@ class FederatedABC(ABC):
         self.compare_score = None
         self.best_score = None
         self.best_weights = None
-        self.epoch_start = time()
+        self.epoch_start = time.monotonic()
         self.is_classification = None
         self.metrics = None
         self.new_score = None
@@ -127,7 +127,6 @@ class FederatedABC(ABC):
         self.setup()
         if not self.is_master:
             self.wm.setup_worker_info(self.get_worker_info())
-        self.last_time = time()
         if self.is_master:
             self.master_loop()
         else:
@@ -164,7 +163,7 @@ class FederatedABC(ABC):
         if self.is_classification:
             preds = np.argmax(preds, axis=1)
         metrics = {name: METRICS_FN[name](y, preds) for name in self.metrics}
-        delta_time = time() - self.epoch_start
+        delta_time = time.monotonic() - self.epoch_start
         if verbose:
             print(f"\nEpoch {epoch}/{self.epochs} - Time: {delta_time:.2f}s")
             print(', '.join(f'{name}: {value:.4f}' for name, value in metrics.items()) + f' - Loss: {loss:.4f}')
@@ -177,7 +176,7 @@ class FederatedABC(ABC):
             self.best_score = self.new_score
             self.best_weights = self.ml.get_weights()
         Logger.log(Logger.EPOCH, epoch=epoch, time=delta_time, loss=loss, **metrics)
-        self.epoch_start = time()
+        self.epoch_start = time.monotonic()
         return metrics, loss
     
 

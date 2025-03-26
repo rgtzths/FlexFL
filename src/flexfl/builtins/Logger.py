@@ -1,6 +1,6 @@
 import logging
 import json
-from datetime import datetime
+import time
 import signal
 import sys
 
@@ -45,9 +45,10 @@ class Logger:
 
     @staticmethod
     def log(event: str, **kwargs):
+        timestamp = time.monotonic()
         logging.info(json.dumps({
             'event': event,
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': timestamp,
             **kwargs
         }))
     
