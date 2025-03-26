@@ -156,6 +156,7 @@ class FederatedABC(ABC):
 
 
     def validate(self, epoch: int, split = "val", verbose = False) -> tuple[dict[str, float], float]:
+        Logger.log(Logger.VALIDATION_START)
         x = getattr(self.ml, f"x_{split}")
         y = getattr(self.ml, f"y_{split}")
         preds = self.ml.predict(x)
@@ -175,8 +176,9 @@ class FederatedABC(ABC):
         ):
             self.best_score = self.new_score
             self.best_weights = self.ml.get_weights()
-        Logger.log(Logger.EPOCH, epoch=epoch, time=delta_time, loss=loss, **metrics)
         self.epoch_start = time.time()
+        Logger.log(Logger.EPOCH, epoch=epoch, time=delta_time, loss=loss, **metrics)
+        Logger.log(Logger.VALIDATION_END)
         return metrics, loss
     
 

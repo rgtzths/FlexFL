@@ -76,26 +76,12 @@ class PyTorch(MLFrameworkABC):
                 param.copy_(new_weight)
 
 
-    def get_gradients(self):
+    def calculate_gradients(self):
         raise NotImplementedError
-        x, y = next(self.train_iterator)
-        x, y = x.to(self.device), y.to(self.device)
-        self.optimizer.zero_grad()
-        y_pred = self.model(x)
-        loss = self.loss(y_pred, y)
-        loss.backward()
-        return np.concatenate([param.grad.detach().cpu().numpy().flatten() for param in self.model.parameters() if param.grad is not None])
     
 
     def apply_gradients(self, gradients: np.ndarray):
         raise NotImplementedError
-        start = 0
-        for param in self.model.parameters():
-            size = np.prod(param.shape)
-            grad_tensor = torch.tensor(gradients[start:start + size].reshape(param.shape), dtype=torch.float32).to(self.device)
-            param.grad = grad_tensor
-            start += size
-        self.optimizer.step()
     
 
     def train(self, epochs: int, verbose=False):

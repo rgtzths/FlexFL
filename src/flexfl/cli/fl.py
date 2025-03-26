@@ -23,6 +23,8 @@ def main():
     MODULES, ALL_ARGS = get_modules_and_args(FOLDERS)
 
     ALIASES = {
+        "CentralizedSync": "cs",
+        "CentralizedAsync": "ca",
         "DecentralizedSync": "ds",
         "DecentralizedAsync": "da",
         "TensorFlow": "tf",

@@ -15,7 +15,10 @@ class Logger:
     EPOCH = "epoch"
     START = "start"
     END = "end"
-    WORKING = "working"
+    WORKING_START = "working_start"
+    WORKING_END = "working_end"
+    VALIDATION_START = "validation_start"
+    VALIDATION_END = "validation_end"
     FAILURE = "failure"
 
     @staticmethod
@@ -57,9 +60,10 @@ class Logger:
     def time(event: str):
         def decorator(func):
             def wrapper(*args, **kwargs):
-                Logger.log(f"{event}_start")
+                start = time.time()
                 res = func(*args, **kwargs)
-                Logger.log(f"{event}_end")
+                end = time.time()
+                Logger.log(event, time=end-start)
                 return res
             return wrapper
         return decorator

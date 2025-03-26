@@ -63,26 +63,26 @@ class TensorFlow(MLFrameworkABC):
         self.model.set_weights(new_weights)
 
     
-    def get_gradients(self):
-        raise NotImplementedError
+    def calculate_gradients(self):
+        x, y = next(self.train_iterator)
         with tf.GradientTape() as tape:
-            x, y = next(self.train_iterator)
-            y_pred = self.model(x, training=True)
+            y_pred = self.model(x)
             loss = self.loss(y, y_pred)
         gradients = tape.gradient(loss, self.model.trainable_variables)
-        return np.concatenate([g.numpy().flatten() for g in gradients])
+        gradient_arrays = [g.numpy().flatten() for g in gradients]
+        return np.concatenate(gradient_arrays)
     
 
     def apply_gradients(self, gradients: np.ndarray):
-        raise NotImplementedError
         start = 0
-        grads_list = []
-        trainable_vars = self.model.trainable_variables
-        for var in trainable_vars:
-            size = np.prod(var.shape)
-            grads_list.append(tf.convert_to_tensor(gradients[start:start + size].reshape(var.shape)))
+        gradient_tensors = []
+        for param in self.model.trainable_variables:
+            size = np.prod(param.shape)
+            grad_tensor = tf.constant(gradients[start:start + size].reshape(param.shape), dtype=tf.float32)
+            gradient_tensors.append(grad_tensor)
             start += size
-        self.optimizer.apply_gradients(zip(grads_list, trainable_vars))
+        gradient_vars = zip(gradient_tensors, self.model.trainable_variables)
+        self.optimizer.apply_gradients(gradient_vars)
 
     
     def train(self, epochs: int, verbose=False):

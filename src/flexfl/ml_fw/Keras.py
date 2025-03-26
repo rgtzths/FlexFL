@@ -77,12 +77,30 @@ class Keras(MLFrameworkABC):
         self.model.set_weights(new_weights)
 
 
-    def get_gradients(self):
-        raise NotImplementedError
+    def calculate_gradients(self) -> np.ndarray:
+        if self.backend != "tensorflow":
+            raise NotImplementedError
+        x, y = next(self.train_iterator)
+        with tf.GradientTape() as tape:
+            y_pred = self.model(x)
+            loss = self.loss(y, y_pred)
+        gradients = tape.gradient(loss, self.model.trainable_variables)
+        gradient_arrays = [g.numpy().flatten() for g in gradients]
+        return np.concatenate(gradient_arrays)
 
 
     def apply_gradients(self, gradients: np.ndarray):
-        raise NotImplementedError
+        if self.backend != "tensorflow":
+            raise NotImplementedError
+        start = 0
+        gradient_tensors = []
+        for param in self.model.trainable_variables:
+            size = np.prod(param.shape)
+            grad_tensor = tf.constant(gradients[start:start + size].reshape(param.shape), dtype=tf.float32)
+            gradient_tensors.append(grad_tensor)
+            start += size
+        gradient_vars = zip(gradient_tensors, self.model.trainable_variables)
+        self.optimizer.apply_gradients(gradient_vars)
 
 
     def train(self, epochs: int, verbose=False):

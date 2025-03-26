@@ -9,16 +9,14 @@ class Task:
     WORK = 0
     WORK_DONE = 1
 
-class DecentralizedAsync(FederatedABC):
+class CentralizedAsync(FederatedABC):
 
     def __init__(self, *, 
-        local_epochs: int = 3,
-        da_penalty: float = 0.3,
+        ca_penalty: float = 0.8,
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.local_epochs = local_epochs
-        self.penalty = da_penalty
+        self.penalty = ca_penalty
         self.iteration = 0
         self.working = set()
 
@@ -36,18 +34,20 @@ class DecentralizedAsync(FederatedABC):
 
 
     def get_worker_info(self) -> dict:
-        return {}
+        return {
+            "n_batches": self.ml.n_samples//self.ml.batch_size,
+        }
 
 
     def master_loop(self):
-        self.weights = self.ml.get_weights()
         self.wm.wait_for_workers(self.min_workers)
-        Logger.log(Logger.START)
-        self.epoch_start = time.time()
         pool = self.wm.get_subpool(self.min_workers, self.subpool_fn)
+        self.total_batches = sum(self.wm.get_info(worker_id)["n_batches"] for worker_id in pool)
+        self.epoch_start = time.time()
+        Logger.log(Logger.START)
         self.wm.send_n(
             workers = pool, 
-            payload = self.weights,
+            payload = self.ml.get_weights(),
             type_ = Task.WORK
         )
         self.working = set(pool)
@@ -57,10 +57,9 @@ class DecentralizedAsync(FederatedABC):
 
     def handle_iteration(self):
         self.iteration += 1
-        if self.iteration % self.min_workers != 0:
+        if self.iteration % self.total_batches != 0:
             return
-        epoch = self.iteration // self.min_workers
-        self.ml.set_weights(self.weights)
+        epoch = self.iteration // self.total_batches
         self.validate(epoch, split="val", verbose=True)
         stop = self.early_stop() or epoch == self.epochs
         if stop:
@@ -72,23 +71,21 @@ class DecentralizedAsync(FederatedABC):
     def on_work(self, sender_id, weights):
         Logger.log(Logger.WORKING_START)
         self.ml.set_weights(weights)
-        self.ml.train(self.local_epochs)
-        new_weights = self.ml.get_weights()
+        grads = self.ml.calculate_gradients()
         Logger.log(Logger.WORKING_END)
         self.wm.send(
             node_id = WorkerManager.MASTER_ID, 
-            payload = new_weights, 
+            payload = grads,
             type_ = Task.WORK_DONE
         )
 
 
-    def on_work_done(self, sender_id, worker_weights):
+    def on_work_done(self, sender_id, grads):
         self.working.remove(sender_id)
         if not self.running:
             return
-        self.weights = self.linear_interpolation(
-            self.weights, worker_weights, self.penalty
-        )
+        grads *= self.penalty
+        self.ml.apply_gradients(grads)
         self.send_work()
         self.handle_iteration()
 
@@ -99,7 +96,7 @@ class DecentralizedAsync(FederatedABC):
         self.working.add(new_worker)
         self.wm.send(
             node_id = new_worker,
-            payload = self.weights,
+            payload = self.ml.get_weights(),
             type_ = Task.WORK
         )
 

@@ -85,9 +85,9 @@ class MLFrameworkABC(ABC):
 
 
     @abstractmethod
-    def get_gradients(self) -> np.ndarray:
+    def calculate_gradients(self) -> np.ndarray:
         """
-        Get the model gradients
+        Calculate the model gradients
         """
         pass
 
