@@ -45,7 +45,7 @@ class Logger:
 
     @staticmethod
     def log(event: str, **kwargs):
-        timestamp = time.monotonic()
+        timestamp = time.time()
         logging.info(json.dumps({
             'event': event,
             'timestamp': timestamp,

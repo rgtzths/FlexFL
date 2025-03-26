@@ -43,7 +43,7 @@ class DecentralizedAsync(FederatedABC):
         self.weights = self.ml.get_weights()
         self.wm.wait_for_workers(self.min_workers)
         Logger.log(Logger.START)
-        self.epoch_start = time.monotonic()
+        self.epoch_start = time.time()
         pool = self.wm.get_subpool(self.min_workers, self.subpool_fn)
         self.wm.send_n(
             workers = pool, 

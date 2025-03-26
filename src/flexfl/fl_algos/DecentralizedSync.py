@@ -39,7 +39,7 @@ class DecentralizedSync(FederatedABC):
     def master_loop(self):
         self.wm.wait_for_workers(self.min_workers)
         Logger.log(Logger.START)
-        self.epoch_start = time.monotonic()
+        self.epoch_start = time.time()
         epoch = 0
         stop = False
         while True:
