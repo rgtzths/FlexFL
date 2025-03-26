@@ -37,6 +37,7 @@ class DecentralizedSync(FederatedABC):
 
 
     def master_loop(self):
+        weights = self.ml.get_weights()
         self.wm.wait_for_workers(self.min_workers)
         Logger.log(Logger.START)
         self.epoch_start = time.time()
@@ -47,10 +48,11 @@ class DecentralizedSync(FederatedABC):
             pool = self.wm.get_subpool(self.min_workers, self.subpool_fn)
             self.wm.send_n(
                 workers = pool, 
-                payload = self.ml.get_weights(),
+                payload = weights,
                 type_ = Task.WORK
             )
             if epoch > 0:
+                self.ml.set_weights(weights)
                 self.validate(epoch, split="val", verbose=True)
                 stop = self.early_stop() or epoch == self.epochs
                 if stop:
@@ -71,7 +73,7 @@ class DecentralizedSync(FederatedABC):
             if i+1 < int(self.min_workers*self.epoch_threshold):
                 continue
             epoch += 1
-            self.ml.set_weights(weighted_sum/total_weight)
+            weights = weighted_sum/total_weight
         self.wm.end()
 
 
