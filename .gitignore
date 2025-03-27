@@ -1,9 +1,10 @@
 data/**
 results/**
 
+*.tfvars
+.terraform*
 
 !.gitkeep
-
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

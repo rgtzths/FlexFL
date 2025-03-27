@@ -52,6 +52,7 @@ class FederatedABC(ABC):
         delta: float = 0.01,
         main_metric: str = None,
         min_workers: int = 2,
+        subfolder: str = None,
         **kwargs
     ) -> None:
         self.ml = ml
@@ -63,6 +64,7 @@ class FederatedABC(ABC):
         self.delta = delta
         self.main_metric = main_metric
         self.min_workers = min_workers
+        self.subfolder = subfolder
         
         self.buffer = deque(maxlen=patience)
         self.compare_score = None
@@ -111,7 +113,10 @@ class FederatedABC(ABC):
     def setup_nodes(self):
         self.id = self.wm.c.id
         self.is_master = self.id == 0
-        self.base_path = f"{RESULTS_FOLDER}/{self.wm.c.start_time.strftime('%Y-%m-%d_%H:%M:%S')}"
+        folder_name = self.wm.c.start_time.strftime('%Y-%m-%d_%H:%M:%S')
+        if self.subfolder is not None:
+            folder_name = f"{folder_name}/{self.subfolder}"
+        self.base_path = f"{RESULTS_FOLDER}/{folder_name}"
         Path(self.base_path).mkdir(parents=True, exist_ok=True)
         if self.ml.dataset.default_folder == self.ml.dataset.data_path:
             self.ml.dataset.data_path = f"{self.ml.dataset.base_path}/node_{self.id}"
