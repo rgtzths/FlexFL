@@ -8,4 +8,4 @@ done < "$VM_LIST"
 sudo apt update -y
 sudo dpkg --configure -a
 sudo apt upgrade -y
-sudo apt install python3.12-venv -y
+sudo apt install -y python3.12-venv python3-dev libopenmpi-dev

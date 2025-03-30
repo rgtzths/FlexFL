@@ -1,6 +1,6 @@
 [project]
 name = "FlexFL"
-version = "0.1.2"
+version = "0.1.3"
 description = "Flexible Federated Learning Framework"
 readme = "README.md"
 authors = [
