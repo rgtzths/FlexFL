@@ -36,7 +36,7 @@ class Kafka(CommABC):
         self.hearbeats = {}
         self.last_time = None
         self.running = True
-        self.thread: threading.Thread = None
+        self.thread = threading.Thread(target=self.listen)
         self.admin = None
         if self.is_anchor:
             self.clear()
@@ -120,7 +120,6 @@ class Kafka(CommABC):
             self.id_mapping[0] = node_uuid
         self._nodes.add(0)
         self.id_mapping[self.id] = self._uuid
-        self.thread = threading.Thread(target=self.listen)
         self.thread.start()
 
 

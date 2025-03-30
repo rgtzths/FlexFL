@@ -5,7 +5,7 @@ export $(grep -v '^#' .env | xargs)
 
 KEY_NAME="fl"
 KEY_PATH="keys/$KEY_NAME"
-VM_LIST="scripts/hostfile.txt"
+VM_LIST="scripts/hostfile.txt" # needs to end in empty line
 USERNAME=$VM_USERNAME
 PASSWORD=$VM_PASSWORD
 
@@ -25,28 +25,18 @@ fi
 
 # Copy SSH key to each VM
 while read -r IP; do
-    echo "Adding SSH key to $IP..."
-    ssh-keyscan -H "$IP" >> ~/.ssh/known_hosts > /dev/null 2>&1
-    echo "  IP added to known_hosts"
-    sshpass -p "$PASSWORD" ssh-copy-id -f -i "$KEY_PATH.pub" "$USERNAME@$IP" > /dev/null 2>&1
-    echo "  SSH pubkey added to $IP"
-    sshpass -p "$PASSWORD" scp "$KEY_PATH" "$USERNAME@$IP:~/.ssh/"
-    echo "  SSH privkey copied to $IP"
-    sshpass -p "$PASSWORD" ssh "$USERNAME@$IP" "chmod 600 ~/.ssh/$KEY_NAME"
-    echo "  SSH privkey permissions set on $IP"
-    sshpass -p "$PASSWORD" ssh "$USERNAME@$IP" "touch ~/.ssh/known_hosts"
-    echo "  known_hosts file created on $IP"
+    echo "Setting up $IP..." &&
+    ssh-keyscan -H "$IP" >> ~/.ssh/known_hosts > /dev/null 2>&1 &&
+    sshpass -p "$PASSWORD" ssh-copy-id -f -i "$KEY_PATH.pub" "$USERNAME@$IP" > /dev/null 2>&1 &&
+    sshpass -p "$PASSWORD" scp "$KEY_PATH" "$USERNAME@$IP:~/.ssh/" &&
+    sshpass -p "$PASSWORD" ssh "$USERNAME@$IP" "chmod 600 ~/.ssh/$KEY_NAME && touch ~/.ssh/known_hosts && mkdir scripts" &&
+    sshpass -p "$PASSWORD" scp "$VM_LIST" "$USERNAME@$IP:~/$VM_LIST" &&
+    sshpass -p "$PASSWORD" scp "scripts/vm.sh" "$USERNAME@$IP:~/scripts/vm.sh" &&
+    echo "Running setup script on $IP..." &&
+    sshpass -p "$PASSWORD" ssh "$USERNAME@$IP" "bash ~/scripts/vm.sh" > /dev/null 2>&1 &&
+    echo "$IP setup done!" &
 done < "$VM_LIST"
-
-# Make sure VMs can SSH into each other
-echo "Setting up SSH access between VMs..."
-while read -r IP; do
-    for INNER_IP in $(cat "$VM_LIST"); do
-        if [ "$IP" == "$INNER_IP" ]; then
-            continue
-        fi
-        sshpass -p "$PASSWORD" ssh "$USERNAME@$IP" "ssh-keyscan -H $INNER_IP >> ~/.ssh/known_hosts"
-    done
-done < "$VM_LIST"
+# Wait for all background jobs to finish
+wait
 
 echo "SSH setup completed!"

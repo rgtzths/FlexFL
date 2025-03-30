@@ -53,6 +53,7 @@ class FederatedABC(ABC):
         main_metric: str = None,
         min_workers: int = 2,
         subfolder: str = None,
+        save_model: bool = True,
         **kwargs
     ) -> None:
         self.ml = ml
@@ -65,6 +66,7 @@ class FederatedABC(ABC):
         self.main_metric = main_metric
         self.min_workers = min_workers
         self.subfolder = subfolder
+        self.save_model = save_model
         
         self.buffer = deque(maxlen=patience)
         self.compare_score = None
@@ -145,7 +147,7 @@ class FederatedABC(ABC):
                 
 
     def end(self):
-        if self.is_master and self.best_weights is not None:
+        if self.is_master and self.best_weights is not None and self.save_model:
             self.ml.set_weights(self.best_weights)
             self.ml.save_model(f"{self.base_path}/model")
         self.wm.c.close()
