@@ -5,7 +5,7 @@ export $(grep -v '^#' .env | xargs)
 
 KEY_NAME="fl"
 KEY_PATH="keys/$KEY_NAME"
-VM_LIST="scripts/hostfile.txt" # needs to end in empty line
+VM_LIST="scripts/ips.txt" # needs to end in empty line
 USERNAME=$VM_USERNAME
 PASSWORD=$VM_PASSWORD
 

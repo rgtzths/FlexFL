@@ -1,5 +1,5 @@
 
-VM_LIST="scripts/hostfile.txt"
+VM_LIST="scripts/ips.txt"
 
 while read -r IP; do
     ssh-keyscan -H $IP >> ~/.ssh/known_hosts

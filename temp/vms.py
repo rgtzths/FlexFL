@@ -12,9 +12,19 @@ API_URL = os.getenv("PM_API_URL")
 USER = os.getenv("PM_USERNAME")
 PASS = os.getenv("PM_PASSWORD")
 INSECURE = True 
-
 NODE = "frodo"
 TEMPLATE = 2000
+
+N_WORKERS = 10
+PREFIX = "fl-worker"
+
+console = Console()
+
+
+def check_env_vars() -> None:
+    if not all([API_URL, USER, PASS]):
+        raise EnvironmentError("Please set PM_API_URL, PM_USERNAME, and PM_PASSWORD in your environment variables.")
+    
 
 def check_response(response) -> None:
     if response.status_code != 200:
@@ -70,17 +80,34 @@ def wait_for_vm_creation(headers, vm_id) -> None:
         break
 
 
-def main():
-    console = Console()
-    headers = authenticate()
-    console.log("Authenticated successfully.")
+def setup_vm(headers, name) -> int:
     vm_id = next_id(headers)
-    name = f"test-vm{vm_id}"
     create_vm(headers, vm_id, name)
     console.log(f"VM: [bold cyan]{name}[/bold cyan] created with ID: {vm_id}.")
     with console.status("Waiting for VM creation..."):
         wait_for_vm_creation(headers, vm_id)
-    console.log("VM created successfully.")
+    console.log(f"VM {vm_id} creation completed.")
+    return vm_id
+
+
+def create_all_vms(headers) -> None:
+    ids = []
+    for i in range(1, N_WORKERS + 1):
+        name = f"{PREFIX}-{i}"
+        vm_id = setup_vm(headers, name)
+        console.log(f"VM {name} is ready")
+        ids.append(vm_id)
+    console.log("All VMs created successfully.")
+    
+
+def main():
+    check_env_vars()
+    headers = authenticate()
+    console.log("Authenticated successfully.")
+    console.log("Creating VMs...")
+    create_all_vms(headers)
+    
+    
 
 if __name__ == "__main__":
     main()
