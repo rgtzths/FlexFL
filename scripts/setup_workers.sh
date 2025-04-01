@@ -24,20 +24,30 @@ if [ ! -f "$KEY_PATH" ]; then
     echo "SSH key generated at $KEY_PATH"
 fi
 
-# Copy SSH key to each VM
-while read -r IP; do
-    if [[ -z "$IP" || "$IP" =~ ^# ]]; then
-        continue
-    fi
-    echo "Setting up $IP..." &&
+function setup_worker {
+    local IP=$1
+    echo "Setting up $IP..."
     sshpass -p "$PASSWORD" ssh-copy-id $ARGS -f -i "$KEY_PATH.pub" "$USERNAME@$IP" > /dev/null 2>&1 &&
     sshpass -p "$PASSWORD" scp $ARGS "$KEY_PATH" "$USERNAME@$IP:~/.ssh/" &&
     sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "chmod 600 ~/.ssh/$KEY_NAME && touch ~/.ssh/known_hosts && mkdir scripts" &&
     sshpass -p "$PASSWORD" scp $ARGS "$VM_LIST" "$USERNAME@$IP:~/$VM_LIST" &&
     sshpass -p "$PASSWORD" scp $ARGS "scripts/vm.sh" "$USERNAME@$IP:~/scripts/vm.sh" &&
-    echo "Running setup script on $IP..." &&
+    sshpass -p "$PASSWORD" scp $ARGS "scripts/ntp_worker.sh" "$USERNAME@$IP:~/scripts/ntp_worker.sh" &&
     sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "bash ~/scripts/vm.sh" > /dev/null 2>&1 &&
-    echo "$IP setup done!" &
+    sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "bash ~/scripts/ntp_worker.sh" > /dev/null 2>&1 
+    if [ $? -eq 0 ]; then
+        echo "Setup completed successfully on $IP."
+    else
+        echo "Error: Setup failed on $IP."
+    fi
+}
+
+# Copy SSH key to each VM
+while read -r IP_; do
+    if [[ -z "$IP_" || "$IP_" =~ ^# ]]; then
+        continue
+    fi
+    setup_worker "$IP_" &
 done < <(tail -n +2 "$VM_LIST") # ignoring the first line
 # Wait for all background jobs to finish
 wait
