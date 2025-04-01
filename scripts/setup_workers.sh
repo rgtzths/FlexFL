@@ -7,8 +7,8 @@ KEY_NAME="fl"
 KEY_PATH="keys/$KEY_NAME"
 VM_LIST="scripts/ips.txt" # needs to end in empty line
 USERNAME=$VM_USERNAME
-ARGS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 PASSWORD=$VM_PASSWORD
+ARGS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q"
 
 # Check VM list
 if [ ! -f "$VM_LIST" ]; then
@@ -38,7 +38,7 @@ while read -r IP; do
     echo "Running setup script on $IP..." &&
     sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "bash ~/scripts/vm.sh" > /dev/null 2>&1 &&
     echo "$IP setup done!" &
-done < "$VM_LIST"
+done < <(tail -n +2 "$VM_LIST") # ignoring the first line
 # Wait for all background jobs to finish
 wait
 

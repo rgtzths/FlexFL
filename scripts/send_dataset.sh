@@ -6,7 +6,7 @@ export $(grep -v '^#' .env | xargs)
 VM_LIST="scripts/ips.txt" # needs to end in empty line
 USERNAME=$VM_USERNAME
 PASSWORD=$VM_PASSWORD
-ARGS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+ARGS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q"
 DATASET=$1
 
 if [ ! -d "data/$DATASET" ]; then
