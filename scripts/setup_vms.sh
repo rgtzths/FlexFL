@@ -7,6 +7,7 @@ KEY_NAME="fl"
 KEY_PATH="keys/$KEY_NAME"
 VM_LIST="scripts/ips.txt" # needs to end in empty line
 USERNAME=$VM_USERNAME
+ARGS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 PASSWORD=$VM_PASSWORD
 
 # Check VM list
@@ -25,15 +26,17 @@ fi
 
 # Copy SSH key to each VM
 while read -r IP; do
+    if [[ -z "$IP" || "$IP" =~ ^# ]]; then
+        continue
+    fi
     echo "Setting up $IP..." &&
-    ssh-keyscan -H "$IP" >> ~/.ssh/known_hosts > /dev/null 2>&1 &&
-    sshpass -p "$PASSWORD" ssh-copy-id -f -i "$KEY_PATH.pub" "$USERNAME@$IP" > /dev/null 2>&1 &&
-    sshpass -p "$PASSWORD" scp "$KEY_PATH" "$USERNAME@$IP:~/.ssh/" &&
-    sshpass -p "$PASSWORD" ssh "$USERNAME@$IP" "chmod 600 ~/.ssh/$KEY_NAME && touch ~/.ssh/known_hosts && mkdir scripts" &&
-    sshpass -p "$PASSWORD" scp "$VM_LIST" "$USERNAME@$IP:~/$VM_LIST" &&
-    sshpass -p "$PASSWORD" scp "scripts/vm.sh" "$USERNAME@$IP:~/scripts/vm.sh" &&
+    sshpass -p "$PASSWORD" ssh-copy-id $ARGS -f -i "$KEY_PATH.pub" "$USERNAME@$IP" > /dev/null 2>&1 &&
+    sshpass -p "$PASSWORD" scp $ARGS "$KEY_PATH" "$USERNAME@$IP:~/.ssh/" &&
+    sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "chmod 600 ~/.ssh/$KEY_NAME && touch ~/.ssh/known_hosts && mkdir scripts" &&
+    sshpass -p "$PASSWORD" scp $ARGS "$VM_LIST" "$USERNAME@$IP:~/$VM_LIST" &&
+    sshpass -p "$PASSWORD" scp $ARGS "scripts/vm.sh" "$USERNAME@$IP:~/scripts/vm.sh" &&
     echo "Running setup script on $IP..." &&
-    sshpass -p "$PASSWORD" ssh "$USERNAME@$IP" "bash ~/scripts/vm.sh" > /dev/null 2>&1 &&
+    sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "bash ~/scripts/vm.sh" > /dev/null 2>&1 &&
     echo "$IP setup done!" &
 done < "$VM_LIST"
 # Wait for all background jobs to finish
