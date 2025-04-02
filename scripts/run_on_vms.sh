@@ -1,21 +1,36 @@
 #!/bin/bash
 
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 [-v] <command>"
+    echo "  -v: verbose mode"
+    exit 1
+fi
+
 # Load environment variables from .env file
 export $(grep -v '^#' .env | xargs)
 
 VM_LIST="scripts/ips.txt" # needs to end in empty line
 USERNAME=$VM_USERNAME
 PASSWORD=$VM_PASSWORD
-COMMAND=$@
 ARGS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q"
 
-echo "Command to execute: $@"
-echo ""
+if [ "$1" == "-v" ]; then
+    VERBOSE=1
+    shift
+else
+    VERBOSE=0
+fi
+COMMAND=$@
 
+echo "Command to execute: $@"
 
 function run_command {
     local IP=$1
-    sshpass -p "$PASSWORD" ssh -tt $ARGS "$USERNAME@$IP" "bash -i -c '$COMMAND'"
+    if [ $VERBOSE -eq 0 ]; then
+        sshpass -p "$PASSWORD" ssh -tt $ARGS "$USERNAME@$IP" "bash -i -c '$COMMAND'" > /dev/null 2>&1
+    else
+        sshpass -p "$PASSWORD" ssh -tt $ARGS "$USERNAME@$IP" "bash -i -c '$COMMAND'"
+    fi
     if [ $? -eq 0 ]; then
         echo "Command executed successfully on $IP."
     else

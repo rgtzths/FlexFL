@@ -1,6 +1,5 @@
-import kaggle
 import pandas as pd
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler
 
 from flexfl.builtins.DatasetABC import DatasetABC
 
@@ -18,6 +17,7 @@ class UNSW(DatasetABC):
 
 
     def download(self):
+        import kaggle
         kaggle.api.dataset_download_files(
             "sankurisrinath/nf-unsw-nb15-v2csv",
             path=f"{self.default_folder}",

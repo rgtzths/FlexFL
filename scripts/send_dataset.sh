@@ -9,6 +9,11 @@ PASSWORD=$VM_PASSWORD
 ARGS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q"
 DATASET=$1
 
+if [ -z "$DATASET" ]; then
+    echo "Usage: $0 <dataset>"
+    exit 1
+fi
+
 if [ ! -d "data/$DATASET" ]; then
     echo "Error: Dataset folder 'data/$DATASET' not found!"
     exit 1

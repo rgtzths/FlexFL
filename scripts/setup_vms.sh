@@ -3,7 +3,7 @@
 # Load environment variables from .env file
 export $(grep -v '^#' .env | xargs)
 
-KEY_NAME="fl"
+KEY_NAME="id_rsa"
 KEY_PATH="keys/$KEY_NAME"
 VM_LIST="scripts/ips.txt" # needs to end in empty line
 USERNAME=$VM_USERNAME
@@ -29,8 +29,9 @@ sudo apt install -y sshpass
 function setup_worker {
     local IP=$1
     echo "Setting up $IP..."
-    sshpass -p "$PASSWORD" ssh-copy-id $ARGS -f -i "$KEY_PATH.pub" "$USERNAME@$IP" > /dev/null 2>&1 &&
+    sshpass -p "$PASSWORD" ssh-copy-id -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -f -i "$KEY_PATH.pub" "$USERNAME@$IP" > /dev/null 2>&1 &&
     sshpass -p "$PASSWORD" scp $ARGS "$KEY_PATH" "$USERNAME@$IP:~/.ssh/" &&
+    sshpass -p "$PASSWORD" scp $ARGS "$KEY_PATH.pub" "$USERNAME@$IP:~/.ssh/" &&
     sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "chmod 600 ~/.ssh/$KEY_NAME && touch ~/.ssh/known_hosts && mkdir scripts" &&
     sshpass -p "$PASSWORD" scp $ARGS "$VM_LIST" "$USERNAME@$IP:~/$VM_LIST" &&
     sshpass -p "$PASSWORD" scp $ARGS "scripts/vm.sh" "$USERNAME@$IP:~/scripts/vm.sh" &&
@@ -48,7 +49,7 @@ while read -r IP_; do
         continue
     fi
     setup_worker "$IP_" &
-done < <(tail -n +2 "$VM_LIST") # ignoring the first line
+done < "$VM_LIST" # ignoring the first line
 # Wait for all background jobs to finish
 wait
 

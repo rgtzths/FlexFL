@@ -1,4 +1,3 @@
-import kaggle
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
@@ -18,6 +17,7 @@ class IOT_DNL(DatasetABC):
 
 
     def download(self):
+        import kaggle
         kaggle.api.dataset_download_files(
             "speedwall10/iot-device-network-logs",
             path=f"{self.default_folder}",
