@@ -1,8 +1,10 @@
 #!/bin/bash
 
 if [ $# -eq 0 ]; then
-    echo "Usage: $0 [-v] <command>"
+    echo "Usage: $0 [-v] [-f] <command>"
     echo "  -v: verbose mode"
+    echo "  -f: run a script file on the VMs"
+    echo "  use -v before -f"
     exit 1
 fi
 
@@ -22,10 +24,25 @@ else
 fi
 COMMAND=$@
 
-echo "Command to execute: $@"
+RUN_FILE=0
+if [ "$1" == "-f" ]; then
+    FILE=$2
+    RUN_FILE=1
+    shift 2
+    COMMAND="sudo bash /tmp/$FILE $@"
+    if [ ! -f "$FILE" ]; then
+        echo "Error: File $FILE not found."
+        exit 1
+    fi
+fi
+
+echo "Command to execute: $COMMAND"
 
 function run_command {
     local IP=$1
+    if [ $RUN_FILE -eq 1 ]; then
+        sshpass -p "$PASSWORD" scp $ARGS "$FILE" "$USERNAME@$IP:/tmp/$FILE"
+    fi
     if [ $VERBOSE -eq 0 ]; then
         sshpass -p "$PASSWORD" ssh -tt $ARGS "$USERNAME@$IP" "bash -i -c '$COMMAND'" > /dev/null 2>&1
     else
