@@ -17,7 +17,7 @@ cd flexfl &&
 mkdir data &&
 mkdir results &&
 python3 -m venv venv &&
-echo "source $HOME/flexfl/venv/bin/activate" >> ~/.bashrc &&
+# echo "source $HOME/flexfl/venv/bin/activate" >> ~/.bashrc &&
 source venv/bin/activate &&
 pip install flexfl[all]
 
