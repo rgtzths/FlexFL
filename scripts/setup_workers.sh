@@ -24,6 +24,8 @@ if [ ! -f "$KEY_PATH" ]; then
     echo "SSH key generated at $KEY_PATH"
 fi
 
+sudo apt install -y sshpass
+
 function setup_worker {
     local IP=$1
     echo "Setting up $IP..."
@@ -32,9 +34,7 @@ function setup_worker {
     sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "chmod 600 ~/.ssh/$KEY_NAME && touch ~/.ssh/known_hosts && mkdir scripts" &&
     sshpass -p "$PASSWORD" scp $ARGS "$VM_LIST" "$USERNAME@$IP:~/$VM_LIST" &&
     sshpass -p "$PASSWORD" scp $ARGS "scripts/vm.sh" "$USERNAME@$IP:~/scripts/vm.sh" &&
-    sshpass -p "$PASSWORD" scp $ARGS "scripts/ntp_worker.sh" "$USERNAME@$IP:~/scripts/ntp_worker.sh" &&
-    sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "bash ~/scripts/vm.sh" > /dev/null 2>&1 &&
-    sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "bash ~/scripts/ntp_worker.sh" > /dev/null 2>&1 
+    sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "bash ~/scripts/vm.sh" > /dev/null 2>&1 
     if [ $? -eq 0 ]; then
         echo "Setup completed successfully on $IP."
     else

@@ -10,7 +10,8 @@ while read -r IP; do
     ssh-keyscan -H $IP >> ~/.ssh/known_hosts 2>/dev/null
 done < "$VM_LIST" &&
 
-sudo apt install -y python3.12-venv python3-dev libopenmpi-dev &&
+echo "if [[ -n \"\$SSH_CONNECTION\" ]]; then source ~/.bashrc; fi" >> ~/.bash_profile &&
+sudo apt install -y python3.12-venv python3-dev libopenmpi-dev ntpsec &&
 mkdir flexfl &&
 cd flexfl &&
 mkdir data &&
@@ -19,3 +20,6 @@ python3 -m venv venv &&
 echo "source $HOME/flexfl/venv/bin/activate" >> ~/.bashrc &&
 source venv/bin/activate &&
 pip install flexfl[all]
+
+# check ntpsec
+# ntpq -p
