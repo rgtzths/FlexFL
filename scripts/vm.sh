@@ -10,7 +10,6 @@ while read -r IP; do
     ssh-keyscan -H $IP >> ~/.ssh/known_hosts 2>/dev/null
 done < "$VM_LIST" &&
 
-echo "if [[ -n \"\$SSH_CONNECTION\" ]]; then source ~/.bashrc; fi" >> ~/.bash_profile &&
 sudo apt install -y python3.12-venv python3-dev libopenmpi-dev ntpsec &&
 mkdir flexfl &&
 cd flexfl &&
