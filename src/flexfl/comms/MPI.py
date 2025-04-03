@@ -15,7 +15,9 @@ class MPI(CommABC):
         self._start_time = datetime.now()
         self.status = MPI4py.Status()
         self.setup()
-        time.sleep(0.1*self.id)
+        if self.id != 0:
+            time.sleep(1)
+        time.sleep(0.2*self.id)
 
 
     @property

@@ -36,6 +36,7 @@ class CentralizedSync(FederatedABC):
 
     def master_loop(self):
         self.wm.wait_for_workers(self.min_workers)
+        print("Starting...")
         pool = self.wm.get_subpool(self.min_workers, self.subpool_fn)
         total_batches = sum(self.wm.get_info(worker_id)["n_batches"] for worker_id in pool)
         Logger.log(Logger.START)

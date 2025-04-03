@@ -39,6 +39,7 @@ class DecentralizedSync(FederatedABC):
     def master_loop(self):
         weights = self.ml.get_weights()
         self.wm.wait_for_workers(self.min_workers)
+        print("Starting...")
         Logger.log(Logger.START)
         self.epoch_start = time.time()
         epoch = 0

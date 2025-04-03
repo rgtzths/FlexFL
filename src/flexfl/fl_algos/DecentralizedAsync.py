@@ -42,6 +42,7 @@ class DecentralizedAsync(FederatedABC):
     def master_loop(self):
         self.weights = self.ml.get_weights()
         self.wm.wait_for_workers(self.min_workers)
+        print("Starting...")
         Logger.log(Logger.START)
         self.epoch_start = time.time()
         pool = self.wm.get_subpool(self.min_workers, self.subpool_fn)

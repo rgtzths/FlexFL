@@ -46,6 +46,7 @@ def main():
     parser.add_argument('--nn', type=str, help="Neural network", choices=MODULES["neural_nets"].keys())
     parser.add_argument('--fl', type=str, help="Federated learning algorithm", choices=MODULES["fl_algos"].keys(), default="DecentralizedSync")
     parser.add_argument('--ml', type=str, help="Machine learning framework", choices=MODULES["ml_fw"].keys(), default="Keras")
+    parser.add_argument('--info', type=str, help="Additional info", default=None)
 
     for arg, (type_, value) in ALL_ARGS.items():
         if type_ is bool:

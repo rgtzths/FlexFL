@@ -30,7 +30,7 @@ function run_command {
     local IP=$1
     local WORKER_ID=$2
     echo "Running command on $IP..."
-    COMMAND="cd flexfl && source venv/bin/activate && flexfl-res -s $WORKER_ID -i $INTERVAL -c $CHANCE flexfl --subfolder worker_$WORKER_ID --ip \"$MASTER_IP\" $RUN_ARGS"
+    COMMAND="cd flexfl && source venv/bin/activate && flexfl-res -s $WORKER_ID -i $INTERVAL -c $CHANCE flexfl --results_folder worker_$WORKER_ID --ip \"$MASTER_IP\" $RUN_ARGS"
     sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "screen -dmS fl-worker-$WORKER_ID bash -c \"$COMMAND\""
 }
 
@@ -46,8 +46,9 @@ while read -r IP; do
     if [[ -z "$IP" || "$IP" =~ ^# ]]; then
         continue
     fi
-    run_command "$IP" "$WORKER_ID" &
+    run_command "$IP" "$WORKER_ID"
     WORKER_ID=$((WORKER_ID + 1))
+    sleep 0.2
 done < <(tail -n +2 "$VM_LIST")
 wait
 echo "Command execution completed!"
