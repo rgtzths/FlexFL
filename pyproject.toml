@@ -61,4 +61,5 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "ipykernel>=6.29.5",
+    "pxm-tools>=0.1.2",
 ]

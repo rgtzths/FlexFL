@@ -1,5 +1,15 @@
 # Helpfull commands
 
+Create VMs
+```bash
+uv run pxm-create -n 10
+```
+
+Start VMs
+```bash
+uv run pxm-start
+```
+
 Update package
 ```bash
 bash scripts/run_commands.sh "source flexfl/venv/bin/activate && pip install --upgrade flexfl"
