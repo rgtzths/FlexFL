@@ -12,12 +12,12 @@ CHANCE=$2
 shift 2
 RUN_ARGS=$@
 
-echo "Running command on VMs with interval $INTERVAL and chance $CHANCE, do you want to continue? (y/n)"
-read -r CONTINUE
-if [[ "$CONTINUE" != "y" ]]; then
-    echo "Exiting..."
-    exit 1
-fi
+# echo "Running command on VMs with interval $INTERVAL and chance $CHANCE, do you want to continue? (y/n)"
+# read -r CONTINUE
+# if [[ "$CONTINUE" != "y" ]]; then
+#     echo "Exiting..."
+#     exit 1
+# fi
 
 if [ ! -f "$VM_LIST" ]; then
     echo "Error: VM list file '$VM_LIST' not found!"
@@ -35,7 +35,7 @@ function run_command {
 }
 
 echo "Running command on master..."
-COMMAND="cd flexfl && source venv/bin/activate && flexfl --is_anchor --no-save_model $RUN_ARGS"
+COMMAND="cd flexfl && source venv/bin/activate && flexfl --is_anchor --no-save_model --info \"interval $INTERVAL and chance $CHANCE\" $RUN_ARGS"
 sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$MASTER_IP" "screen -dmS fl-master bash -c \"$COMMAND\""
 
 echo "Waiting..."
