@@ -63,8 +63,3 @@ chronyc sources -v
 echo ""
 echo "Check offset value to see how closely synchronized you are to the master."
 echo "For sub-millisecond precision, the offset should be less than 1 ms (0.001 seconds)."
-
-# sync
-# sudo chronyc makestep
-# check
-# chronyc tracking

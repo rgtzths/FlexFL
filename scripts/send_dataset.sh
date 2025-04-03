@@ -29,9 +29,9 @@ function send_dataset {
     local NODE_ID=$2
 
     echo "Sending dataset $DATASET/node_$NODE_ID to $IP..."
-    sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "mkdir -p ~/flexfl/data/$DATASET" > /dev/null 2>&1 &&
+    sshpass -p "$PASSWORD" ssh -n $ARGS "$USERNAME@$IP" "mkdir -p ~/flexfl/data/$DATASET" > /dev/null 2>&1 &&
     sshpass -p "$PASSWORD" scp $ARGS -r "data/$DATASET/node_$NODE_ID" "$USERNAME@$IP:~/flexfl/data/$DATASET" > /dev/null 2>&1 &&
-    sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "mv ~/flexfl/data/$DATASET/node_$NODE_ID ~/flexfl/data/$DATASET/my_data" > /dev/null 2>&1
+    sshpass -p "$PASSWORD" ssh -n $ARGS "$USERNAME@$IP" "mv ~/flexfl/data/$DATASET/node_$NODE_ID ~/flexfl/data/$DATASET/my_data" > /dev/null 2>&1
     if [ $? -eq 0 ]; then
         echo "Dataset sent to $IP successfully!"
     else
