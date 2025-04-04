@@ -6,10 +6,8 @@ CHANCE=$3
 shift 3
 RUN_ARGS=$@
 
-echo "Running command locally with and $WORKERS workers, interval $INTERVAL and chance $CHANCE, do you want to continue? (y/n)"
-read -r CONTINUE
-if [[ "$CONTINUE" != "y" ]]; then
-    echo "Exiting..."
+if ! [[ "$INTERVAL" =~ ^[0-9]+(\.[0-9]+)?$ && "$CHANCE" =~ ^[0-9]+(\.[0-9]+)?$ && "$WORKERS" =~ ^[0-9]+$ ]]; then
+    echo "Error: Interval, chance, and workers must be numbers."
     exit 1
 fi
 
@@ -23,12 +21,13 @@ sleep 10
 function run_command {
     local WORKER_ID=$1
     echo "Running worker $WORKER_ID..."
-    COMMAND="uv run flexfl-res -s $WORKER_ID -i $INTERVAL -c $CHANCE flexfl --subfolder worker_$WORKER_ID  $RUN_ARGS"
+    COMMAND="uv run flexfl-res -s $WORKER_ID -i $INTERVAL -c $CHANCE uv run flexfl --results_folder worker_$WORKER_ID  $RUN_ARGS"
     screen -dmS fl-worker-$WORKER_ID bash -c "$COMMAND"
 }
 
 for (( WORKER_ID=1; WORKER_ID<=$WORKERS; WORKER_ID++ )); do
-    run_command "$WORKER_ID" &
+    sleep 1
+    run_command "$WORKER_ID" 
 done
 wait
 echo "Command execution completed!"

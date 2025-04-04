@@ -21,16 +21,17 @@ def run_program(args: list) -> subprocess.Popen:
 def run(interval, chance, args):
     process = None
     try:
+        print("Starting process...")
         process = run_program(args)
         while True:
+            time.sleep(interval)
             if process.poll() is not None:
                 print("Process terminated.")
                 break
             if random.random() < chance:
-                print("Restarting process...")
                 terminate(process)
+                print("Restarting process...")
                 process = run_program(args)
-            time.sleep(interval)
     except KeyboardInterrupt:
         print("\nForcing end...")
         terminate(process)

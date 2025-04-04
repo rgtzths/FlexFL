@@ -6,6 +6,8 @@ import time
 import numpy as np
 from sklearn.metrics import matthews_corrcoef, accuracy_score, f1_score, mean_squared_error, mean_absolute_error
 from typing import Callable
+import signal
+import sys
 
 from flexfl.builtins.WorkerManager import WorkerManager
 from flexfl.builtins.MLFrameworkABC import MLFrameworkABC
@@ -83,6 +85,7 @@ class FederatedABC(ABC):
 
         self.setup_metrics()
         self.setup_nodes()
+        self.setup_failure()
 
 
     @abstractmethod
@@ -126,9 +129,20 @@ class FederatedABC(ABC):
         if self.is_master:
             with open(f"{self.base_path}/args.json", "w") as f:
                 json.dump(self.all_args, f, indent=4)
-        else:
-            Logger.setup_failure()
 
+
+    def setup_failure(self):
+        def handle(signal, frame):
+            if self.is_master:
+                self.force_end()
+            else:
+                Logger.log(Logger.FAILURE)
+                self.end()
+            sys.exit(0)
+
+        signal.signal(signal.SIGTERM, handle)
+        signal.signal(signal.SIGINT, handle)
+            
 
     def run(self):
         self.setup()
@@ -155,6 +169,7 @@ class FederatedABC(ABC):
 
 
     def force_end(self):
+        print("Force ending...")
         self.wm.send_n(
             workers = self.wm.get_all_workers(), 
             type_ = WorkerManager.EXIT_TYPE

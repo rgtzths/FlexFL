@@ -55,7 +55,7 @@ while read -r IP_; do
     if [[ -z "$IP_" || "$IP_" =~ ^# ]]; then
         continue
     fi
-    sleep 0.5
+    sleep 1
     run_command "$IP_" "$WORKER_ID"
     WORKER_ID=$((WORKER_ID + 1))
 done < <(tail -n +2 "$VM_LIST")

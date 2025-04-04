@@ -110,11 +110,7 @@ def main():
         **class_args,
     )
 
-    try:
-        f.run()
-    except KeyboardInterrupt:
-        print("\nForcing end...")
-        f.force_end()
+    f.run()
 
 
 if __name__ == "__main__":

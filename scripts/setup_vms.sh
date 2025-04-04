@@ -49,7 +49,7 @@ while read -r IP_; do
         continue
     fi
     setup_worker "$IP_" &
-done < "$VM_LIST" # ignoring the first line
+done < "$VM_LIST"
 # Wait for all background jobs to finish
 wait
 

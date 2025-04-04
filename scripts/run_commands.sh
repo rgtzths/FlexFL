@@ -1,10 +1,11 @@
 #!/bin/bash
 
 if [ $# -eq 0 ]; then
-    echo "Usage: $0 [-v] [-f] <command>"
+    echo "Usage: $0 [-v] [-w] [-f] <command>"
     echo "  -v: verbose mode"
+    echo "  -w: run command only on workers (skip first line of ips.txt)"
     echo "  -f: run a script file on the VMs"
-    echo "  use -v before -f"
+    echo "  use options by order: -v -w -f"
     exit 1
 fi
 
@@ -15,12 +16,16 @@ VM_LIST="scripts/ips.txt" # needs to end in empty line
 USERNAME=$VM_USERNAME
 PASSWORD=$VM_PASSWORD
 ARGS="-n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q"
+VERBOSE=0
+ONLY_WORKERS=0
 
 if [ "$1" == "-v" ]; then
     VERBOSE=1
     shift
-else
-    VERBOSE=0
+fi
+if [ "$1" == "-w" ]; then
+    ONLY_WORKERS=1
+    shift
 fi
 COMMAND=$@
 
@@ -55,7 +60,12 @@ function run_command {
     fi
 }
 
+read -r MASTER_IP < "$VM_LIST"
+
 while read -r IP; do
+    if [ $ONLY_WORKERS -eq 1 ] && [ "$IP" == "$MASTER_IP" ]; then
+        continue
+    fi
     if [[ -z "$IP" || "$IP" =~ ^# ]]; then
         continue
     fi
