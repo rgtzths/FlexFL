@@ -1,0 +1,189 @@
+from pathlib import Path
+import pandas as pd
+import json
+from typing import Generator, Callable
+from datetime import datetime
+
+BASE_DIR = "results"
+
+class Results:
+
+    @staticmethod
+    def get_all_folders() -> list[str]:
+        folders = Path(BASE_DIR).iterdir()
+        folders = sorted(str(f) for f in folders if f.is_dir())
+        return folders
+
+
+    @staticmethod
+    def get_last_folder() -> str:
+        folders = Results.get_all_folders()
+        if len(folders) == 0:
+            return None
+        return folders[-1]
+
+
+    def __init__(self, results_folder: str) -> None:
+        assert Path(results_folder).is_dir(), f"Results folder {results_folder} does not exist."
+        self.results_folder = results_folder
+        self.out = f"{results_folder}/_analysis"
+        Path(self.out).mkdir(parents=True, exist_ok=True)
+        self.logs: dict[int, list[dict]] = {}
+        self.log2node: dict[int, int] = {}
+        self.setup_paths()
+        self.n_workers = len(set(self.log2node.values())) - 1
+
+
+    def process_path(self, path_: Path, node_id: int = None) -> None:
+        if path_.is_file() and path_.name.startswith("log_"):
+            log_id = int(path_.name.split("_")[1].split(".")[0])
+            if node_id is None:
+                node_id = log_id
+            self.log2node[log_id] = node_id
+            self.logs[log_id] = []
+            with open(str(path_), "r") as f:
+                for line in f:
+                    line = json.loads(line)
+                    self.logs[log_id].append(line)
+
+
+    def setup_paths(self):
+        for path_ in Path(self.results_folder).iterdir():
+            if path_.is_file():
+                self.process_path(path_)
+            elif path_.is_dir() and path_.name.startswith("worker_"):
+                node_id = int(path_.name.split("_")[1])
+                for sub_path in path_.iterdir():
+                    self.process_path(sub_path, node_id)
+        self.log2node = dict(sorted(self.log2node.items(), key=lambda x: (x[1], x[0])))
+
+
+    def yield_log(self, log_id: int, events: set = None, fn: Callable[[dict], bool] = None) -> Generator[dict, None, None]:
+        assert log_id in self.logs, f"Log {log_id} not found in results folder."
+        for line in self.logs[log_id]:
+            if (
+                (events is not None and line["event"] in events) or
+                (fn is not None and fn(line))
+            ):
+                yield line
+
+
+    def get_validations(self) -> pd.DataFrame:
+        data = []
+        starts = self.yield_log(0, {"validation_start"})
+        ends = self.yield_log(0, {"validation_end"})
+        for start, end in zip(starts, ends, strict=True):
+            data.append((
+                datetime.fromtimestamp(start["timestamp"]),
+                datetime.fromtimestamp(end["timestamp"]),
+                end["timestamp"] - start["timestamp"]
+            ))
+        return pd.DataFrame(data, columns=["start", "end", "duration"])
+    
+
+    def get_generic(self, event: str, log_id: int = None, cols: list[str] = None) -> pd.DataFrame:
+        data = []
+        if cols is None:
+            cols = []
+        logs = self.logs if log_id is None else [log_id]
+        for id_ in logs:
+            for line in self.yield_log(id_, {event}):
+                data.append((
+                    self.log2node[id_],
+                    id_,
+                    datetime.fromtimestamp(line["timestamp"]),
+                    *(line[col] for col in cols) 
+                ))
+        df = pd.DataFrame(data, columns=["nid", "lid", "timestamp", *cols])
+        df = df.sort_values(by=["timestamp"])
+        return df
+    
+
+    def get_failures(self) -> pd.DataFrame:
+        df = self.get_generic("failure")
+        return df
+    
+
+    def get_joins(self) -> pd.DataFrame:
+        df = self.get_generic("join", 0, ["node_id"])
+        df = df.drop(columns=["nid", "lid"])
+        df = df.rename(columns={"node_id": "lid"})
+        df["nid"] = df["lid"].apply(lambda x: self.log2node[x])
+        return df
+    
+
+    def get_leaves(self) -> pd.DataFrame:
+        df = self.get_generic("leave", 0, ["node_id"])
+        df = df.drop(columns=["nid", "lid"])
+        df = df.rename(columns={"node_id": "lid"})
+        df["nid"] = df["lid"].apply(lambda x: self.log2node[x])
+        return df
+
+
+    def get_work_times(self) -> pd.DataFrame:
+        data = []
+        for log_id in self.logs:
+            starts = self.yield_log(log_id, {"working_start"})
+            ends = self.yield_log(log_id, {"working_end", "failure"})
+            for start, end in zip(starts, ends):
+                data.append((
+                    self.log2node[log_id],
+                    log_id,
+                    datetime.fromtimestamp(start["timestamp"]),
+                    datetime.fromtimestamp(end["timestamp"]),
+                    end["timestamp"] - start["timestamp"],
+                ))
+        df = pd.DataFrame(data, columns=[ "nid", "lid", "start", "end", "duration"])
+        df = df.sort_values(by=["nid", "start"])
+        return df
+    
+
+    def get_comms(self) -> pd.DataFrame:
+        data = []
+        for a1, a2, a3 in [("send", "recv", "receiver"), ("recv", "send", "sender")]:
+            for log_id in set(self.logs.keys()) - {0}:
+                l1s = self.yield_log(0, None, lambda x: x["event"] == a1 and x[a3] == log_id)
+                l2s = self.yield_log(log_id, {a2})
+                for l1, l2 in zip(l1s, l2s):
+                    t1 = l1["timestamp"]
+                    t2 = l2["timestamp"]
+                    sender = l1["sender"]
+                    receiver = l1["receiver"]
+                    if a1 == "send":
+                        start = t1
+                        end = t2
+                    else:
+                        start = t2
+                        end = t1
+                    duration = (end - start) * 1000
+                    if duration < 0:
+                        raise ValueError(f"Negative duration: {duration} ms")
+                    data.append((
+                        self.log2node[sender],
+                        sender,
+                        self.log2node[receiver],
+                        receiver,
+                        datetime.fromtimestamp(start),
+                        datetime.fromtimestamp(end),
+                        duration,
+                        l1["payload_size"]
+                    ))
+        df = pd.DataFrame(data, columns=["send_nid", "send_lid", "recv_nid", "recv_lid", "start", "end", "duration (ms)", "payload_size"])
+        df = df.sort_values(by=["start"])
+        return df
+    
+
+    def get_metrics(self) -> pd.DataFrame:
+        data = []
+        logs = self.yield_log(0, {"epoch"})
+        for log in logs:
+            metrics = set(log.keys()) - {"event", "epoch", "time", "timestamp", "loss"}
+            data.append((
+                log["epoch"],
+                log["time"],
+                log["loss"],
+                *(log[m] for m in metrics)
+            ))
+        df = pd.DataFrame(data, columns=["epoch", "time", "loss", *metrics])
+        df = df.sort_values(by=["epoch"])
+        return df

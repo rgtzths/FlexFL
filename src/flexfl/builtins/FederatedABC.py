@@ -198,9 +198,9 @@ class FederatedABC(ABC):
         ):
             self.best_score = self.new_score
             self.best_weights = self.ml.get_weights()
-        self.epoch_start = time.time()
         Logger.log(Logger.EPOCH, epoch=epoch, time=delta_time, loss=loss, **metrics)
         Logger.log(Logger.VALIDATION_END)
+        self.epoch_start = time.time()
         return metrics, loss
     
 

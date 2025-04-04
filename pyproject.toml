@@ -1,6 +1,6 @@
 [project]
 name = "FlexFL"
-version = "0.1.6"
+version = "0.1.7"
 description = "Flexible Federated Learning Framework"
 readme = "README.md"
 authors = [
@@ -27,6 +27,7 @@ flexfl = "flexfl.cli.fl:main"
 flexfl-division = "flexfl.cli.division:main"
 flexfl-preprocess = "flexfl.cli.preprocess:main"
 flexfl-res = "flexfl.cli.auto_restart:main"
+flexfl-plot = "flexfl.cli.analysis:main"
 
 
 [project.optional-dependencies]

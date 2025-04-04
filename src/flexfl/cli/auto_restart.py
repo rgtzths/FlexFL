@@ -18,13 +18,13 @@ def run_program(args: list) -> subprocess.Popen:
     )
 
 
-def run(interval, chance, args):
+def run(interval, chance, wait_time, args):
     process = None
     try:
         print("Starting process...")
         process = run_program(args)
+        time.sleep(wait_time)
         while True:
-            time.sleep(interval)
             if process.poll() is not None:
                 print("Process terminated.")
                 break
@@ -32,6 +32,7 @@ def run(interval, chance, args):
                 terminate(process)
                 print("Restarting process...")
                 process = run_program(args)
+            time.sleep(interval)
     except KeyboardInterrupt:
         print("\nForcing end...")
         terminate(process)
@@ -42,16 +43,15 @@ def main():
     parser.add_argument("-i", "--interval", type=int, help="Interval in seconds", default=1)
     parser.add_argument("-c", "--chance",type=float, help="Chance of restart", default=0.1)
     parser.add_argument("-s", "--seed", type=int, help="Seed for random number generator", default=42)
+    parser.add_argument("-w", "--wait", type=int, help="Wait time before running the loop", default=3)
     parser.add_argument("args", nargs=argparse.REMAINDER, help="Program arguments")
     args = parser.parse_args()
     if len(args.args) < 1:
         parser.error("Please provide a program to run.")
         exit(1)
     random.seed(args.seed)
-    run(args.interval, args.chance, args.args)
+    run(args.interval, args.chance, args.wait, args.args)
 
 
 if __name__ == "__main__":
     main()
-
-    
