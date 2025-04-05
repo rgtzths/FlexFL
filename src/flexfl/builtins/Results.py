@@ -3,6 +3,7 @@ import pandas as pd
 import json
 from typing import Generator, Callable
 from datetime import datetime
+from functools import lru_cache
 
 BASE_DIR = "results"
 
@@ -32,6 +33,8 @@ class Results:
         self.log2node: dict[int, int] = {}
         self.setup_paths()
         self.n_workers = len(set(self.log2node.values())) - 1
+        self.start = next(self.yield_log(0, {"start"}))["timestamp"]
+        self.start = datetime.fromtimestamp(self.start)
 
 
     def process_path(self, path_: Path, node_id: int = None) -> None:
@@ -68,6 +71,7 @@ class Results:
                 yield line
 
 
+    @lru_cache(maxsize=1)
     def get_validations(self) -> pd.DataFrame:
         data = []
         starts = self.yield_log(0, {"validation_start"})
@@ -99,11 +103,13 @@ class Results:
         return df
     
 
+    @lru_cache(maxsize=1)
     def get_failures(self) -> pd.DataFrame:
         df = self.get_generic("failure")
         return df
     
 
+    @lru_cache(maxsize=1)
     def get_joins(self) -> pd.DataFrame:
         df = self.get_generic("join", 0, ["node_id"])
         df = df.drop(columns=["nid", "lid"])
@@ -112,14 +118,25 @@ class Results:
         return df
     
 
+    @lru_cache(maxsize=1)
     def get_leaves(self) -> pd.DataFrame:
         df = self.get_generic("leave", 0, ["node_id"])
         df = df.drop(columns=["nid", "lid"])
         df = df.rename(columns={"node_id": "lid"})
         df["nid"] = df["lid"].apply(lambda x: self.log2node[x])
         return df
+    
+
+    @lru_cache(maxsize=1)
+    def get_new_workers(self) -> pd.DataFrame:
+        df = self.get_generic("new_worker", 0, ["node_id"])
+        df = df.drop(columns=["nid", "lid"])
+        df = df.rename(columns={"node_id": "lid"})
+        df["nid"] = df["lid"].apply(lambda x: self.log2node[x])
+        return df
 
 
+    @lru_cache(maxsize=1)
     def get_work_times(self) -> pd.DataFrame:
         data = []
         for log_id in self.logs:
@@ -138,6 +155,7 @@ class Results:
         return df
     
 
+    @lru_cache(maxsize=1)
     def get_comms(self) -> pd.DataFrame:
         data = []
         for a1, a2, a3 in [("send", "recv", "receiver"), ("recv", "send", "sender")]:
@@ -168,22 +186,99 @@ class Results:
                         duration,
                         l1["payload_size"]
                     ))
-        df = pd.DataFrame(data, columns=["send_nid", "send_lid", "recv_nid", "recv_lid", "start", "end", "duration (ms)", "payload_size"])
+        df = pd.DataFrame(data, columns=["send_nid", "send_lid", "recv_nid", "recv_lid", "start", "end", "duration (ms)", "payload_size (bytes)"])
         df = df.sort_values(by=["start"])
         return df
     
 
+    @lru_cache(maxsize=1)
     def get_metrics(self) -> pd.DataFrame:
         data = []
         logs = self.yield_log(0, {"epoch"})
         for log in logs:
-            metrics = set(log.keys()) - {"event", "epoch", "time", "timestamp", "loss"}
+            log = {**log}
+            log.pop("event")
+            log.pop("timestamp")
             data.append((
-                log["epoch"],
-                log["time"],
-                log["loss"],
-                *(log[m] for m in metrics)
+                *log.values(),
             ))
-        df = pd.DataFrame(data, columns=["epoch", "time", "loss", *metrics])
+        df = pd.DataFrame(data, columns=[*log.keys()])
         df = df.sort_values(by=["epoch"])
+        return df
+    
+
+    @lru_cache(maxsize=1)
+    def get_comms_per_worker(self) -> pd.DataFrame:
+        df = self.get_comms()
+        df["worker"] = df.apply(lambda x: max(x["send_nid"], x["recv_nid"]), axis=1)
+        df = df.groupby(["worker"]).agg({
+            "duration (ms)": "sum",
+            "payload_size (bytes)": "sum"
+        })
+        df = df.reset_index()
+        df["payload_size (bytes)"] = df["payload_size (bytes)"] / 1024 / 1024
+        df["duration (ms)"] = df["duration (ms)"] / 1000
+        df = df.rename(columns={
+            "payload_size (bytes)": "payload_size (MB)",
+            "duration (ms)": "comm_time (s)"
+        })
+        df = df.sort_values(by=["worker"])
+        return df
+    
+
+    @lru_cache(maxsize=1)
+    def get_work_time_per_worker(self) -> pd.DataFrame:
+        df = self.get_work_times()
+        df = df.rename(columns={"nid": "worker"})
+        df = df.groupby(["worker"]).agg({
+            "duration": "sum",
+        })
+        df = df.reset_index()
+        df = df.rename(columns={
+            "duration": "work_time (s)"
+        })
+        return df
+    
+
+    @lru_cache(maxsize=1)
+    def get_worker_start_end(self) -> pd.DataFrame:
+        data = []
+        for log_id in set(self.logs.keys()) - {0}:
+            worker_id = self.log2node[log_id]
+            start = self.logs[log_id][0]["timestamp"]
+            end = self.logs[log_id][-1]["timestamp"]
+            data.append((
+                worker_id,
+                log_id,
+                datetime.fromtimestamp(start),
+                datetime.fromtimestamp(end),
+            ))
+        df = pd.DataFrame(data, columns=["nid", "lid", "start", "end"])
+        df = df.rename(columns={"nid": "worker"})
+        df = df.groupby(["worker"]).agg({
+            "start": "min",
+            "end": "max",
+        })
+        df = df.reset_index()
+        df["duration"] = df["end"] - df["start"]
+        df["duration"] = df["duration"].dt.total_seconds()
+        df = df.rename(columns={
+            "duration": "total_time (s)"
+        })
+        df = df.sort_values(by=["worker"])
+        return df
+    
+
+    @lru_cache(maxsize=1)
+    def get_worker_time_status(self) -> pd.DataFrame:
+        cpm = self.get_comms_per_worker()
+        wtpw = self.get_work_time_per_worker()
+        wse = self.get_worker_start_end()
+        df = pd.merge(cpm, wtpw, on="worker", how="outer")
+        df = pd.merge(df, wse, on="worker", how="outer")
+        df["other_time (s)"] = df["total_time (s)"] - df["work_time (s)"] - df["comm_time (s)"]
+        df["comm_time% (s)"] = df["comm_time (s)"] / df["total_time (s)"] * 100
+        df["work_time% (s)"] = df["work_time (s)"] / df["total_time (s)"] * 100
+        df["other_time% (s)"] = df["other_time (s)"] / df["total_time (s)"] * 100
+        df = df.drop(columns=["start", "end"])
         return df

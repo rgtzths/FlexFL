@@ -7,6 +7,7 @@ class Logger:
     SEND = "send"
     RECV = "recv"
     JOIN = "join"
+    NEW_WORKER = "new_worker"
     LEAVE = "leave"
     ENCODE = "encode"
     DECODE = "decode"

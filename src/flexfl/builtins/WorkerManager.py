@@ -2,6 +2,7 @@ from typing import Any, Callable, Generator
 
 from flexfl.builtins.CommABC import CommABC
 from flexfl.builtins.MessageABC import MessageABC
+from flexfl.builtins.Logger import Logger
 
 JOIN_TYPE = "__joining__"
 WAITING_TYPE = "__waiting__"
@@ -45,6 +46,7 @@ class WorkerManager():
             self.callbacks[type_](node_id, data)
         elif type_ == JOIN_TYPE:
             self.worker_info[node_id] = data
+            Logger.log(Logger.NEW_WORKER, node_id=node_id, info=data)
             self.on_new_worker(node_id, data)
         else:
             if type_ not in self.buffer:
@@ -67,6 +69,8 @@ class WorkerManager():
     def _recv(self, type_: Any = None, return_on_disconnect: bool = False) -> tuple[int, Any]:
         node_id, data = self.c.recv()
         if data is None:
+            if node_id not in self.worker_info:
+                return None
             self.worker_info.pop(node_id)
             self.on_worker_disconnect(node_id)
             if return_on_disconnect:

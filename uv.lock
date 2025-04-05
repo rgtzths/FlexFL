@@ -254,7 +254,7 @@ wheels = [
 
 [[package]]
 name = "flexfl"
-version = "0.1.7"
+version = "0.1.8"
 source = { editable = "." }
 dependencies = [
     { name = "kaggle" },

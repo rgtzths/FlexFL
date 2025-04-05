@@ -32,7 +32,9 @@ def run(interval, chance, wait_time, args):
                 terminate(process)
                 print("Restarting process...")
                 process = run_program(args)
-            time.sleep(interval)
+                time.sleep(wait_time)
+            else:
+                time.sleep(interval)
     except KeyboardInterrupt:
         print("\nForcing end...")
         terminate(process)
