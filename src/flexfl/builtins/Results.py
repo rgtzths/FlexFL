@@ -338,10 +338,7 @@ class Results:
         self.add_to_timeline(fig, joins, "timestamp", "nid", "green", "Joins")
         fig.update_yaxes(title="Workers")
         fig.update_xaxes(title="Time", showticklabels=False)
-        start = worktimes["start"].min() 
-        end = worktimes["end"].max()
-        diff = end - start
-        fig.update_xaxes(range=[start - diff * 0.05, end + diff * 0.05])
+        fig.update_xaxes(range=[worktimes["start"].min() , worktimes["end"].max()])
         fig.show()
 
 
