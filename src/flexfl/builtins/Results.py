@@ -305,6 +305,7 @@ class Results:
         worktimes = self.get_work_times()
         failures = self.get_failures()
         joins = self.get_new_workers()
+        validations = self.get_validations()
         worktimes = worktimes.rename(columns={"nid": "worker"})
         worktimes = worktimes.sort_values(by=["worker"], ascending=False)
         worktimes["worker"] = worktimes["worker"].astype(str)
@@ -320,6 +321,19 @@ class Results:
         )
         for trace in fig.data:
             trace.showlegend = False
+        for i, row in validations.iterrows():
+            fig.add_shape(
+                type="rect",
+                x0=row["start"],
+                y0=-0.8,
+                x1=row["end"],
+                y1=self.n_workers-0.2,
+                line=dict(color="blue", width=1, dash="dot"),
+                showlegend=i==0,
+                legendgroup="Validation",
+                name="Validation period",
+            )
+
         self.add_to_timeline(fig, failures, "timestamp", "nid", "red", "Failures")
         self.add_to_timeline(fig, joins, "timestamp", "nid", "green", "Joins")
         fig.update_yaxes(title="Workers")

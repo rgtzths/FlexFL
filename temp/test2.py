@@ -34,6 +34,6 @@ metrics = r.get_metrics()           # epoch, time, loss, mcc, acc, f1
 
 wts = r.get_worker_time_status()
 
-print_table(new_workers)
+print_table(validations)
 
 
