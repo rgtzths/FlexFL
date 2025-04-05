@@ -24,7 +24,7 @@ sleep 10
 function run_command {
     local WORKER_ID=$1
     echo "Running worker $WORKER_ID..."
-    COMMAND="uv run flexfl-res -s $WORKER_ID -i $INTERVAL -c $CHANCE -w 3 uv run flexfl --results_folder worker_$WORKER_ID --data_folder node_$WORKER_ID $RUN_ARGS"
+    COMMAND="uv run flexfl-res -s $WORKER_ID -i $INTERVAL -c $CHANCE -w 5 uv run flexfl --results_folder worker_$WORKER_ID --data_folder node_$WORKER_ID $RUN_ARGS"
     screen -dmS fl-worker-$WORKER_ID bash -c "$COMMAND"
 }
 

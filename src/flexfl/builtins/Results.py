@@ -4,14 +4,18 @@ import json
 from typing import Generator, Callable
 from datetime import datetime
 from functools import lru_cache
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
-BASE_DIR = "results"
 
 class Results:
 
+    BASE_DIR = "results"
+
     @staticmethod
     def get_all_folders() -> list[str]:
-        folders = Path(BASE_DIR).iterdir()
+        folders = Path(Results.BASE_DIR).iterdir()
         folders = sorted(str(f) for f in folders if f.is_dir())
         return folders
 
@@ -33,8 +37,6 @@ class Results:
         self.log2node: dict[int, int] = {}
         self.setup_paths()
         self.n_workers = len(set(self.log2node.values())) - 1
-        self.start = next(self.yield_log(0, {"start"}))["timestamp"]
-        self.start = datetime.fromtimestamp(self.start)
 
 
     def process_path(self, path_: Path, node_id: int = None) -> None:
@@ -119,7 +121,7 @@ class Results:
     
 
     @lru_cache(maxsize=1)
-    def get_leaves(self) -> pd.DataFrame:
+    def get_exits(self) -> pd.DataFrame:
         df = self.get_generic("leave", 0, ["node_id"])
         df = df.drop(columns=["nid", "lid"])
         df = df.rename(columns={"node_id": "lid"})
@@ -282,3 +284,91 @@ class Results:
         df["other_time% (s)"] = df["other_time (s)"] / df["total_time (s)"] * 100
         df = df.drop(columns=["start", "end"])
         return df
+    
+
+    def add_to_timeline(self, fig: go.Figure, df: pd.DataFrame, x: str, y: str, color: str, title: str) -> None:
+        df[y] = df[y].astype(str)
+        fig.add_trace(go.Scatter(
+            x=df[x],
+            y=df[y],
+            mode="markers",
+            name=title,
+            marker=dict(
+                color=color,
+                size=10,
+                line=dict(color="black", width=2)
+            ), 
+        ))
+    
+
+    def plot_timeline(self) -> None:
+        worktimes = self.get_work_times()
+        failures = self.get_failures()
+        joins = self.get_new_workers()
+        worktimes = worktimes.rename(columns={"nid": "worker"})
+        worktimes = worktimes.sort_values(by=["worker"], ascending=False)
+        worktimes["worker"] = worktimes["worker"].astype(str)
+        fig = px.timeline(
+            worktimes,
+            x_start="start", 
+            x_end="end", 
+            y="worker", 
+            title="Worker timeline", 
+            color="worker", 
+            color_discrete_sequence=px.colors.qualitative.Safe,
+            labels={"worker": "Legend"}
+        )
+        for trace in fig.data:
+            trace.showlegend = False
+        self.add_to_timeline(fig, failures, "timestamp", "nid", "red", "Failures")
+        self.add_to_timeline(fig, joins, "timestamp", "nid", "green", "Joins")
+        fig.update_yaxes(title="Workers")
+        fig.update_xaxes(title="Time", showticklabels=False)
+        start = worktimes["start"].min() 
+        end = worktimes["end"].max()
+        diff = end - start
+        fig.update_xaxes(range=[start - diff * 0.05, end + diff * 0.05])
+        fig.show()
+
+
+    def plot_training(self) -> None:
+        data = self.get_metrics()
+        metrics = data.columns[-3:]
+        fig = make_subplots(
+            rows=1, cols=2,
+            subplot_titles=("Loss over epochs", "Metrics over epochs")
+        )
+        fig1 = px.line(data, x="epoch", y="loss", labels={"epoch": "Epoch", "loss": "Loss"})
+        for trace in fig1.data:
+            fig.add_trace(trace, row=1, col=1)
+        fig2 = px.line(data, x="epoch", y=metrics, labels={"epoch": "Epoch"})
+        for trace in fig2.data:
+            fig.add_trace(trace, row=1, col=2)
+        fig.update_layout(title_text="Training Overview", showlegend=True)
+        fig.show()
+        
+
+    def plot_times(self) -> None:
+        df = self.get_worker_time_status()
+        df_melted = df.melt(
+            id_vars="worker", 
+            value_vars=["comm_time% (s)", "work_time% (s)", "other_time% (s)"],
+            var_name="Time Type", value_name="Percentage"
+        )
+        label_map = {
+            "comm_time% (s)": "Communication",
+            "work_time% (s)": "Working",
+            "other_time% (s)": "Other"
+        }
+        df_melted["Time Type"] = df_melted["Time Type"].map(label_map)
+        fig = px.bar(
+            df_melted,
+            x="worker",
+            y="Percentage",
+            color="Time Type",
+            title="Worker Time Status",
+            labels={"worker": "Worker", "Percentage": "Time (%)"},
+            color_discrete_sequence=px.colors.qualitative.Safe
+        )
+        fig.update_layout(barmode="stack")
+        fig.show()
