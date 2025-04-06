@@ -1,9 +1,7 @@
 data/**
 results/**
-keys/**
-
-# *.tfvars
-# .terraform*
+keys
+.ruff_cache
 
 !.gitkeep
 
