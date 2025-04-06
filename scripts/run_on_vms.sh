@@ -17,13 +17,6 @@ if ! [[ "$INTERVAL" =~ ^[0-9]+(\.[0-9]+)?$ && "$CHANCE" =~ ^[0-9]+(\.[0-9]+)?$ ]
     exit 1
 fi
 
-# echo "Running command on VMs with interval $INTERVAL and chance $CHANCE, do you want to continue? (y/n)"
-# read -r CONTINUE
-# if [[ "$CONTINUE" != "y" ]]; then
-#     echo "Exiting..."
-#     exit 1
-# fi
-
 if [ ! -f "$VM_LIST" ]; then
     echo "Error: VM list file '$VM_LIST' not found!"
     exit 1
@@ -55,8 +48,7 @@ while read -r IP_; do
     if [[ -z "$IP_" || "$IP_" =~ ^# ]]; then
         continue
     fi
-    sleep 1
-    run_command "$IP_" "$WORKER_ID"
+    run_command "$IP_" "$WORKER_ID" &
     WORKER_ID=$((WORKER_ID + 1))
 done < <(tail -n +2 "$VM_LIST")
 wait

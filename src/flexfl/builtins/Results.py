@@ -6,7 +6,9 @@ from datetime import datetime
 from functools import lru_cache
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+import plotly.io as pio   
+
+pio.kaleido.scope.mathjax = None
 
 
 class Results:
@@ -301,7 +303,7 @@ class Results:
         ))
     
 
-    def plot_timeline(self) -> None:
+    def plot_timeline(self, show = True) -> None:
         worktimes = self.get_work_times()
         failures = self.get_failures()
         joins = self.get_new_workers()
@@ -314,10 +316,8 @@ class Results:
             x_start="start", 
             x_end="end", 
             y="worker", 
-            title="Worker timeline", 
             color="worker", 
             color_discrete_sequence=px.colors.qualitative.Safe,
-            labels={"worker": "Legend"}
         )
         for trace in fig.data:
             trace.showlegend = False
@@ -336,30 +336,75 @@ class Results:
 
         self.add_to_timeline(fig, failures, "timestamp", "nid", "red", "Failures")
         self.add_to_timeline(fig, joins, "timestamp", "nid", "green", "Joins")
-        fig.update_yaxes(title="Workers")
+        fig.update_yaxes(title="Workers", title_standoff=5)
         fig.update_xaxes(title="Time", showticklabels=False)
-        fig.update_xaxes(range=[worktimes["start"].min() , worktimes["end"].max()])
-        fig.show()
-
-
-    def plot_training(self) -> None:
-        data = self.get_metrics()
-        metrics = data.columns[-3:]
-        fig = make_subplots(
-            rows=1, cols=2,
-            subplot_titles=("Loss over epochs", "Metrics over epochs")
+        fig.update_xaxes(range=[joins["timestamp"].min(), worktimes["end"].max()])
+        fig.update_layout(
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
+                x=0.5,
+                title_text="",
+            ),
+            width=1200,
+            height=400,
+            margin=dict(l=50, r=20, t=10, b=20),
         )
-        fig1 = px.line(data, x="epoch", y="loss", labels={"epoch": "Epoch", "loss": "Loss"})
-        for trace in fig1.data:
-            fig.add_trace(trace, row=1, col=1)
-        fig2 = px.line(data, x="epoch", y=metrics, labels={"epoch": "Epoch"})
-        for trace in fig2.data:
-            fig.add_trace(trace, row=1, col=2)
-        fig.update_layout(title_text="Training Overview", showlegend=True)
-        fig.show()
+        if show:
+            fig.show()
+        fig.write_image(f"{self.out}/timeline.pdf")
+
+
+    def plot_training(self, show = True) -> None:
+        data = self.get_metrics()
+        data = data.rename(columns={
+            "mcc": "MCC", 
+            "f1": "F1-score", 
+            "acc": "Accuracy", 
+            "mse": "MSE"
+        })
+        metrics = data.columns[-3:]
+        fig1 = px.line(
+            data,
+            x="epoch",
+            y="loss",
+            labels={"epoch": "Epoch", "loss": "Loss"},
+        )
+        fig1.update_layout(
+            width=600,
+            height=400,
+            margin=dict(l=60, r=20, t=20, b=50),
+        )
+        fig2 = px.line(
+            data,
+            x="epoch",
+            y=metrics,
+            labels={"epoch": "Epoch", "value": "Value"},
+        )
+        fig2.update_layout(
+            width=600,
+            height=400,
+            margin=dict(l=60, r=20, t=10, b=50),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
+                x=0.5,
+                title_text="",
+            ),
+        )
+        if show:
+            fig1.show()
+            fig2.show()
+        fig1.write_image(f"{self.out}/training_loss.pdf")
+        fig2.write_image(f"{self.out}/training_metrics.pdf")
+        data.to_markdown(f"{self.out}/training_metrics.md", index=False)
         
 
-    def plot_times(self) -> None:
+    def plot_times(self, show = True) -> None:
         df = self.get_worker_time_status()
         df_melted = df.melt(
             id_vars="worker", 
@@ -377,9 +422,35 @@ class Results:
             x="worker",
             y="Percentage",
             color="Time Type",
-            title="Worker Time Status",
             labels={"worker": "Worker", "Percentage": "Time (%)"},
             color_discrete_sequence=px.colors.qualitative.Safe
         )
-        fig.update_layout(barmode="stack")
-        fig.show()
+        fig.update_xaxes(tickmode="array", tickvals=df["worker"], ticktext=df["worker"])
+        fig.update_yaxes(title="Time (%)", title_standoff=5)
+        fig.update_layout(
+            barmode="stack",
+            width=600,
+            height=400,
+            margin=dict(l=60, r=20, t=10, b=50),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
+                x=0.5,
+                title_text="",
+            ),
+        )
+        if show:
+            fig.show()
+        fig.write_image(f"{self.out}/worker_time.pdf")
+        df = df[["worker", "payload_size (MB)", "comm_time (s)", "comm_time% (s)", "work_time (s)", "work_time% (s)", "other_time (s)", "other_time% (s)"]]
+        df.columns = ["Worker", "Payload Size (MB)", "Communication Time (s)", "Communication Time (%)", "Work Time (s)", "Work Time (%)", "Other Time (s)", "Other Time (%)"]
+        df.to_markdown(f"{self.out}/worker_time.md", index=False)
+
+
+    def plot_all(self, show = True) -> None:
+        self.plot_timeline(show)
+        self.plot_training(show)
+        self.plot_times(show)
+        

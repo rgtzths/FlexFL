@@ -19,18 +19,17 @@ COMMAND="uv run flexfl --is_anchor --no-save_model $RUN_ARGS"
 screen -dmS fl-master bash -c "$COMMAND"
 
 echo "Waiting..."
-sleep 10
+sleep 3
 
 function run_command {
     local WORKER_ID=$1
     echo "Running worker $WORKER_ID..."
-    COMMAND="uv run flexfl-res -s $WORKER_ID -i $INTERVAL -c $CHANCE -w 5 uv run flexfl --results_folder worker_$WORKER_ID --data_folder node_$WORKER_ID $RUN_ARGS"
+    COMMAND="uv run flexfl-res -s $WORKER_ID -i $INTERVAL -c $CHANCE -w 1 uv run flexfl --results_folder worker_$WORKER_ID --data_folder node_$WORKER_ID $RUN_ARGS"
     screen -dmS fl-worker-$WORKER_ID bash -c "$COMMAND"
 }
 
 for (( WORKER_ID=1; WORKER_ID<=$WORKERS; WORKER_ID++ )); do
-    sleep 1
-    run_command "$WORKER_ID" 
+    run_command "$WORKER_ID" &
 done
 wait
 echo "Command execution completed!"
