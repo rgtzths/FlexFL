@@ -37,5 +37,5 @@ bash scripts/run_commands.sh -w "sudo chronyc makestep"
 
 Check Workers clocks
 ```bash
-bash scripts/run_commands.sh -v -w"chronyc tracking"
+bash scripts/run_commands.sh -v -w "chronyc tracking"
 ```
