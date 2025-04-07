@@ -350,7 +350,7 @@ class Results:
             ),
             width=1200,
             height=400,
-            margin=dict(l=50, r=20, t=10, b=20),
+            margin=dict(l=50, r=20, t=0, b=40),
         )
         if show:
             fig.show()
@@ -383,6 +383,7 @@ class Results:
             y=metrics,
             labels={"epoch": "Epoch", "value": "Value"},
         )
+        fig2.update_traces(mode="lines+markers")
         fig2.update_layout(
             width=600,
             height=400,

@@ -1,0 +1,14 @@
+{
+    "comm": "Zenoh",
+    "dataset": "UNSW",
+    "message_layer": "Raw",
+    "fl": "da",
+    "ml": "Keras",
+    "info": "interval_{1}_chance_{0.01}",
+    "min_workers": 5,
+    "save_model": false,
+    "learning_rate": 5e-05,
+    "data_folder": "my_data",
+    "is_anchor": true,
+    "nn": "UNSW"
+}

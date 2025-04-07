@@ -129,6 +129,8 @@ class FederatedABC(ABC):
         if self.is_master:
             with open(f"{self.base_path}/args.json", "w") as f:
                 json.dump(self.all_args, f, indent=4)
+            with open(f"{self.base_path}/.gitignore", "w") as f:
+                f.write("*\n")
 
 
     def setup_failure(self):
