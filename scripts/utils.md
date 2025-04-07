@@ -20,14 +20,14 @@ Clear results
 bash scripts/run_commands.sh "rm -rf flexfl/results"
 ```
 
-Gather results
+Gather results - also clears results
 ```bash
-bash scripts/gather_results.sh # also clears results
+bash scripts/gather_results.sh
 ```
 
 Kill VMs processes
 ```bash
-bash scripts/run_commands.sh "pkill screen"
+bash scripts/run_commands.sh "pkill -f flexfl"
 ```
 
 Sync Workers clocks

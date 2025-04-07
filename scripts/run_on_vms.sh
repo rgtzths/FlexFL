@@ -22,8 +22,8 @@ if [ ! -f "$VM_LIST" ]; then
     exit 1
 fi
 
-echo "Killing all screen sessions..."
-bash scripts/run_commands.sh "pkill screen" > /dev/null 2>&1
+echo "Killing all sessions..."
+bash scripts/run_commands.sh "pkill -f flexfl" > /dev/null 2>&1
 
 read -r MASTER_IP < "$VM_LIST"
 
