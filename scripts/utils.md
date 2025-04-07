@@ -20,7 +20,7 @@ Clear results
 bash scripts/run_commands.sh "rm -rf flexfl/results"
 ```
 
-Gather results - also clears results
+Gather results
 ```bash
 bash scripts/gather_results.sh
 ```

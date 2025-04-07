@@ -33,5 +33,5 @@ done < "$VM_LIST"
 wait
 echo "Results copying completed!"
 
-echo "Cleaning remote files..."
-bash scripts/run_commands.sh "rm -rf flexfl/results" > /dev/null 2>&1
+# echo "Cleaning remote files..."
+# bash scripts/run_commands.sh "rm -rf flexfl/results" > /dev/null 2>&1
