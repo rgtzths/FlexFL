@@ -82,7 +82,7 @@ class CentralizedAsync(FederatedABC):
 
 
     def on_work_done(self, sender_id, grads):
-        self.working.remove(sender_id)
+        self.working.discard(sender_id)
         if not self.running:
             return
         grads *= self.penalty

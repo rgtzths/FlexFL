@@ -41,7 +41,7 @@ COMMAND="cd flexfl && source venv/bin/activate && flexfl --is_anchor --no-save_m
 sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$MASTER_IP" "screen -dmS fl-master bash -c \"$COMMAND\""
 
 echo "Waiting..."
-sleep 10
+sleep 5
 
 WORKER_ID=1
 while read -r IP_; do

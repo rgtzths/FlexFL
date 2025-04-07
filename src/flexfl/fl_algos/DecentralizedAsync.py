@@ -84,7 +84,7 @@ class DecentralizedAsync(FederatedABC):
 
 
     def on_work_done(self, sender_id, worker_weights):
-        self.working.remove(sender_id)
+        self.working.discard(sender_id)
         if not self.running:
             return
         self.weights = self.linear_interpolation(
