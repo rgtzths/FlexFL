@@ -1,7 +1,14 @@
 data/**
-# results/**
 keys
 .ruff_cache
+
+# to keep results
+# *
+# !.gitignore
+# !_analysis/
+# !_analysis/**
+# !args.json
+
 
 !.gitkeep
 

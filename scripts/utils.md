@@ -15,6 +15,11 @@ Update package
 bash scripts/run_commands.sh "source flexfl/venv/bin/activate && pip install --upgrade flexfl"
 ```
 
+Check version
+```bash
+bash scripts/run_commands.sh -v "source flexfl/venv/bin/activate && pip freeze" | grep FlexFL
+```
+
 Clear results
 ```bash
 bash scripts/run_commands.sh "rm -rf flexfl/results"
