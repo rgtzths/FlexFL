@@ -355,6 +355,9 @@ class Results:
         if show:
             fig.show()
         fig.write_image(f"{self.out}/timeline.pdf")
+        failures = failures.rename(columns={"nid": "Worker", "timestamp": "Timestamp"})
+        failures = failures.drop(columns=["lid"])
+        failures.to_markdown(f"{self.out}/failures.md", index=False)
 
 
     def plot_training(self, show = True) -> None:

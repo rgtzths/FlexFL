@@ -10,7 +10,7 @@ def plot(folder: str, visualize: bool = False):
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Analyze results")
     parser.add_argument("-r", "--results", type=str, help="Results folder (\"all\" to preprocess all folders), otherwise the last folder is chosen", default=None)
     parser.add_argument("-f", "--folder", type=str, help="Base folder name", default="results")
     parser.add_argument("-v", "--visualize", action="store_true", help="Visualize the results", default=False)

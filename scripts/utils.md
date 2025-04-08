@@ -39,3 +39,13 @@ Check Workers clocks
 ```bash
 bash scripts/run_commands.sh -v -w "chronyc tracking"
 ```
+
+Run FL in VMs
+```bash
+bash scripts/run_on_vms [interval] [change] [args]
+```
+
+With MPI
+```bash
+bash scripts/run_on_vms_mpi [args]
+```

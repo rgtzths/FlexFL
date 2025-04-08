@@ -54,3 +54,6 @@ done < <(tail -n +2 "$VM_LIST")
 wait
 echo "Command execution completed!"
 
+sshpass -p "$PASSWORD" ssh -tt $ARGS "$USERNAME@$MASTER_IP" "screen -r fl-master"
+
+echo "Done!"

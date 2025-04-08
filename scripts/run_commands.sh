@@ -15,7 +15,7 @@ export $(grep -v '^#' .env | xargs)
 VM_LIST="scripts/ips.txt" # needs to end in empty line
 USERNAME=$VM_USERNAME
 PASSWORD=$VM_PASSWORD
-ARGS="-n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q"
+ARGS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q"
 VERBOSE=0
 ONLY_WORKERS=0
 
@@ -46,6 +46,8 @@ echo "Command to execute: $COMMAND"
 function run_command {
     local IP=$1
     if [ $RUN_FILE -eq 1 ]; then
+        sshpass -p "$PASSWORD" scp $ARGS "$VM_LIST" "$USERNAME@$IP:~/$VM_LIST"
+        sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "mkdir -p /tmp/scripts"
         sshpass -p "$PASSWORD" scp $ARGS "$FILE" "$USERNAME@$IP:/tmp/$FILE"
     fi
     if [ $VERBOSE -eq 0 ]; then

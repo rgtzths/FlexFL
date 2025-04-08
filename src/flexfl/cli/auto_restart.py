@@ -41,7 +41,7 @@ def run(interval, chance, wait_time, args):
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Auto-restart a program")
     parser.add_argument("-i", "--interval", type=int, help="Interval in seconds", default=1)
     parser.add_argument("-c", "--chance",type=float, help="Chance of restart", default=0.1)
     parser.add_argument("-s", "--seed", type=int, help="Seed for random number generator", default=42)

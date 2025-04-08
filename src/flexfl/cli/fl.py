@@ -37,7 +37,7 @@ def main():
             if class_name in ALIASES:
                 MODULES[m][ALIASES[class_name]] = path
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Federated Learning CLI")
     parser.add_argument('--config', type=str, help="Path to config JSON file", required=False)
 
     parser.add_argument('-c', '--comm', type=str, help="Communication layer", choices=MODULES["comms"].keys(), default="Zenoh")
