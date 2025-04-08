@@ -449,12 +449,27 @@ class Results:
             fig.show()
         fig.write_image(f"{self.out}/worker_time.pdf")
         df = df[["worker", "payload_size (MB)", "comm_time (s)", "comm_time% (s)", "work_time (s)", "work_time% (s)", "other_time (s)", "other_time% (s)"]]
-        df.columns = ["Worker", "Payload Size (MB)", "Communication Time (s)", "Communication Time (%)", "Work Time (s)", "Work Time (%)", "Other Time (s)", "Other Time (%)"]
+        df.columns = ["Worker", "Total transfered (MB)", "Communication Time (s)", "Communication Time (%)", "Work Time (s)", "Work Time (%)", "Other Time (s)", "Other Time (%)"]
         df.to_markdown(f"{self.out}/worker_time.md", index=False)
 
+
+    def calculate_run_time(self) -> pd.DataFrame:
+        start = next(self.yield_log(0, {"start"}))
+        end = next(self.yield_log(0, {"end"}))
+        duration = end["timestamp"] - start["timestamp"]
+        data = [(
+            datetime.fromtimestamp(start["timestamp"]),
+            datetime.fromtimestamp(end["timestamp"]),
+            duration,
+        )]
+        df = pd.DataFrame(data, columns=["Start", "End", "Duration (s)"])
+        df.to_markdown(f"{self.out}/run_time.md", index=False)
+        return df
+    
 
     def plot_all(self, show = True) -> None:
         self.plot_timeline(show)
         self.plot_training(show)
         self.plot_times(show)
+        self.calculate_run_time()
         

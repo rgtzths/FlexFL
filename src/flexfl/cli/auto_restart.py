@@ -51,6 +51,11 @@ def main():
     if len(args.args) < 1:
         parser.error("Please provide a program to run.")
         exit(1)
+    if args.interval == 0:
+        print("Starting program without auto-restart...")
+        subprocess.run(args.args)
+        print("Program finished.")
+        exit(0)
     random.seed(args.seed)
     run(args.interval, args.chance, args.wait, args.args)
 

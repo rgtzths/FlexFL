@@ -4,9 +4,13 @@ from flexfl.builtins.Results import Results
 
 
 def plot(folder: str, visualize: bool = False):
-    print(f"Analyzing folder: {folder}")
-    r = Results(folder)
-    r.plot_all(visualize)
+    try:
+        print(f"Analyzing folder: {folder}")
+        r = Results(folder)
+        r.plot_all(visualize)
+    except Exception as e:
+        print(f"Error: {e}")
+        return
 
 
 def main():
