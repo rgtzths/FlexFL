@@ -42,6 +42,7 @@ class DecentralizedAsync(FederatedABC):
     def master_loop(self):
         self.weights = self.ml.get_weights()
         self.wm.wait_for_workers(self.min_workers)
+        print("Starting...")
         Logger.log(Logger.START)
         self.epoch_start = time.time()
         pool = self.wm.get_subpool(self.min_workers, self.subpool_fn)
@@ -53,6 +54,7 @@ class DecentralizedAsync(FederatedABC):
         self.working = set(pool)
         self.run_loop()
         self.wm.wait_for(self.finished)
+        self.wm.end()
 
 
     def handle_iteration(self):
@@ -65,7 +67,6 @@ class DecentralizedAsync(FederatedABC):
         stop = self.early_stop() or epoch == self.epochs
         if stop:
             Logger.log(Logger.END)
-            self.wm.end()
             self.running = False
             
 
@@ -83,7 +84,7 @@ class DecentralizedAsync(FederatedABC):
 
 
     def on_work_done(self, sender_id, worker_weights):
-        self.working.remove(sender_id)
+        self.working.discard(sender_id)
         if not self.running:
             return
         self.weights = self.linear_interpolation(

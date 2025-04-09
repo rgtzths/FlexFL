@@ -37,7 +37,7 @@ def main():
             if class_name in ALIASES:
                 MODULES[m][ALIASES[class_name]] = path
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Federated Learning CLI")
     parser.add_argument('--config', type=str, help="Path to config JSON file", required=False)
 
     parser.add_argument('-c', '--comm', type=str, help="Communication layer", choices=MODULES["comms"].keys(), default="Zenoh")
@@ -46,6 +46,7 @@ def main():
     parser.add_argument('--nn', type=str, help="Neural network", choices=MODULES["neural_nets"].keys())
     parser.add_argument('--fl', type=str, help="Federated learning algorithm", choices=MODULES["fl_algos"].keys(), default="DecentralizedSync")
     parser.add_argument('--ml', type=str, help="Machine learning framework", choices=MODULES["ml_fw"].keys(), default="Keras")
+    parser.add_argument('--info', type=str, help="Additional info", default=None)
 
     for arg, (type_, value) in ALL_ARGS.items():
         if type_ is bool:
@@ -109,11 +110,7 @@ def main():
         **class_args,
     )
 
-    try:
-        f.run()
-    except KeyboardInterrupt:
-        print("\nForcing end...")
-        f.force_end()
+    f.run()
 
 
 if __name__ == "__main__":

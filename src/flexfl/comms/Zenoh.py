@@ -12,9 +12,22 @@ LIVELINESS = "fl_liveliness"
 class Zenoh(CommABC):
     
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, *, 
+        ip: str = "localhost",
+        zenoh_port: int = 7447,
+        is_anchor: bool = False,
+        **kwargs
+    ) -> None:
         super().__init__(**kwargs)
+        self.is_anchor = is_anchor
+        if ip == "localhost":
+            ip ="0.0.0.0"
+        enpoint = str([f"tcp/{ip}:{zenoh_port}"])
         self.zconf = zenoh.Config()
+        if is_anchor:
+            self.zconf.insert_json5("listen/endpoints", enpoint)
+        else:
+            self.zconf.insert_json5("connect/endpoints", enpoint)
         self.session = zenoh.open(self.zconf)
         self._id = None
         self._nodes = set()
@@ -83,13 +96,16 @@ class Zenoh(CommABC):
 
 
     def discover(self) -> None:
-        replies = self.session.get(DISCOVER)
-        for r in replies:
-            self._id, self._start_time = pickle.loads(r.ok.payload.to_bytes())
-            self.liveliness_token = self.session.liveliness().declare_token(f"{LIVELINESS}/{self.id}")
-        if self.id is None:
+        if self.is_anchor:
             self._id = 0
-            self.session.declare_queryable(DISCOVER, self.handle_id)
+            self.discover_queryable = self.session.declare_queryable(DISCOVER, self.handle_id)
             self.liveliness_sub = self.session.liveliness().declare_subscriber(f"{LIVELINESS}/**", history=True, handler=self.handle_liveliness)
+        else:
+            replies = self.session.get(DISCOVER)
+            for r in replies:
+                self._id, self._start_time = pickle.loads(r.ok.payload.to_bytes())
+                self.liveliness_token = self.session.liveliness().declare_token(f"{LIVELINESS}/{self.id}")
+            if self.id is None:
+                raise TimeoutError("Failed to discover the master node")
         self._nodes.add(0)
         self.sub = self.session.declare_subscriber(f"fl/{self._id}", self.handle_recv)

@@ -6,6 +6,8 @@ import time
 import numpy as np
 from sklearn.metrics import matthews_corrcoef, accuracy_score, f1_score, mean_squared_error, mean_absolute_error
 from typing import Callable
+import signal
+import sys
 
 from flexfl.builtins.WorkerManager import WorkerManager
 from flexfl.builtins.MLFrameworkABC import MLFrameworkABC
@@ -52,6 +54,8 @@ class FederatedABC(ABC):
         delta: float = 0.01,
         main_metric: str = None,
         min_workers: int = 2,
+        results_folder: str = None,
+        save_model: bool = True,
         **kwargs
     ) -> None:
         self.ml = ml
@@ -63,6 +67,8 @@ class FederatedABC(ABC):
         self.delta = delta
         self.main_metric = main_metric
         self.min_workers = min_workers
+        self.results_folder = results_folder
+        self.save_model = save_model
         
         self.buffer = deque(maxlen=patience)
         self.compare_score = None
@@ -79,6 +85,7 @@ class FederatedABC(ABC):
 
         self.setup_metrics()
         self.setup_nodes()
+        self.setup_failure()
 
 
     @abstractmethod
@@ -111,7 +118,10 @@ class FederatedABC(ABC):
     def setup_nodes(self):
         self.id = self.wm.c.id
         self.is_master = self.id == 0
-        self.base_path = f"{RESULTS_FOLDER}/{self.wm.c.start_time.strftime('%Y-%m-%d_%H:%M:%S')}"
+        folder_name = self.wm.c.start_time.strftime('%Y-%m-%d_%H:%M:%S')
+        if self.results_folder is not None:
+            folder_name = f"{folder_name}/{self.results_folder}"
+        self.base_path = f"{RESULTS_FOLDER}/{folder_name}"
         Path(self.base_path).mkdir(parents=True, exist_ok=True)
         if self.ml.dataset.default_folder == self.ml.dataset.data_path:
             self.ml.dataset.data_path = f"{self.ml.dataset.base_path}/node_{self.id}"
@@ -119,9 +129,22 @@ class FederatedABC(ABC):
         if self.is_master:
             with open(f"{self.base_path}/args.json", "w") as f:
                 json.dump(self.all_args, f, indent=4)
-        else:
-            Logger.setup_failure()
+            with open(f"{self.base_path}/.gitignore", "w") as f:
+                f.write("*\n")
 
+
+    def setup_failure(self):
+        def handle(signal, frame):
+            if self.is_master:
+                self.force_end()
+            else:
+                Logger.log(Logger.FAILURE)
+                self.end()
+            sys.exit(0)
+
+        signal.signal(signal.SIGTERM, handle)
+        signal.signal(signal.SIGINT, handle)
+            
 
     def run(self):
         self.setup()
@@ -140,7 +163,7 @@ class FederatedABC(ABC):
                 
 
     def end(self):
-        if self.is_master and self.best_weights is not None:
+        if self.is_master and self.best_weights is not None and self.save_model:
             self.ml.set_weights(self.best_weights)
             self.ml.save_model(f"{self.base_path}/model")
         self.wm.c.close()
@@ -148,6 +171,7 @@ class FederatedABC(ABC):
 
 
     def force_end(self):
+        print("Force ending...")
         self.wm.send_n(
             workers = self.wm.get_all_workers(), 
             type_ = WorkerManager.EXIT_TYPE
@@ -176,9 +200,9 @@ class FederatedABC(ABC):
         ):
             self.best_score = self.new_score
             self.best_weights = self.ml.get_weights()
-        self.epoch_start = time.time()
         Logger.log(Logger.EPOCH, epoch=epoch, time=delta_time, loss=loss, **metrics)
         Logger.log(Logger.VALIDATION_END)
+        self.epoch_start = time.time()
         return metrics, loss
     
 
@@ -225,8 +249,8 @@ class FederatedABC(ABC):
         workers_ = workers - self.rr
         if len(workers_) < size:
             chosen = sorted(list(workers_))
-            for w in chosen:
-                self.rr.add(w)
+            self.rr = set()
+        workers_ = workers - set(chosen)
         for _ in range(size - len(chosen)):
-            chosen.append(self.round_robin_single(workers))
+            chosen.append(self.round_robin_single(workers_))
         return chosen

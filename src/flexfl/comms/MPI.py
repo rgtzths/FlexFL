@@ -1,9 +1,9 @@
 from mpi4py import MPI as MPI4py
 from datetime import datetime
-import time
 
 from flexfl.builtins.CommABC import CommABC
 from flexfl.builtins.Logger import Logger
+
 
 class MPI(CommABC):
 
@@ -15,7 +15,6 @@ class MPI(CommABC):
         self._start_time = datetime.now()
         self.status = MPI4py.Status()
         self.setup()
-        time.sleep(0.1*self.id)
 
 
     @property

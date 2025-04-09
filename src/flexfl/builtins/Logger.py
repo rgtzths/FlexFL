@@ -1,14 +1,13 @@
 import logging
 import json
 import time
-import signal
-import sys
 
 class Logger:
 
     SEND = "send"
     RECV = "recv"
     JOIN = "join"
+    NEW_WORKER = "new_worker"
     LEAVE = "leave"
     ENCODE = "encode"
     DECODE = "decode"
@@ -29,16 +28,6 @@ class Logger:
             format='%(message)s',
             filemode='w'
         )
-
-
-    @staticmethod
-    def setup_failure():
-        def handle_terminate(signal, frame):
-            Logger.log(Logger.FAILURE)
-            Logger.end()
-            sys.exit(0)
-        signal.signal(signal.SIGTERM, handle_terminate)
-        signal.signal(signal.SIGINT, handle_terminate)
 
     
     @staticmethod

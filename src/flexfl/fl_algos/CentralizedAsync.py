@@ -41,6 +41,7 @@ class CentralizedAsync(FederatedABC):
 
     def master_loop(self):
         self.wm.wait_for_workers(self.min_workers)
+        print("Starting...")
         pool = self.wm.get_subpool(self.min_workers, self.subpool_fn)
         self.total_batches = sum(self.wm.get_info(worker_id)["n_batches"] for worker_id in pool)
         self.epoch_start = time.time()
@@ -53,6 +54,7 @@ class CentralizedAsync(FederatedABC):
         self.working = set(pool)
         self.run_loop()
         self.wm.wait_for(self.finished)
+        self.wm.end()
 
 
     def handle_iteration(self):
@@ -64,7 +66,6 @@ class CentralizedAsync(FederatedABC):
         stop = self.early_stop() or epoch == self.epochs
         if stop:
             Logger.log(Logger.END)
-            self.wm.end()
             self.running = False
             
 
@@ -81,7 +82,7 @@ class CentralizedAsync(FederatedABC):
 
 
     def on_work_done(self, sender_id, grads):
-        self.working.remove(sender_id)
+        self.working.discard(sender_id)
         if not self.running:
             return
         grads *= self.penalty

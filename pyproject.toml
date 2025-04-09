@@ -1,6 +1,6 @@
 [project]
 name = "FlexFL"
-version = "0.1.2"
+version = "0.2.4"
 description = "Flexible Federated Learning Framework"
 readme = "README.md"
 authors = [
@@ -8,7 +8,6 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "ipykernel>=6.29.5",
     "kaggle>=1.7.4.2",
     "keras>=3.9.0",
     "nbformat>=5.10.4",
@@ -28,6 +27,7 @@ flexfl = "flexfl.cli.fl:main"
 flexfl-division = "flexfl.cli.division:main"
 flexfl-preprocess = "flexfl.cli.preprocess:main"
 flexfl-res = "flexfl.cli.auto_restart:main"
+flexfl-plot = "flexfl.cli.analysis:main"
 
 
 [project.optional-dependencies]
@@ -58,3 +58,10 @@ ml = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.29.5",
+    # "pxm-tools>=0.1.4",
+    "pxm-tools>=0.1.5",
+]
