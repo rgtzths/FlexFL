@@ -403,9 +403,9 @@ class Results:
         if show:
             fig1.show()
             fig2.show()
-        fig1.write_image(f"{self.out}/training_loss.pdf")
-        fig2.write_image(f"{self.out}/training_metrics.pdf")
-        data.to_markdown(f"{self.out}/training_metrics.md", index=False)
+        fig1.write_image(f"{self.out}/validation_loss.pdf")
+        fig2.write_image(f"{self.out}/validation_metrics.pdf")
+        data.to_markdown(f"{self.out}/validation_metrics.md", index=False)
         
 
     def plot_times(self, show = True) -> None:
