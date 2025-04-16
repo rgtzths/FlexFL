@@ -39,7 +39,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--is_anchor", action="store_true", help="Run as anchor node", default=False)
     parser.add_argument("-c", "--comm", type=str, choices=["zenoh", "kafka", "mqtt"], default="zenoh", help="Communication method")
-    parser.add_argument("-i", "--iterations", type=int, default=1000, help="Number of iterations for worker")
+    parser.add_argument("-i", "--iterations", type=int, default=5000, help="Number of iterations for worker")
     args = parser.parse_args()
     comm: CommABC = COMMS[args.comm](is_anchor=args.is_anchor)
     print(f"Communication method: {args.comm}")

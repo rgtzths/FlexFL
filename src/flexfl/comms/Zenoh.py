@@ -30,7 +30,7 @@ class Zenoh(CommABC):
             self.zconf.insert_json5("connect/endpoints", enpoint)
         self.session = zenoh.open(self.zconf)
         self._id = None
-        self._nodes = set()
+        self._nodes = {0}
         self._start_time = datetime.now()
         self.total_nodes = 0
         self.q = queue.Queue()
@@ -107,5 +107,4 @@ class Zenoh(CommABC):
                 self.liveliness_token = self.session.liveliness().declare_token(f"{LIVELINESS}/{self.id}")
             if self.id is None:
                 raise TimeoutError("Failed to discover the master node")
-        self._nodes.add(0)
         self.sub = self.session.declare_subscriber(f"fl/{self._id}", self.handle_recv)
