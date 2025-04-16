@@ -1,6 +1,5 @@
 import argparse
 import time
-import os
 
 from flexfl.builtins.CommABC import CommABC
 from flexfl.comms.MPI import MPI
@@ -18,7 +17,7 @@ COMMS = {
 
 PAYLOAD = b"a" * 1024  # 1KB payload
 
-def master():
+def master(comm: CommABC):
     while True:
         node_id, data = comm.recv()
         if data is None:
@@ -26,7 +25,7 @@ def master():
         else:
             comm.send(node_id, PAYLOAD)
 
-def worker(iterations):
+def worker(comm: CommABC, iterations: int):
     print("Starting...")
     start = time.time()
     for _ in range(iterations):
@@ -37,12 +36,12 @@ def worker(iterations):
     print("Exiting...")
     comm.close()
     print("Worker closed")
-        
 
-if __name__ == "__main__":
+
+def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--is_anchor", action="store_true", help="Run as anchor node", default=False)
-    parser.add_argument("-c", "--comm", type=str, choices=["mpi", "zenoh", "kafka", "mqtt"], default="mpi", help="Communication method")
+    parser.add_argument("-a", "--is_anchor", action="store_true", help="Run as anchor node", default=False)
+    parser.add_argument("-c", "--comm", type=str, choices=["mpi", "zenoh", "kafka", "mqtt"], required=True, help="Communication method")
     parser.add_argument("-i", "--iterations", type=int, default=5000, help="Number of iterations for worker")
     args = parser.parse_args()
     comm: CommABC = COMMS[args.comm](is_anchor=args.is_anchor)
@@ -50,9 +49,13 @@ if __name__ == "__main__":
     print(f"Node ID: {comm.id}")
     if comm.id == 0:
         try:
-            master()
+            master(comm)
         except KeyboardInterrupt:
             print("Master interrupted")
             comm.close()
     else:
-        worker(args.iterations)
+        worker(comm, args.iterations)
+
+
+if __name__ == "__main__":
+    main()

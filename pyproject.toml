@@ -28,6 +28,7 @@ flexfl-division = "flexfl.cli.division:main"
 flexfl-preprocess = "flexfl.cli.preprocess:main"
 flexfl-res = "flexfl.cli.auto_restart:main"
 flexfl-plot = "flexfl.cli.analysis:main"
+flexfl-benchmark = "flexfl.cli.benchmark:main"
 
 
 [project.optional-dependencies]
