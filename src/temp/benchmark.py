@@ -1,13 +1,16 @@
 import argparse
 import time
+import os
 
 from flexfl.builtins.CommABC import CommABC
+from flexfl.comms.MPI import MPI
 from flexfl.comms.Zenoh import Zenoh
 from flexfl.comms.Kafka import Kafka
 from flexfl.comms.MQTT import MQTT
 
 
 COMMS = {
+    "mpi": MPI,
     "zenoh": Zenoh,
     "kafka": Kafka,
     "mqtt": MQTT
@@ -33,18 +36,19 @@ def worker(iterations):
     print(f"Worker {comm.id} completed {iterations} iterations in {end - start:.3f} seconds")
     print("Exiting...")
     comm.close()
+    print("Worker closed")
         
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--is_anchor", action="store_true", help="Run as anchor node", default=False)
-    parser.add_argument("-c", "--comm", type=str, choices=["zenoh", "kafka", "mqtt"], default="zenoh", help="Communication method")
+    parser.add_argument("-c", "--comm", type=str, choices=["mpi", "zenoh", "kafka", "mqtt"], default="mpi", help="Communication method")
     parser.add_argument("-i", "--iterations", type=int, default=5000, help="Number of iterations for worker")
     args = parser.parse_args()
     comm: CommABC = COMMS[args.comm](is_anchor=args.is_anchor)
     print(f"Communication method: {args.comm}")
     print(f"Node ID: {comm.id}")
-    if args.is_anchor:
+    if comm.id == 0:
         try:
             master()
         except KeyboardInterrupt:

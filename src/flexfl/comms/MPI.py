@@ -1,5 +1,6 @@
 from mpi4py import MPI as MPI4py
 from datetime import datetime
+import os
 
 from flexfl.builtins.CommABC import CommABC
 from flexfl.builtins.Logger import Logger
@@ -12,6 +13,8 @@ class MPI(CommABC):
         self.comm = MPI4py.COMM_WORLD
         self._id = self.comm.Get_rank()
         self._nodes = set(range(self.comm.Get_size()))
+        if len(self._nodes) == 1:
+            raise ValueError("Only one node found. Please run with multiple processes.")
         self._start_time = datetime.now()
         self.status = MPI4py.Status()
         self.setup()
@@ -44,12 +47,16 @@ class MPI(CommABC):
             node_id = self.status.Get_source()
         else:
             data = self.comm.recv(source=node_id, tag=0)
+        if data is None:
+            Logger.log(Logger.LEAVE, node_id=node_id)
+            return node_id, None
         Logger.log(Logger.RECV, sender=node_id, receiver=self.id, payload_size=len(data))
         return node_id, data
     
 
     def close(self) -> None:
-        return
+        if self.id != 0:
+            self.comm.send(None, dest=0, tag=0)
     
 
     def setup(self):
