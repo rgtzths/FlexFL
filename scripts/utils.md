@@ -54,3 +54,10 @@ With MPI
 ```bash
 bash scripts/run_on_vms_mpi [args]
 ```
+
+Containers
+```bash
+source scripts/set_ip.sh 
+docker-compose -f requirements/kafka-compose.yml up -d
+docker-compose -f requirements/mqtt-compose.yml up -d
+```
