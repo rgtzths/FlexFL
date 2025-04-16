@@ -1,6 +1,5 @@
 from mpi4py import MPI as MPI4py
 from datetime import datetime
-import os
 
 from flexfl.builtins.CommABC import CommABC
 from flexfl.builtins.Logger import Logger
