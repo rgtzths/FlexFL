@@ -33,3 +33,7 @@ for (( WORKER_ID=1; WORKER_ID<=$WORKERS; WORKER_ID++ )); do
 done
 wait
 echo "Command execution completed!"
+
+screen -r fl-master
+
+echo "Done!"
