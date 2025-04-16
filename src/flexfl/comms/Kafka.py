@@ -14,8 +14,7 @@ TOPIC = "fl"
 DISCOVER = "fl_discover"
 GROUP_ID = "fl_group"
 
-logging.getLogger('kafka.coordinator').setLevel(logging.ERROR)
-logging.getLogger('kafka.coordinator.assignors.range').setLevel(logging.ERROR)
+logging.basicConfig(level=logging.CRITICAL)
 
 class Kafka(CommABC):
 
@@ -88,7 +87,7 @@ class Kafka(CommABC):
 
 
     def clear(self):
-        self.admin = KafkaAdminClient(bootstrap_servers=self.kafka_broker)
+        self.admin = KafkaAdminClient(bootstrap_servers=self.kafka_broker, client_id="fl_admin")
         topics = self.admin.list_topics()
         topics = [topic for topic in topics if not topic.startswith("__")]
         self.admin.delete_topics(topics)
