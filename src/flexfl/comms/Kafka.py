@@ -1,20 +1,21 @@
 import queue
 import pickle
-import time
 import threading
 from datetime import datetime
 from uuid import uuid4
 from kafka import KafkaProducer, KafkaConsumer
 from kafka.admin import KafkaAdminClient
+import logging
 
 from flexfl.builtins.CommABC import CommABC
 from flexfl.builtins.Logger import Logger
 
 TOPIC = "fl"
 DISCOVER = "fl_discover"
-LIVENESS = "fl_liveness"
-TIMEOUT = 3
-HEARTBEAT = 1
+GROUP_ID = "fl_group"
+
+logging.getLogger('kafka.coordinator').setLevel(logging.ERROR)
+logging.getLogger('kafka.coordinator.assignors.range').setLevel(logging.ERROR)
 
 class Kafka(CommABC):
 
@@ -33,8 +34,7 @@ class Kafka(CommABC):
         self.q = queue.Queue()
         self.total_nodes = 0
         self.id_mapping = {}
-        self.hearbeats = {}
-        self.last_time = None
+        self.uuid_mapping = {}
         self.running = True
         self.thread = threading.Thread(target=self.listen)
         self.admin = None
@@ -64,8 +64,6 @@ class Kafka(CommABC):
         assert node_id in self.nodes, f"Node {node_id} not found"
         Logger.log(Logger.SEND, sender=self.id, receiver=node_id, payload_size=len(data))
         data = self.id.to_bytes(4) + data
-        if node_id == 0:
-            self.last_time = time.time()
         self.producer.send(
             topic=f"{TOPIC}_{self.id_mapping[node_id]}", 
             value=data, 
@@ -94,6 +92,9 @@ class Kafka(CommABC):
         topics = self.admin.list_topics()
         topics = [topic for topic in topics if not topic.startswith("__")]
         self.admin.delete_topics(topics)
+        groups = self.admin.list_consumer_groups()
+        groups = [g[0] for g in groups]
+        self.admin.delete_consumer_groups(groups)
 
 
     def discover(self):
@@ -101,52 +102,46 @@ class Kafka(CommABC):
             bootstrap_servers=self.kafka_broker,
         )
         self.consumer = KafkaConsumer(
-            group_id=f"{TOPIC}_{self._uuid}",
+            group_id=GROUP_ID,
+            client_id=f"{TOPIC}_{self._uuid}",
             bootstrap_servers=self.kafka_broker,
+            enable_auto_commit=True,
             auto_offset_reset="earliest",
         )
         if self.is_anchor:
             self._id = 0
-            self.consumer.subscribe([f"{TOPIC}_{self._uuid}", DISCOVER, LIVENESS])
+            self.consumer.subscribe([f"{TOPIC}_{self._uuid}", DISCOVER])
+            self.uuid_mapping[self._uuid] = 0
         else:
-            self.consumer.subscribe([f"{TOPIC}_{self._uuid}"])
             self.producer.send(DISCOVER, pickle.dumps(self._uuid))
             self.producer.flush()
+            self.consumer.subscribe([f"{TOPIC}_{self._uuid}"])
             res = self.consumer.poll(timeout_ms=10000, max_records=1)
             if len(res) == 0:
                 raise TimeoutError("Timeout waiting for anchor node")
             msg = res.popitem()[1][0].value
             self._id, node_uuid, self._start_time = pickle.loads(msg)
             self.id_mapping[0] = node_uuid
-        self._nodes.add(0)
+            self.uuid_mapping[node_uuid] = 0
+            self._nodes.add(0)
         self.id_mapping[self.id] = self._uuid
+        self.uuid_mapping[self._uuid] = self.id
         self.thread.start()
 
 
     def listen(self):
-        self.last_time = time.time()
         while self.running:
-            self.handle_msg()
             if self.is_anchor:
-                if (time.time() - self.last_time) >= TIMEOUT:
-                    self.last_time = time.time()
-                    self.handle_liveliness()
-            elif (time.time() - self.last_time) >= HEARTBEAT:
-                self.last_time = time.time()
-                self.producer.send(LIVENESS, self.id.to_bytes(4))
-                self.producer.flush()
+                self.monitor_members()
+            res = self.consumer.poll(timeout_ms=1000)
+            self.handle_msg(res)
 
 
-    def handle_msg(self):
-        res = self.consumer.poll(timeout_ms=HEARTBEAT*1000)
+    def handle_msg(self, res):
         for topic, msgs in res.items():
             for msg in msgs:
                 if topic.topic == DISCOVER:
                     self.handle_discover(msg.value)
-                elif topic.topic == LIVENESS:
-                    node_id = int.from_bytes(msg.value)
-                    if node_id in self.nodes:
-                        self.hearbeats[node_id] = time.time()
                 else:
                     self.handle_recv(msg.value)
 
@@ -155,22 +150,11 @@ class Kafka(CommABC):
         node_uuid = pickle.loads(payload)
         self.total_nodes += 1
         Logger.log(Logger.JOIN, node_id=self.total_nodes)
-        self._nodes.add(self.total_nodes)
         self.id_mapping[self.total_nodes] = node_uuid
+        self.uuid_mapping[node_uuid] = self.total_nodes
         new_payload = (self.total_nodes, self._uuid, self.start_time)
         self.producer.send(f"{TOPIC}_{node_uuid}", pickle.dumps(new_payload))
         self.producer.flush()
-
-
-    def handle_liveliness(self):
-        for node_id, timestamp in list(self.hearbeats.items()):
-            if (time.time() - timestamp) > TIMEOUT:
-                Logger.log(Logger.LEAVE, node_id=node_id)
-                self.admin.delete_topics([f"{TOPIC}_{self.id_mapping[node_id]}"])
-                self._nodes.remove(node_id)
-                self.id_mapping.pop(node_id)
-                self.hearbeats.pop(node_id)
-                self.q.put((node_id, None))
 
 
     def handle_recv(self, payload: bytes):
@@ -180,8 +164,27 @@ class Kafka(CommABC):
         data = payload[4:]
         Logger.log(Logger.RECV, sender=node_id, receiver=self.id, payload_size=len(data))
         self.q.put((node_id, data))
-        if self.id == 0:
-            self.hearbeats[node_id] = time.time()
 
-            
-        
+
+    def monitor_members(self):
+        groups = self.admin.describe_consumer_groups([GROUP_ID])
+        members = groups[0].members
+        node_ids = (member.client_id for member in members)
+        node_ids = (_id.split("_")[-1] for _id in node_ids)
+        node_ids = set(self.uuid_mapping[_id] for _id in node_ids)
+        disconnected = self.nodes - node_ids
+        self.handle_disconect(disconnected)
+        new_connections = node_ids - self.nodes
+        for node_id in new_connections:
+            self._nodes.add(node_id)
+
+
+    def handle_disconect(self, node_ids):
+        for node_id in node_ids:
+            uuid = self.id_mapping[node_id]
+            Logger.log(Logger.LEAVE, node_id=node_id)
+            self.admin.delete_topics([f"{TOPIC}_{uuid}"])
+            self._nodes.remove(node_id)
+            self.id_mapping.pop(node_id)
+            self.uuid_mapping.pop(uuid)
+            self.q.put((node_id, None))
