@@ -595,9 +595,10 @@ class Results:
                 x=0.5,
                 title_text="",
             ),
-            margin=dict(l=0, r=20, t=0, b=50),
+            margin=dict(l=0, r=20, t=0, b=40),
         )
         fig.update_yaxes(title_standoff=5)
+        fig.update_xaxes(title_standoff=5)
         fig.write_image(f"{self.out}/worker_status.pdf", width=400, height=400)
         if show:
             fig.show()

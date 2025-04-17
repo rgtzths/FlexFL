@@ -44,10 +44,11 @@ def main():
     parser.add_argument("-a", "--is_anchor", action="store_true", help="Run as anchor node", default=False)
     parser.add_argument("-c", "--comm", type=str, choices=MODULES["comms"].keys(), default="zenoh", help="Communication method")
     parser.add_argument("-i", "--iterations", type=int, default=5000, help="Number of iterations for worker")
+    parser.add_argument("--ip", type=str, default="localhost", help="IP address of the master node")
     args = parser.parse_args()
     if "OMPI_COMM_WORLD_SIZE" in os.environ:
         args.comm = "MPI"
-    comm: CommABC = load_class(MODULES["comms"][args.comm])(is_anchor=args.is_anchor)
+    comm: CommABC = load_class(MODULES["comms"][args.comm])(is_anchor=args.is_anchor, ip=args.ip)
     print(f"Communication method: {args.comm}")
     print(f"Node ID: {comm.id}")
     if comm.id == 0:
