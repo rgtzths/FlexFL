@@ -20,25 +20,30 @@ class Logger:
     VALIDATION_END = "validation_end"
     FAILURE = "failure"
 
+    _logger = logging.getLogger("flexfl")
+
     @staticmethod
     def setup(file_path: str):
-        logging.basicConfig(
-            level=logging.INFO,
-            filename=file_path,
-            format='%(message)s',
-            filemode='w'
-        )
+        Logger._logger.setLevel(logging.INFO)
+        handler = logging.FileHandler(file_path, mode='w')
+        formatter = logging.Formatter('%(message)s')
+        handler.setFormatter(formatter)
+        Logger._logger.handlers = []
+        Logger._logger.addHandler(handler)
 
     
     @staticmethod
     def end():
-        logging.shutdown()
+        for handler in Logger._logger.handlers:
+            handler.flush()
+            handler.close()
+        Logger._logger.handlers = []
 
 
     @staticmethod
     def log(event: str, **kwargs):
         timestamp = time.time()
-        logging.info(json.dumps({
+        Logger._logger.info(json.dumps({
             'event': event,
             'timestamp': timestamp,
             **kwargs

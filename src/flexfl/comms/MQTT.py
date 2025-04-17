@@ -10,8 +10,6 @@ from flexfl.builtins.Logger import Logger
 TOPIC = "fl"
 DISCOVER = "fl_discover"
 LIVELINESS = "fl_liveliness"
-TIMEOUT = 2
-HEARTBEAT = 0.5
 QOS = 0
 
 class MQTT(CommABC):
@@ -28,7 +26,7 @@ class MQTT(CommABC):
         self.is_anchor = is_anchor
         self._id = None
         self._uuid = str(uuid4())
-        self._nodes = set()
+        self._nodes = {0}
         self._start_time = datetime.now()
         self.total_nodes = 0
         self.q = queue.Queue()
@@ -37,7 +35,9 @@ class MQTT(CommABC):
         self.client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2, 
             reconnect_on_failure=False,
-            transport="tcp"
+            transport="tcp",
+            clean_session=True,
+            client_id=self._uuid,
         )
         self.discover()
 
@@ -92,7 +92,6 @@ class MQTT(CommABC):
             self._id, node_uuid, self._start_time = pickle.loads(msg)
             self.id_mapping[0] = node_uuid
             self.uuid_mapping[node_uuid] = 0
-        self._nodes.add(0)
         self.id_mapping[self.id] = self._uuid
         self.uuid_mapping[self._uuid] = self.id
 
@@ -131,6 +130,3 @@ class MQTT(CommABC):
             data = payload[4:]
             Logger.log(Logger.RECV, sender=node_id, receiver=self.id, payload_size=len(data))
             self.q.put((node_id, data))
-        
-
-            
