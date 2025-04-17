@@ -334,15 +334,15 @@ class Results:
         failures = failures[failures["nid"] == str(worker_id)][["timestamp"]]
         worktimes = self.get_work_times()
         worktimes = worktimes[worktimes["nid"] == worker_id][["start", "end"]]
-        for start, end in epochs:
+        for epoch_start, epoch_end in epochs:
             current_status = IDLE
             failure = None
             for _, row in worktimes.iterrows():
-                if start < row["end"] < end:
+                if epoch_start < row["end"] < epoch_end:
                     current_status = WORKED
                     break
             for _, row in failures.iterrows():
-                if start < row["timestamp"] < end:
+                if epoch_start < row["timestamp"] < epoch_end:
                     failure = row["timestamp"]
                     break
             if failure is not None:
@@ -350,7 +350,7 @@ class Results:
                     current_status = FAILED_IDLE
                 else:
                     for _, row in worktimes.iterrows():
-                        if row["start"] <= failure <= row["end"]:
+                        if failure == row["end"]:
                             current_status = FAILED_WORKING
                             break
                     if current_status == WORKED:
@@ -567,7 +567,9 @@ class Results:
             text=df.values,
             xgap=1,
             ygap=1,
-            showscale=False
+            showscale=False,
+            zmin=0,
+            zmax=len(STATUS_MAP) - 1,
         )
         fig = go.Figure(data=[heatmap_trace])
         for i in range(len(STATUS_MAP)):
