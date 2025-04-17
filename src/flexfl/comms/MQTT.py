@@ -35,7 +35,9 @@ class MQTT(CommABC):
         self.client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2, 
             reconnect_on_failure=False,
-            transport="tcp"
+            transport="tcp",
+            clean_session=True,
+            client_id=self._uuid,
         )
         self.discover()
 
@@ -128,6 +130,3 @@ class MQTT(CommABC):
             data = payload[4:]
             Logger.log(Logger.RECV, sender=node_id, receiver=self.id, payload_size=len(data))
             self.q.put((node_id, data))
-        
-
-            

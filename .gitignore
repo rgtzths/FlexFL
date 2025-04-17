@@ -2,13 +2,8 @@ data/**
 keys
 .ruff_cache
 
-# to keep results
-# *
-# !.gitignore
-# !_analysis/
-# !_analysis/**
-# !args.json
-
+results/**/*.jsonl
+results/**/*.csv
 
 !.gitkeep
 

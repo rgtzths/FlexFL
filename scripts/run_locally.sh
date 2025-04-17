@@ -11,8 +11,8 @@ if ! [[ "$INTERVAL" =~ ^[0-9]+(\.[0-9]+)?$ && "$CHANCE" =~ ^[0-9]+(\.[0-9]+)?$ &
     exit 1
 fi
 
-echo "Killing all screen sessions..."
-pkill screen > /dev/null 2>&1
+echo "Killing all sessions..."
+pkill flexfl > /dev/null 2>&1
 
 echo "Running master..."
 COMMAND="uv run flexfl --is_anchor --no-save_model $RUN_ARGS"

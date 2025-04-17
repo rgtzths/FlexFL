@@ -6,6 +6,7 @@ from uuid import uuid4
 from kafka import KafkaProducer, KafkaConsumer
 from kafka.admin import KafkaAdminClient
 import logging
+import time
 
 from flexfl.builtins.CommABC import CommABC
 from flexfl.builtins.Logger import Logger
@@ -28,7 +29,8 @@ class Kafka(CommABC):
         self._id = None
         self.is_anchor = is_anchor
         self._uuid = str(uuid4())
-        self._nodes = set()
+        self._nodes = {0}
+        self.members = set()
         self._start_time = datetime.now()
         self.q = queue.Queue()
         self.total_nodes = 0
@@ -122,16 +124,17 @@ class Kafka(CommABC):
             self._id, node_uuid, self._start_time = pickle.loads(msg)
             self.id_mapping[0] = node_uuid
             self.uuid_mapping[node_uuid] = 0
-            self._nodes.add(0)
         self.id_mapping[self.id] = self._uuid
         self.uuid_mapping[self._uuid] = self.id
         self.thread.start()
 
 
     def listen(self):
+        last_time = time.time()
         while self.running:
-            if self.is_anchor:
+            if self.is_anchor and time.time() - last_time > 1:
                 self.monitor_members()
+                last_time = time.time()
             res = self.consumer.poll(timeout_ms=1000)
             self.handle_msg(res)
 
@@ -148,6 +151,7 @@ class Kafka(CommABC):
     def handle_discover(self, payload: bytes):
         node_uuid = pickle.loads(payload)
         self.total_nodes += 1
+        self._nodes.add(self.total_nodes)
         Logger.log(Logger.JOIN, node_id=self.total_nodes)
         self.id_mapping[self.total_nodes] = node_uuid
         self.uuid_mapping[node_uuid] = self.total_nodes
@@ -168,14 +172,17 @@ class Kafka(CommABC):
     def monitor_members(self):
         groups = self.admin.describe_consumer_groups([GROUP_ID])
         members = groups[0].members
-        node_ids = (member.client_id for member in members)
-        node_ids = (_id.split("_")[-1] for _id in node_ids)
-        node_ids = set(self.uuid_mapping[_id] for _id in node_ids)
-        disconnected = self.nodes - node_ids
+        node_ids = set()
+        for m in members:
+            _uuid = m.client_id.split("_")[-1]
+            node_id = self.uuid_mapping.get(_uuid, None)
+            if node_id is not None:
+                node_ids.add(node_id) 
+        disconnected = self.members - node_ids
         self.handle_disconect(disconnected)
-        new_connections = node_ids - self.nodes
+        new_connections = node_ids - self.members
         for node_id in new_connections:
-            self._nodes.add(node_id)
+            self.members.add(node_id)
 
 
     def handle_disconect(self, node_ids):
@@ -184,6 +191,7 @@ class Kafka(CommABC):
             Logger.log(Logger.LEAVE, node_id=node_id)
             self.admin.delete_topics([f"{TOPIC}_{uuid}"])
             self._nodes.remove(node_id)
+            self.members.remove(node_id)
             self.id_mapping.pop(node_id)
             self.uuid_mapping.pop(uuid)
             self.q.put((node_id, None))

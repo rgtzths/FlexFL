@@ -10,12 +10,18 @@ import plotly.io as pio
 
 pio.kaleido.scope.mathjax = None
 
+IDLE = 0
+WORKED = 1
+FAILED_IDLE = 2
+FAILED_WORKING = 3
+FAILED_AFTER_WORKING = 4
+
 STATUS_MAP = {
-    0: "Idle",
-    1: "Worked",
-    2: "Failed while idle",
-    3: "Failed while working",
-    4: "Failed after working"
+    IDLE: "Idle",
+    WORKED: "Worked",
+    FAILED_IDLE: "Failed while idle",
+    FAILED_WORKING: "Failed while working",
+    FAILED_AFTER_WORKING: "Failed after working"
 }
 
 
@@ -322,24 +328,54 @@ class Results:
         return df
     
 
+    def calculate_status(self, worker_id: int, epochs: list[tuple[datetime, datetime]]) -> list[int]:
+        epoch_status = []
+        failures = self.get_failures()
+        failures = failures[failures["nid"] == str(worker_id)][["timestamp"]]
+        worktimes = self.get_work_times()
+        worktimes = worktimes[worktimes["nid"] == worker_id][["start", "end"]]
+        for start, end in epochs:
+            current_status = IDLE
+            failure = None
+            for _, row in worktimes.iterrows():
+                if start < row["end"] < end:
+                    current_status = WORKED
+                    break
+            for _, row in failures.iterrows():
+                if start < row["timestamp"] < end:
+                    failure = row["timestamp"]
+                    break
+            if failure is not None:
+                if current_status == IDLE:
+                    current_status = FAILED_IDLE
+                else:
+                    for _, row in worktimes.iterrows():
+                        if row["start"] <= failure <= row["end"]:
+                            current_status = FAILED_WORKING
+                            break
+                    if current_status == WORKED:
+                        current_status = FAILED_AFTER_WORKING
+            epoch_status.append(current_status)
+        return epoch_status
+    
+
     @lru_cache(maxsize=1)
     def get_overall_status(self) -> pd.DataFrame:
-        # TODO
-        data = [
-            [2, 1, 1, 2, 0, 1, 0, 3, 0, 1],
-            [1, 0, 1, 1, 1, 0, 3, 1, 1, 0],
-            [1, 1, 0, 1, 1, 0, 4, 0, 3, 2],
-            [1, 1, 0, 3, 1, 1, 1, 2, 0, 3],
-            [4, 0, 3, 3, 1, 1, 1, 0, 1, 3],
-            [3, 1, 1, 0, 3, 0, 1, 1, 1, 1],
-            [0, 1, 1, 3, 0, 3, 1, 1, 1, 1],
-            [1, 1, 0, 4, 0, 1, 2, 1, 1, 1],
-            [3, 1, 3, 1, 1, 1, 1, 1, 2, 0],
-            [2, 0, 1, 2, 3, 1, 0, 1, 1, 1],
-        ]
+        data = []
+        validations = self.get_validations()
+        epochs = [(
+            self.get_run_time().iloc[0]["Start"], 
+            validations.iloc[0]["start"]
+        )]
+        for i in range(1, len(validations)):
+            epochs.append((validations.iloc[i-1]["start"], validations.iloc[i]["start"]))
+        
+        for nid in range(1, self.n_workers + 1):
+            status = self.calculate_status(nid, epochs)
+            data.append(status)
         df = pd.DataFrame(data)
-        df.index = [f"{i+1}" for i in range(df.shape[0])]
-        df.columns = [f"{i+1}" for i in range(df.shape[1])]
+        df.index = [f"worker_{i+1}" for i in range(df.shape[0])]
+        df.columns = [f"epoch_{i+1}" for i in range(df.shape[1])]
         return df
 
 
@@ -509,6 +545,8 @@ class Results:
 
     def plot_status(self, show = True) -> None:
         df = self.get_overall_status()
+        df.index = [f"{i+1}" for i in range(df.shape[0])]
+        df.columns = [f"{i+1}" for i in range(df.shape[1])]
         colors = [
             'SteelBlue', 
             'mediumseagreen', 
@@ -527,8 +565,8 @@ class Results:
             y=df.index,
             colorscale=custom_colorscale,
             text=df.values,
-            xgap=1.5,
-            ygap=1.5,
+            xgap=1,
+            ygap=1,
             showscale=False
         )
         fig = go.Figure(data=[heatmap_trace])

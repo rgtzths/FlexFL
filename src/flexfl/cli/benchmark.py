@@ -1,19 +1,9 @@
 import argparse
 import time
+import os
 
 from flexfl.builtins.CommABC import CommABC
-from flexfl.comms.MPI import MPI
-from flexfl.comms.Zenoh import Zenoh
-from flexfl.comms.Kafka import Kafka
-from flexfl.comms.MQTT import MQTT
-
-
-COMMS = {
-    "mpi": MPI,
-    "zenoh": Zenoh,
-    "kafka": Kafka,
-    "mqtt": MQTT
-}
+from flexfl.cli.utils import get_modules_and_args, load_class
 
 PAYLOAD = b"a" * 1024  # 1KB payload
 
@@ -39,12 +29,25 @@ def worker(comm: CommABC, iterations: int):
 
 
 def main():
+
+    FOLDERS: list[str] = [
+        "comms",
+    ]
+
+    MODULES, _ = get_modules_and_args(FOLDERS)
+
+    for m, classes in list(MODULES.items()):
+        for class_name, path in list(classes.items()):
+            MODULES[m][class_name.lower()] = path
+
     parser = argparse.ArgumentParser()
     parser.add_argument("-a", "--is_anchor", action="store_true", help="Run as anchor node", default=False)
-    parser.add_argument("-c", "--comm", type=str, choices=["mpi", "zenoh", "kafka", "mqtt"], required=True, help="Communication method")
+    parser.add_argument("-c", "--comm", type=str, choices=MODULES["comms"].keys(), default="zenoh", help="Communication method")
     parser.add_argument("-i", "--iterations", type=int, default=5000, help="Number of iterations for worker")
     args = parser.parse_args()
-    comm: CommABC = COMMS[args.comm](is_anchor=args.is_anchor)
+    if "OMPI_COMM_WORLD_SIZE" in os.environ:
+        args.comm = "MPI"
+    comm: CommABC = load_class(MODULES["comms"][args.comm])(is_anchor=args.is_anchor)
     print(f"Communication method: {args.comm}")
     print(f"Node ID: {comm.id}")
     if comm.id == 0:
