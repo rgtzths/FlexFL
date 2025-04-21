@@ -88,12 +88,12 @@ class MQTT(CommABC):
             self.client.subscribe(LIVELINESS)
         else:
             self.client.publish(DISCOVER, pickle.dumps(self._uuid), qos=QOS)
-            _, msg = self.q.get()
-            self._id, node_uuid, self._start_time = pickle.loads(msg)
+            _, (_, node_uuid, self._start_time) = self.q.get()
             self.id_mapping[0] = node_uuid
             self.uuid_mapping[node_uuid] = 0
         self.id_mapping[self.id] = self._uuid
         self.uuid_mapping[self._uuid] = self.id
+
 
 
     def handle_discover(self, payload: bytes):
@@ -104,7 +104,7 @@ class MQTT(CommABC):
         self.id_mapping[self.total_nodes] = node_uuid
         self.uuid_mapping[node_uuid] = self.total_nodes
         new_payload = (self.total_nodes, self._uuid, self.start_time)
-        self.send(self.total_nodes, pickle.dumps(new_payload))
+        self.client.publish(f"{TOPIC}/{node_uuid}", pickle.dumps(new_payload), qos=QOS)
 
 
     def handle_liveliness(self, payload: bytes):
@@ -119,7 +119,11 @@ class MQTT(CommABC):
 
     def on_message(self, client: mqtt.Client, userdata, msg: mqtt.MQTTMessage):
         payload = msg.payload
-        if msg.topic == DISCOVER:
+        if self.id is None:
+            data = pickle.loads(payload)
+            self._id = data[0]
+            self.q.put((0, data))
+        elif msg.topic == DISCOVER:
             self.handle_discover(payload)
         elif msg.topic == LIVELINESS:
             self.handle_liveliness(payload)

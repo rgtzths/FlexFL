@@ -60,3 +60,8 @@ class MPI(CommABC):
 
     def setup(self):
         self._start_time = self.comm.bcast(self._start_time, root=0)
+        if self.id != 0:
+            return
+        for i in range(1, len(self._nodes)):
+            Logger.log(Logger.JOIN, node_id=i)
+            
