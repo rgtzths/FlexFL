@@ -239,12 +239,13 @@ class Results:
 
     @lru_cache(maxsize=1)
     def get_comms_per_worker(self) -> pd.DataFrame:
-        df = self.get_comms()
-        df["worker"] = df.apply(lambda x: max(x["send_nid"], x["recv_nid"]), axis=1)
-        df = df.groupby(["worker"]).agg({
+        df_ = self.get_comms()
+        df_["worker"] = df_.apply(lambda x: max(x["send_nid"], x["recv_nid"]), axis=1)
+        df = df_.groupby(["worker"]).agg({
             "duration (ms)": "sum",
-            "payload_size (bytes)": "sum"
+            "payload_size (bytes)": "sum",
         })
+        df["n_messages"] = df_.groupby(["worker"]).size()
         df = df.reset_index()
         df["payload_size (bytes)"] = df["payload_size (bytes)"] / 1024 / 1024
         df["duration (ms)"] = df["duration (ms)"] / 1000
@@ -411,8 +412,8 @@ class Results:
     @lru_cache(maxsize=1)
     def getp_worker_time(self) -> pd.DataFrame:
         df = self.get_worker_time_status()
-        df = df[["worker", "payload_size (MB)", "comm_time (s)", "comm_time% (s)", "work_time (s)", "work_time% (s)", "other_time (s)", "other_time% (s)"]]
-        df.columns = ["Worker", "Total transfered (MB)", "Communication Time (s)", "Communication Time (%)", "Work Time (s)", "Work Time (%)", "Other Time (s)", "Other Time (%)"]
+        df = df[["worker", "payload_size (MB)", "n_messages", "comm_time (s)", "comm_time% (s)", "work_time (s)", "work_time% (s)", "other_time (s)", "other_time% (s)"]]
+        df.columns = ["Worker", "Total transfered (MB)", "Total Messages", "Communication Time (s)", "Communication Time (%)", "Work Time (s)", "Work Time (%)", "Other Time (s)", "Other Time (%)"]
         return df
     
 
