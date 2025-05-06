@@ -20,7 +20,7 @@ def worker(comm: CommABC, iterations: int):
     start = time.time()
     for _ in range(iterations):
         comm.send(0, PAYLOAD)
-        node_id, data = comm.recv()
+        comm.recv()
     end = time.time()
     print(f"Worker {comm.id} completed {iterations} iterations in {end - start:.3f} seconds")
     print("Exiting...")
