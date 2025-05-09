@@ -30,6 +30,7 @@ class Logger:
         handler.setFormatter(formatter)
         Logger._logger.handlers = []
         Logger._logger.addHandler(handler)
+        Logger._logger.propagate = False
 
     
     @staticmethod

@@ -18,10 +18,10 @@ FAILED_AFTER_WORKING = 4
 
 STATUS_MAP = {
     IDLE: "Idle",
-    WORKED: "Worked",
+    WORKED: "Finished work",
     FAILED_IDLE: "Failed while idle",
     FAILED_WORKING: "Failed while working",
-    FAILED_AFTER_WORKING: "Failed after working"
+    FAILED_AFTER_WORKING: "Failed after work"
 }
 
 
@@ -239,12 +239,13 @@ class Results:
 
     @lru_cache(maxsize=1)
     def get_comms_per_worker(self) -> pd.DataFrame:
-        df = self.get_comms()
-        df["worker"] = df.apply(lambda x: max(x["send_nid"], x["recv_nid"]), axis=1)
-        df = df.groupby(["worker"]).agg({
+        df_ = self.get_comms()
+        df_["worker"] = df_.apply(lambda x: max(x["send_nid"], x["recv_nid"]), axis=1)
+        df = df_.groupby(["worker"]).agg({
             "duration (ms)": "sum",
-            "payload_size (bytes)": "sum"
+            "payload_size (bytes)": "sum",
         })
+        df["n_messages"] = df_.groupby(["worker"]).size()
         df = df.reset_index()
         df["payload_size (bytes)"] = df["payload_size (bytes)"] / 1024 / 1024
         df["duration (ms)"] = df["duration (ms)"] / 1000
@@ -360,7 +361,7 @@ class Results:
     
 
     @lru_cache(maxsize=1)
-    def get_overall_status(self) -> pd.DataFrame:
+    def get_worker_status(self) -> pd.DataFrame:
         data = []
         validations = self.get_validations()
         epochs = [(
@@ -376,6 +377,23 @@ class Results:
         df = pd.DataFrame(data)
         df.index = [f"worker_{i+1}" for i in range(df.shape[0])]
         df.columns = [f"epoch_{i+1}" for i in range(df.shape[1])]
+        return df
+    
+
+    @lru_cache(maxsize=1)
+    def get_overall_status(self) -> pd.DataFrame:
+        status = self.get_worker_status()
+        df = pd.DataFrame()
+        for i in range(len(STATUS_MAP)):
+            df[STATUS_MAP[i]] = status.isin([i]).sum(axis=1)
+        df = df.reset_index()
+        df = df.rename(columns={"index": "Worker"}) 
+        df["Non Critical Failures"] = df[[STATUS_MAP[FAILED_IDLE], STATUS_MAP[FAILED_AFTER_WORKING]]].sum(axis=1)
+        df["Total Failures"] = df[[STATUS_MAP[FAILED_IDLE], STATUS_MAP[FAILED_WORKING], STATUS_MAP[FAILED_AFTER_WORKING]]].sum(axis=1)
+        df["Working times"] = df[[STATUS_MAP[WORKED], STATUS_MAP[FAILED_WORKING], STATUS_MAP[FAILED_AFTER_WORKING]]].sum(axis=1)
+        summary_values = df.drop(columns=["Worker"]).sum(numeric_only=True)
+        summary_values["Worker"] = "All"
+        df.loc[len(df)] = summary_values
         return df
 
 
@@ -394,8 +412,8 @@ class Results:
     @lru_cache(maxsize=1)
     def getp_worker_time(self) -> pd.DataFrame:
         df = self.get_worker_time_status()
-        df = df[["worker", "payload_size (MB)", "comm_time (s)", "comm_time% (s)", "work_time (s)", "work_time% (s)", "other_time (s)", "other_time% (s)"]]
-        df.columns = ["Worker", "Total transfered (MB)", "Communication Time (s)", "Communication Time (%)", "Work Time (s)", "Work Time (%)", "Other Time (s)", "Other Time (%)"]
+        df = df[["worker", "payload_size (MB)", "n_messages", "comm_time (s)", "comm_time% (s)", "work_time (s)", "work_time% (s)", "other_time (s)", "other_time% (s)"]]
+        df.columns = ["Worker", "Total transfered (MB)", "Total Messages", "Communication Time (s)", "Communication Time (%)", "Work Time (s)", "Work Time (%)", "Other Time (s)", "Other Time (%)"]
         return df
     
 
@@ -544,7 +562,7 @@ class Results:
 
 
     def plot_status(self, show = True) -> None:
-        df = self.get_overall_status()
+        df = self.get_worker_status()
         df.index = [f"{i+1}" for i in range(df.shape[0])]
         df.columns = [f"{i+1}" for i in range(df.shape[1])]
         colors = [
@@ -613,5 +631,6 @@ class Results:
             self.getp_worker_time,
             self.getp_metrics,
             self.get_run_time,
+            self.get_overall_status,
         )
         
