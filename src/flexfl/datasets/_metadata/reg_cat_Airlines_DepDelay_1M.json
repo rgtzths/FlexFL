@@ -1,0 +1,16 @@
+{
+    "name": "reg_cat_Airlines_DepDelay_1M",
+    "link": "",
+    "type": "regression",
+    "output_size": 1,
+    "info": "",
+    "samples": 1000000,
+    "input_shape": [
+        5
+    ],
+    "split": {
+        "train": "70.00%: 700000",
+        "val": "15.00%: 150000",
+        "test": "15.00%: 150000"
+    }
+}

@@ -1,0 +1,16 @@
+{
+    "name": "clf_num_jannis",
+    "link": "",
+    "type": "classification",
+    "output_size": 2,
+    "info": "",
+    "samples": 57580,
+    "input_shape": [
+        54
+    ],
+    "split": {
+        "train": "70.00%: 40306",
+        "val": "15.00%: 8637",
+        "test": "15.00%: 8637"
+    }
+}

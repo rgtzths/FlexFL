@@ -7,7 +7,7 @@ from flexfl.datasets.Benchmark import Benchmark
 
 import os
 
-BATCHSIZE = 256
+BATCHSIZE = 2560
 
 def create_model(trial, n_classes):
     # We optimize the numbers of layers, their units and weight decay parameter.
@@ -101,7 +101,7 @@ def objective(trial, dataset_name, epochs):
     eval_fn = tf.keras.metrics.MeanAbsolutePercentageError() if n_classes == 1 else tf.keras.metrics.F1Score(average = "weighted")
 
     # Training and validating cycle.
-    with tf.device("/cpu:0"):
+    with tf.device("/gpu:0"):
         for _ in range(epochs):
             learn(model, optimizer, loss_fn, eval_fn, train_ds, "train")
 
@@ -113,8 +113,8 @@ def objective(trial, dataset_name, epochs):
 
 if __name__ == "__main__":
     datasets_info = json.load(open("datasets.json"))
-    epochs = 1
-    trials = 1
+    epochs = 200
+    trials = 100
     result_folder = "results/hyperparameter_optimization/"
     result_folder = Path(result_folder)
     result_folder.mkdir(parents=True, exist_ok=True)
@@ -122,10 +122,10 @@ if __name__ == "__main__":
 
     for dataset in datasets_info["splits"]:    
         print(dataset['config'])
-        if dataset["config"] not in ["clf_cat_electricity"]:
+        if dataset["config"] not in ["clf_cat_electricity", "clf_num_MagicTelescope", "clf_num_MiniBooNE", "clf_num_electricity", "clf_num_house_16H", "clf_num_pol"]:
             result_file = result_folder / f"{dataset['config']}.json"
+            
             study = optuna.create_study(direction="maximize") if "clf" in dataset["config"] else optuna.create_study(direction="minimize")
-
             study.optimize(lambda trial: objective(trial, dataset["config"], epochs), n_trials=trials)
 
             print("Number of finished trials: ", len(study.trials))

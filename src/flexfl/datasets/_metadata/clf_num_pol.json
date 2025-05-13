@@ -1,0 +1,16 @@
+{
+    "name": "clf_num_pol",
+    "link": "",
+    "type": "classification",
+    "output_size": 2,
+    "info": "",
+    "samples": 10082,
+    "input_shape": [
+        26
+    ],
+    "split": {
+        "train": "70.00%: 7057",
+        "val": "15.00%: 1512",
+        "test": "15.00%: 1513"
+    }
+}

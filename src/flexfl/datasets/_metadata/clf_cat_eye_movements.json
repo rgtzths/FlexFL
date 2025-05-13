@@ -1,0 +1,16 @@
+{
+    "name": "clf_cat_eye_movements",
+    "link": "",
+    "type": "classification",
+    "output_size": 2,
+    "info": "",
+    "samples": 7608,
+    "input_shape": [
+        23
+    ],
+    "split": {
+        "train": "70.00%: 5325",
+        "val": "15.00%: 1141",
+        "test": "15.00%: 1142"
+    }
+}

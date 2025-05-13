@@ -1,0 +1,16 @@
+{
+    "name": "reg_cat_analcatdata_supreme",
+    "link": "",
+    "type": "regression",
+    "output_size": 1,
+    "info": "",
+    "samples": 4052,
+    "input_shape": [
+        7
+    ],
+    "split": {
+        "train": "70.00%: 2836",
+        "val": "15.00%: 608",
+        "test": "15.00%: 608"
+    }
+}

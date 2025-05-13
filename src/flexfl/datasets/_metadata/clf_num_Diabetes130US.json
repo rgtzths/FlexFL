@@ -1,0 +1,16 @@
+{
+    "name": "clf_num_Diabetes130US",
+    "link": "",
+    "type": "classification",
+    "output_size": 2,
+    "info": "",
+    "samples": 71090,
+    "input_shape": [
+        7
+    ],
+    "split": {
+        "train": "70.00%: 49763",
+        "val": "15.00%: 10663",
+        "test": "15.00%: 10664"
+    }
+}

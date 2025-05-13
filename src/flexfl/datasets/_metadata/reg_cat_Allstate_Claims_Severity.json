@@ -1,0 +1,16 @@
+{
+    "name": "reg_cat_Allstate_Claims_Severity",
+    "link": "",
+    "type": "regression",
+    "output_size": 1,
+    "info": "",
+    "samples": 188318,
+    "input_shape": [
+        124
+    ],
+    "split": {
+        "train": "70.00%: 131822",
+        "val": "15.00%: 28248",
+        "test": "15.00%: 28248"
+    }
+}

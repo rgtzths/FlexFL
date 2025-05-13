@@ -1,0 +1,16 @@
+{
+    "name": "clf_num_california",
+    "link": "",
+    "type": "classification",
+    "output_size": 2,
+    "info": "",
+    "samples": 20634,
+    "input_shape": [
+        8
+    ],
+    "split": {
+        "train": "70.00%: 14443",
+        "val": "15.00%: 3095",
+        "test": "15.00%: 3096"
+    }
+}

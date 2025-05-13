@@ -1,0 +1,16 @@
+{
+    "name": "clf_num_house_16H",
+    "link": "",
+    "type": "classification",
+    "output_size": 2,
+    "info": "",
+    "samples": 13488,
+    "input_shape": [
+        16
+    ],
+    "split": {
+        "train": "70.00%: 9441",
+        "val": "15.00%: 2023",
+        "test": "15.00%: 2024"
+    }
+}

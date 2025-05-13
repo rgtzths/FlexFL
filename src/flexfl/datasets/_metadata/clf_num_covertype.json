@@ -1,0 +1,16 @@
+{
+    "name": "clf_num_covertype",
+    "link": "",
+    "type": "classification",
+    "output_size": 2,
+    "info": "",
+    "samples": 566602,
+    "input_shape": [
+        10
+    ],
+    "split": {
+        "train": "70.00%: 396621",
+        "val": "15.00%: 84990",
+        "test": "15.00%: 84991"
+    }
+}

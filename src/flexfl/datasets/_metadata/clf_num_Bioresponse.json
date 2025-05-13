@@ -1,0 +1,16 @@
+{
+    "name": "clf_num_Bioresponse",
+    "link": "",
+    "type": "classification",
+    "output_size": 2,
+    "info": "",
+    "samples": 3434,
+    "input_shape": [
+        419
+    ],
+    "split": {
+        "train": "70.00%: 2403",
+        "val": "15.00%: 515",
+        "test": "15.00%: 516"
+    }
+}

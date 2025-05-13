@@ -1,0 +1,16 @@
+{
+    "name": "clf_num_MiniBooNE",
+    "link": "",
+    "type": "classification",
+    "output_size": 2,
+    "info": "",
+    "samples": 72998,
+    "input_shape": [
+        50
+    ],
+    "split": {
+        "train": "70.00%: 51098",
+        "val": "15.00%: 10950",
+        "test": "15.00%: 10950"
+    }
+}

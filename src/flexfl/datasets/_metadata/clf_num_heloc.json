@@ -1,0 +1,16 @@
+{
+    "name": "clf_num_heloc",
+    "link": "",
+    "type": "classification",
+    "output_size": 2,
+    "info": "",
+    "samples": 10000,
+    "input_shape": [
+        22
+    ],
+    "split": {
+        "train": "70.00%: 7000",
+        "val": "15.00%: 1500",
+        "test": "15.00%: 1500"
+    }
+}

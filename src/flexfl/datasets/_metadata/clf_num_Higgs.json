@@ -1,0 +1,16 @@
+{
+    "name": "clf_num_Higgs",
+    "link": "",
+    "type": "classification",
+    "output_size": 2,
+    "info": "",
+    "samples": 940160,
+    "input_shape": [
+        24
+    ],
+    "split": {
+        "train": "70.00%: 658112",
+        "val": "15.00%: 141024",
+        "test": "15.00%: 141024"
+    }
+}

@@ -1,0 +1,16 @@
+{
+    "name": "clf_num_credit",
+    "link": "",
+    "type": "classification",
+    "output_size": 2,
+    "info": "",
+    "samples": 16714,
+    "input_shape": [
+        10
+    ],
+    "split": {
+        "train": "70.00%: 11699",
+        "val": "15.00%: 2507",
+        "test": "15.00%: 2508"
+    }
+}

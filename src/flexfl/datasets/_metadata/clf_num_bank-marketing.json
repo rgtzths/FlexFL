@@ -1,0 +1,16 @@
+{
+    "name": "clf_num_bank-marketing",
+    "link": "",
+    "type": "classification",
+    "output_size": 2,
+    "info": "",
+    "samples": 10578,
+    "input_shape": [
+        7
+    ],
+    "split": {
+        "train": "70.00%: 7404",
+        "val": "15.00%: 1587",
+        "test": "15.00%: 1587"
+    }
+}
