@@ -1,0 +1,16 @@
+{
+    "name": "reg_num_MiamiHousing2016",
+    "link": "",
+    "type": "regression",
+    "output_size": 1,
+    "info": "",
+    "samples": 13932,
+    "input_shape": [
+        13
+    ],
+    "split": {
+        "train": "70.00%: 9752",
+        "val": "15.00%: 2090",
+        "test": "15.00%: 2090"
+    }
+}

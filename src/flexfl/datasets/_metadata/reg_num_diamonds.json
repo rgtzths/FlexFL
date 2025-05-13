@@ -1,0 +1,16 @@
+{
+    "name": "reg_num_diamonds",
+    "link": "",
+    "type": "regression",
+    "output_size": 1,
+    "info": "",
+    "samples": 53940,
+    "input_shape": [
+        6
+    ],
+    "split": {
+        "train": "70.00%: 37758",
+        "val": "15.00%: 8091",
+        "test": "15.00%: 8091"
+    }
+}

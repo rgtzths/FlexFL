@@ -1,0 +1,16 @@
+{
+    "name": "reg_cat_nyc-taxi-green-dec-2016",
+    "link": "",
+    "type": "regression",
+    "output_size": 1,
+    "info": "",
+    "samples": 581835,
+    "input_shape": [
+        16
+    ],
+    "split": {
+        "train": "70.00%: 407284",
+        "val": "15.00%: 87275",
+        "test": "15.00%: 87276"
+    }
+}

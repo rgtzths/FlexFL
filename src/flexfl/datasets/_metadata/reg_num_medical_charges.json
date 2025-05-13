@@ -1,0 +1,16 @@
+{
+    "name": "reg_num_medical_charges",
+    "link": "",
+    "type": "regression",
+    "output_size": 1,
+    "info": "",
+    "samples": 163065,
+    "input_shape": [
+        3
+    ],
+    "split": {
+        "train": "70.00%: 114145",
+        "val": "15.00%: 24460",
+        "test": "15.00%: 24460"
+    }
+}

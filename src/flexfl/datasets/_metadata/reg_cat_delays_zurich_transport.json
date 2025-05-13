@@ -1,0 +1,16 @@
+{
+    "name": "reg_cat_delays_zurich_transport",
+    "link": "",
+    "type": "regression",
+    "output_size": 1,
+    "info": "",
+    "samples": 5465575,
+    "input_shape": [
+        11
+    ],
+    "split": {
+        "train": "70.00%: 3825902",
+        "val": "15.00%: 819836",
+        "test": "15.00%: 819837"
+    }
+}

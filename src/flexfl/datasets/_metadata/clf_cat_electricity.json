@@ -1,0 +1,16 @@
+{
+    "name": "clf_cat_electricity",
+    "link": "",
+    "type": "classification",
+    "output_size": 2,
+    "info": "",
+    "samples": 38474,
+    "input_shape": [
+        8
+    ],
+    "split": {
+        "train": "70.00%: 26931",
+        "val": "15.00%: 5771",
+        "test": "15.00%: 5772"
+    }
+}

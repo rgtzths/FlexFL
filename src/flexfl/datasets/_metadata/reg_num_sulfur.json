@@ -1,0 +1,16 @@
+{
+    "name": "reg_num_sulfur",
+    "link": "",
+    "type": "regression",
+    "output_size": 1,
+    "info": "",
+    "samples": 10081,
+    "input_shape": [
+        6
+    ],
+    "split": {
+        "train": "70.00%: 7056",
+        "val": "15.00%: 1512",
+        "test": "15.00%: 1513"
+    }
+}

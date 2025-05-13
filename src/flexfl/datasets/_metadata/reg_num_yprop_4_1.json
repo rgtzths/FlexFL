@@ -1,0 +1,16 @@
+{
+    "name": "reg_num_yprop_4_1",
+    "link": "",
+    "type": "regression",
+    "output_size": 1,
+    "info": "",
+    "samples": 8885,
+    "input_shape": [
+        42
+    ],
+    "split": {
+        "train": "70.00%: 6219",
+        "val": "15.00%: 1333",
+        "test": "15.00%: 1333"
+    }
+}

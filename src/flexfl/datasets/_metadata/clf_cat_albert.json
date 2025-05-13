@@ -1,0 +1,16 @@
+{
+    "name": "clf_cat_albert",
+    "link": "",
+    "type": "classification",
+    "output_size": 2,
+    "info": "",
+    "samples": 58252,
+    "input_shape": [
+        31
+    ],
+    "split": {
+        "train": "70.00%: 40776",
+        "val": "15.00%: 8738",
+        "test": "15.00%: 8738"
+    }
+}

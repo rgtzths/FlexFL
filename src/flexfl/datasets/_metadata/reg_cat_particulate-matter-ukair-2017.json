@@ -1,0 +1,16 @@
+{
+    "name": "reg_cat_particulate-matter-ukair-2017",
+    "link": "",
+    "type": "regression",
+    "output_size": 1,
+    "info": "",
+    "samples": 394299,
+    "input_shape": [
+        6
+    ],
+    "split": {
+        "train": "70.00%: 276009",
+        "val": "15.00%: 59145",
+        "test": "15.00%: 59145"
+    }
+}

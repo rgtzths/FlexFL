@@ -3,7 +3,7 @@ keys
 .ruff_cache
 
 paper/**
-
+results/*
 results/**/*.jsonl
 results/**/*.csv
 

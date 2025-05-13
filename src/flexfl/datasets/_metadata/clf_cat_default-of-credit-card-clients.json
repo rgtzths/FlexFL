@@ -1,0 +1,16 @@
+{
+    "name": "clf_cat_default-of-credit-card-clients",
+    "link": "",
+    "type": "classification",
+    "output_size": 2,
+    "info": "",
+    "samples": 13272,
+    "input_shape": [
+        21
+    ],
+    "split": {
+        "train": "70.00%: 9290",
+        "val": "15.00%: 1991",
+        "test": "15.00%: 1991"
+    }
+}

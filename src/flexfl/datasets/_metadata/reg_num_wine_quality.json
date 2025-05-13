@@ -1,0 +1,16 @@
+{
+    "name": "reg_num_wine_quality",
+    "link": "",
+    "type": "regression",
+    "output_size": 1,
+    "info": "",
+    "samples": 6497,
+    "input_shape": [
+        11
+    ],
+    "split": {
+        "train": "70.00%: 4547",
+        "val": "15.00%: 975",
+        "test": "15.00%: 975"
+    }
+}

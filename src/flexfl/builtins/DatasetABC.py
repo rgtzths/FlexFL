@@ -101,8 +101,8 @@ class DatasetABC(ABC):
 
 
     def load_data(self, split, loader = None):
-        x: np.ndarray = np.load(f'{self.data_path}/x_{split}.npy')
-        y: np.ndarray = np.load(f'{self.data_path}/y_{split}.npy')
+        x: np.ndarray = np.load(f'{self.data_path}/x_{split}.npy', allow_pickle=True)
+        y: np.ndarray = np.load(f'{self.data_path}/y_{split}.npy', allow_pickle=True)
         if loader == "tf":
             import tensorflow as tf
             x = tf.data.Dataset.from_tensor_slices(x)

@@ -1,0 +1,16 @@
+{
+    "name": "reg_num_house_sales",
+    "link": "",
+    "type": "regression",
+    "output_size": 1,
+    "info": "",
+    "samples": 21613,
+    "input_shape": [
+        15
+    ],
+    "split": {
+        "train": "70.00%: 15129",
+        "val": "15.00%: 3242",
+        "test": "15.00%: 3242"
+    }
+}

@@ -1,0 +1,16 @@
+{
+    "name": "reg_num_abalone",
+    "link": "",
+    "type": "regression",
+    "output_size": 1,
+    "info": "",
+    "samples": 4177,
+    "input_shape": [
+        7
+    ],
+    "split": {
+        "train": "70.00%: 2923",
+        "val": "15.00%: 627",
+        "test": "15.00%: 627"
+    }
+}

@@ -1,11 +1,11 @@
 import optuna
 import tensorflow as tf
-from datasets import load_dataset
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
 import numpy as np
 import json
 from pathlib import Path
+from flexfl.datasets.Benchmark import Benchmark
+
+import os
 
 BATCHSIZE = 256
 
@@ -50,7 +50,6 @@ def create_optimizer(trial):
 
 
 def learn(model, optimizer, loss_fn, eval_fn, dataset, mode="eval"):
-
     for _, (samples, labels) in enumerate(dataset):
         with tf.GradientTape() as tape:
             logits = model(samples, training=(mode == "train"))
@@ -66,37 +65,27 @@ def learn(model, optimizer, loss_fn, eval_fn, dataset, mode="eval"):
 
 
 def get_dataset(name):
-    ds = load_dataset("inria-soda/tabular-benchmark", name)["train"].to_pandas().values
-    x = ds[:,:-1]
-    y = ds[:,-1]
-    if "clf" in name:
-            le = LabelEncoder()
-            y = le.fit_transform(y)
-            y = tf.keras.utils.to_categorical(y)
-            n_classes = y.shape[1]
-    else:
-        n_classes = 1
-
-    x_train, x_valid, y_train, y_valid = train_test_split(
-            x, y, 
-            test_size=0.25,
-            random_state=42, 
-            shuffle=True
-        )
     
-    x_train = x_train.astype("float32")
-    x_valid = x_valid.astype("float32")
+    ds = Benchmark(data_name=name)
+    try:
+        x_train, y_train = ds.load_data("train")
+        x_val, y_val = ds.load_data("val")
+    except:
+        ds.preprocess(0.15, 0.15)
+        x_train, y_train = ds.load_data("train")
+        x_val, y_val = ds.load_data("val")
 
-    y_train = y_train.astype("int32")
-    y_valid = y_valid.astype("int32")
+    if "clf" in name:
+        y_train = tf.keras.utils.to_categorical(y_train, num_classes=ds.metadata["output_size"])
+        y_val = tf.keras.utils.to_categorical(y_val, num_classes=ds.metadata["output_size"])
 
     train_ds = tf.data.Dataset.from_tensor_slices((x_train, y_train))
     train_ds = train_ds.shuffle(x_train.shape[0]).batch(BATCHSIZE)
 
-    valid_ds = tf.data.Dataset.from_tensor_slices((x_valid, y_valid))
-    valid_ds = valid_ds.shuffle(x_valid.shape[0]).batch(BATCHSIZE)
+    val_ds = tf.data.Dataset.from_tensor_slices((x_val, y_val))
+    val_ds = val_ds.shuffle(x_val.shape[0]).batch(BATCHSIZE)
 
-    return train_ds, valid_ds, n_classes
+    return train_ds, val_ds, ds.metadata["output_size"]
 
 
 # FYI: Objective functions can take additional arguments
@@ -124,29 +113,31 @@ def objective(trial, dataset_name, epochs):
 
 if __name__ == "__main__":
     datasets_info = json.load(open("datasets.json"))
-    epochs = 200
-    trials = 100
+    epochs = 1
+    trials = 1
     result_folder = "results/hyperparameter_optimization/"
     result_folder = Path(result_folder)
     result_folder.mkdir(parents=True, exist_ok=True)
 
 
-    for d in datasets_info["splits"]:                   
-        result_file = result_folder / f"{d['config']}.json"
-        study = optuna.create_study(direction="maximize") if "clf" in d["config"] else optuna.create_study(direction="minimize")
+    for dataset in datasets_info["splits"]:    
+        print(dataset['config'])
+        if dataset["config"] not in ["clf_cat_electricity"]:
+            result_file = result_folder / f"{dataset['config']}.json"
+            study = optuna.create_study(direction="maximize") if "clf" in dataset["config"] else optuna.create_study(direction="minimize")
 
-        study.optimize(lambda trial: objective(trial, d["config"], epochs), n_trials=trials)
+            study.optimize(lambda trial: objective(trial, dataset["config"], epochs), n_trials=trials)
 
-        print("Number of finished trials: ", len(study.trials))
+            print("Number of finished trials: ", len(study.trials))
 
-        print("Best trial:")
-        trial = study.best_trial
+            print("Best trial:")
+            trial = study.best_trial
 
-        print("  Value: ", trial.value)
+            print("  Value: ", trial.value)
 
-        print("  Params: ")
-        for key, value in trial.params.items():
-            print("    {}: {}".format(key, value))
-        json.dump(trial.params, open(result_file, "w"), indent=2)
+            print("  Params: ")
+            for key, value in trial.params.items():
+                print("    {}: {}".format(key, value))
+            json.dump(trial.params, open(result_file, "w"), indent=2)
 
-        
+            

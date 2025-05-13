@@ -1,0 +1,16 @@
+{
+    "name": "reg_num_cpu_act",
+    "link": "",
+    "type": "regression",
+    "output_size": 1,
+    "info": "",
+    "samples": 8192,
+    "input_shape": [
+        21
+    ],
+    "split": {
+        "train": "70.00%: 5734",
+        "val": "15.00%: 1229",
+        "test": "15.00%: 1229"
+    }
+}

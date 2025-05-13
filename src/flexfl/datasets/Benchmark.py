@@ -1,4 +1,3 @@
-from sklearn.preprocessing import StandardScaler
 from flexfl.builtins.DatasetABC import DatasetABC
 from datasets import load_dataset
 from sklearn.preprocessing import LabelEncoder
@@ -11,12 +10,13 @@ class MyScaler:
     def transform(self, x):
         return x
 
-class Benchnmark(DatasetABC):
+class Benchmark(DatasetABC):
 
     def __init__(self, *, data_name:str = "clf_cat_albert", data_folder:str = None, **kwargs):
-        super().__init__(data_name = "clf_cat_albert", data_folder=data_folder, **kwargs)
-
         self.class_task = True if "clf" in data_name else False
+
+        super().__init__(data_name = data_name, data_folder=data_folder, **kwargs)
+
 
     @property
     def is_classification(self) -> bool:

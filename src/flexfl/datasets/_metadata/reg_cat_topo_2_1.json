@@ -1,0 +1,16 @@
+{
+    "name": "reg_cat_topo_2_1",
+    "link": "",
+    "type": "regression",
+    "output_size": 1,
+    "info": "",
+    "samples": 8885,
+    "input_shape": [
+        255
+    ],
+    "split": {
+        "train": "70.00%: 6219",
+        "val": "15.00%: 1333",
+        "test": "15.00%: 1333"
+    }
+}

@@ -1,0 +1,16 @@
+{
+    "name": "reg_num_elevators",
+    "link": "",
+    "type": "regression",
+    "output_size": 1,
+    "info": "",
+    "samples": 16599,
+    "input_shape": [
+        16
+    ],
+    "split": {
+        "train": "70.00%: 11619",
+        "val": "15.00%: 2490",
+        "test": "15.00%: 2490"
+    }
+}
