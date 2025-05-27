@@ -2,6 +2,7 @@
 
 VM_LIST="scripts/ips.txt"
 
+sudo swapoff -a
 sudo apt update -y &&
 sudo dpkg --configure -a &&
 sudo apt upgrade -y &&
