@@ -6,6 +6,7 @@ paper/**
 results/*
 results/**/*.jsonl
 results/**/*.csv
+results/**/*.keras
 
 !.gitkeep
 
