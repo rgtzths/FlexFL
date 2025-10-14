@@ -87,9 +87,6 @@ def get_dataset(name):
 
     return train_ds, val_ds, ds.metadata["output_size"]
 
-
-# FYI: Objective functions can take additional arguments
-# (https://optuna.readthedocs.io/en/stable/faq.html#objective-func-additional-args).
 def objective(trial, dataset_name, epochs):
 
     train_ds, valid_ds, n_classes = get_dataset(dataset_name)
@@ -122,22 +119,21 @@ if __name__ == "__main__":
 
     for dataset in datasets_info["splits"]:    
         print(dataset['config'])
-        if dataset["config"] not in ["clf_cat_electricity", "clf_num_MagicTelescope", "clf_num_MiniBooNE", "clf_num_electricity", "clf_num_house_16H", "clf_num_pol"]:
-            result_file = result_folder / f"{dataset['config']}.json"
-            
-            study = optuna.create_study(direction="maximize") if "clf" in dataset["config"] else optuna.create_study(direction="minimize")
-            study.optimize(lambda trial: objective(trial, dataset["config"], epochs), n_trials=trials)
+        result_file = result_folder / f"{dataset['config']}.json"
+        
+        study = optuna.create_study(direction="maximize") if "clf" in dataset["config"] else optuna.create_study(direction="minimize")
+        study.optimize(lambda trial: objective(trial, dataset["config"], epochs), n_trials=trials)
 
-            print("Number of finished trials: ", len(study.trials))
+        print("Number of finished trials: ", len(study.trials))
 
-            print("Best trial:")
-            trial = study.best_trial
+        print("Best trial:")
+        trial = study.best_trial
 
-            print("  Value: ", trial.value)
+        print("  Value: ", trial.value)
 
-            print("  Params: ")
-            for key, value in trial.params.items():
-                print("    {}: {}".format(key, value))
-            json.dump(trial.params, open(result_file, "w"), indent=2)
+        print("  Params: ")
+        for key, value in trial.params.items():
+            print("    {}: {}".format(key, value))
+        json.dump(trial.params, open(result_file, "w"), indent=2)
 
             
