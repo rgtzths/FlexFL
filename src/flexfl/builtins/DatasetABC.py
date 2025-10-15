@@ -2,12 +2,13 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 import json
 import numpy as np
+import pandas as pd
 from sklearn.model_selection import train_test_split
 from typing import Any
 import wget
 import zipfile
 import os
-
+import random
 
 METADATA_FOLDER = Path(__file__).parent.parent / "datasets/_metadata"
 DATA_FOLDER = "data"
@@ -157,13 +158,14 @@ class DatasetABC(ABC):
         self.save_metadata()
     
 
-    def data_division(self, num_workers, val_size = 0, test_size = 0):
+    def data_division(self, num_workers, val_size = 0, test_size = 0, distribution='iid', distribution_percentage=0.9):
         for folder in  Path(self.base_path).glob('node_*'):
             for file in folder.glob('*'):
                 file.unlink()
             folder.rmdir()
         self.division_master()
-        x, y = self.division_iid(num_workers)
+
+        x, y = self.division_iid(num_workers) if distribution == "iid" else self.division_non_iid(num_workers, distribution_percentage)
         for i in range(num_workers):
             self.division_worker(x[i], y[i], i+1, val_size, test_size)
 
@@ -183,6 +185,115 @@ class DatasetABC(ABC):
         x = np.array_split(x, num_workers)
         y = np.array_split(y, num_workers)
         return x, y
+    
+    def division_non_iid(self, num_workers, distribution_percentage):
+        self.data_path = self.default_folder
+        x, y = self.load_data('train')
+        if self.metadata["type"] == "classification":
+            classes = list(np.unique(y))
+        else:
+            bins = np.histogram_bin_edges(y, bins="auto")
+            # remove the last index (end point)
+            bins[-1] += 1
+            classes = [(bins[x], bins[x+1]) for x in range(len(bins)-1)]
+
+            remove_classes = []
+            for classe in classes:
+                indx = np.where( (y >= classe[0]) & (y < classe[1]))[0]
+                if len(indx) == 0:
+                    remove_classes.append(1)
+                else:
+                    remove_classes.append(0)
+
+            updated_classes = []
+            for idx, class_to_remove in enumerate(remove_classes):
+                if class_to_remove:
+                    updated_classes[-1] = (updated_classes[-1][0], classes[idx][1])
+                else:
+                    updated_classes.append(classes[idx])
+
+            classes = updated_classes
+            
+        workers = list(range(num_workers))
+        workers_x = [0]*num_workers
+        workers_y = [0]*num_workers
+
+        if num_workers > len(classes):
+            counts = [1]*len(classes)
+            for i in range(num_workers-len(classes)):
+                idx = i % len(counts)
+                counts[idx] += 1
+            
+            dist = random.sample(classes, k=num_workers, counts=counts)
+        else:
+            counts = [1]*num_workers
+            for i in range(len(classes)-num_workers):
+                idx = i % num_workers
+                counts[idx] += 1
+            
+            dist = random.sample(workers, k=len(classes), counts=counts)
+            temp_dist = [0]*num_workers
+
+            for idx, c in enumerate(classes):
+                if temp_dist[dist[idx]] == 0:
+                    temp_dist[dist[idx]] = {c}
+                else:
+                    temp_dist[dist[idx]].add(c)
+            dist = temp_dist
+
+        for idx, c in enumerate(classes):
+            indexes = np.where(y == c)[0] if self.metadata["type"] == "classificaiton" else np.where( (y >= c[0]) & (y < c[1]))[0]
+
+            in_class = indexes[:int(len(indexes)*distribution_percentage)]
+            out_class = indexes[int(len(indexes)*distribution_percentage):]
+            in_count = 0
+            out_count = 0
+
+            if num_workers > len(classes):
+                in_subset_size = len(in_class) // counts[idx]
+                out_subset_size = len(out_class) // (num_workers - counts[idx])
+
+            else:
+                out_subset_size =  len(out_class) // (num_workers - 1)
+
+            for worker in workers:
+                if num_workers > len(classes):
+                    if dist[worker] == c:
+                        worker_x_values = x[in_class] if counts[idx] == 1 else \
+                                x[in_class[in_count*in_subset_size:in_count*in_subset_size + in_subset_size]]
+                        worker_y_values = y[in_class] if counts[idx] == 1 else \
+                                y[in_class[in_count*in_subset_size:in_count*in_subset_size + in_subset_size]]
+
+                        in_count += 1
+                    else:
+                        worker_x_values = x[out_class] if num_workers-counts[idx] == 1 else \
+                                x[out_class[out_count*out_subset_size:out_count*out_subset_size + out_subset_size]]
+                        
+                        worker_y_values = y[out_class] if num_workers-counts[idx] == 1 else \
+                                y[out_class[out_count*out_subset_size:out_count*out_subset_size + out_subset_size]]
+                        out_count += 1
+                else:
+                    if c in dist[worker]:
+                        worker_x_values = x[in_class]
+                        worker_y_values = y[in_class]
+                    else:
+                        worker_x_values = x[out_class[out_count*out_subset_size:out_count*out_subset_size + out_subset_size]]
+                        worker_y_values = y[out_class[out_count*out_subset_size:out_count*out_subset_size + out_subset_size]]
+
+                        out_count += 1
+
+                if type(workers_x[worker]) == int:
+                    workers_x[worker] = [worker_x_values]
+                    workers_y[worker] = [worker_y_values]
+                else:
+                    workers_x[worker].append(worker_x_values)
+                    workers_y[worker].append(worker_y_values)
+
+        for worker in workers:
+            workers_x[worker] = np.concatenate(workers_x[worker], axis=0)
+            workers_y[worker] = np.concatenate(workers_y[worker], axis=0)
+
+        return workers_x, workers_y
     
 
     def division_worker(self, x, y, worker_id, val_size, test_size):
