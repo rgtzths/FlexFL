@@ -1,54 +1,64 @@
 #!/bin/bash
 
-if [ $# -eq 0 ]; then
-    echo "Usage: $0 [-v] [-w] [-f] <command>"
-    echo "  -v: verbose mode"
-    echo "  -w: run command only on workers (skip first line of ips.txt)"
-    echo "  -f: run a script file on the VMs"
-    echo "  use options by order: -v -w -f"
-    exit 1
-fi
-
-# Load environment variables from .env file
 export $(grep -v '^#' .env | xargs)
 
-VM_LIST="scripts/ips.txt" # needs to end in empty line
-VM_LIST="vms/ips.txt"
 USERNAME=$VM_USERNAME
 PASSWORD=$VM_PASSWORD
 ARGS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q"
 VERBOSE=0
 ONLY_WORKERS=0
+RUN_FILE=0
+VM_LIST="scripts/ips.txt"
 
-if [ "$1" == "-v" ]; then
-    VERBOSE=1
-    shift
+usage() {
+    echo "Usage: $0 [-v] [-w] [-i <ips_file>] [-f <script_file>] <command>" >&2
+    echo "  -v: verbose mode" >&2
+    echo "  -w: run command only on workers (skip first IP)" >&2
+    echo "  -i: path to IPs file (default: scripts/ips.txt)" >&2
+    echo "  -f: run a local script file on the VMs" >&2
+}
+
+while getopts ":vwi:f:" opt; do
+    case "$opt" in
+        v) VERBOSE=1 ;;
+        w) ONLY_WORKERS=1 ;;
+        i) VM_LIST="$OPTARG" ;;
+        f) RUN_FILE=1; FILE="$OPTARG" ;;
+        *)
+            usage
+            exit 1
+            ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+if [ $# -eq 0 ] && [ $RUN_FILE -eq 0 ]; then
+    usage
+    exit 1
 fi
-if [ "$1" == "-w" ]; then
-    ONLY_WORKERS=1
-    shift
-fi
+
 COMMAND=$@
 
-RUN_FILE=0
-if [ "$1" == "-f" ]; then
-    FILE=$2
-    RUN_FILE=1
-    shift 2
-    COMMAND="sudo bash /tmp/$FILE $@"
+if [ $RUN_FILE -eq 1 ]; then
     if [ ! -f "$FILE" ]; then
         echo "Error: File $FILE not found."
         exit 1
     fi
+    COMMAND="sudo bash /tmp/$FILE"
+fi
+
+if [ ! -f "$VM_LIST" ]; then
+    echo "Error: VM list file '$VM_LIST' not found!"
+    exit 1
 fi
 
 echo "Command to execute: $COMMAND"
 
+read -r MASTER_IP < "$VM_LIST"
+
 function run_command {
     local IP=$1
     if [ $RUN_FILE -eq 1 ]; then
-        sshpass -p "$PASSWORD" scp $ARGS "$VM_LIST" "$USERNAME@$IP:~/$VM_LIST"
-        sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "mkdir -p /tmp/scripts"
         sshpass -p "$PASSWORD" scp $ARGS "$FILE" "$USERNAME@$IP:/tmp/$FILE"
     fi
     if [ $VERBOSE -eq 0 ]; then
@@ -63,13 +73,11 @@ function run_command {
     fi
 }
 
-read -r MASTER_IP < "$VM_LIST"
-
 while read -r IP; do
-    if [ $ONLY_WORKERS -eq 1 ] && [ "$IP" == "$MASTER_IP" ]; then
+    if [[ -z "$IP" || "$IP" =~ ^# ]]; then
         continue
     fi
-    if [[ -z "$IP" || "$IP" =~ ^# ]]; then
+    if [ $ONLY_WORKERS -eq 1 ] && [ "$IP" == "$MASTER_IP" ]; then
         continue
     fi
     run_command "$IP" &

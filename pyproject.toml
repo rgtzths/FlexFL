@@ -24,6 +24,7 @@ dependencies = [
     "wget>=3.2",
     "datasets",
     "optuna",
+    "tqdm>=4.67.1",
 ]
 
 

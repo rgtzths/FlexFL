@@ -14,4 +14,4 @@
 
 #If there is only one script/value combination to run, remove the (#SBATCH --array=0-5)
 #And run something like
-srun uv run python model_finder/model_finder.py
+srun uv run python src/other/model_finder.py

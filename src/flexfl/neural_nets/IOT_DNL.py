@@ -2,7 +2,7 @@ from flexfl.builtins.NeuralNetworkABC import NeuralNetworkABC
 
 class IOT_DNL(NeuralNetworkABC):
 
-    def keras_model(self, input_shape, output_size, is_classification):
+    def keras_model(self, data_name, input_shape, output_size, is_classification):
         import keras
         layers = [
             keras.layers.Input(shape=input_shape),
@@ -20,7 +20,7 @@ class IOT_DNL(NeuralNetworkABC):
         return keras.models.Sequential(layers)
 
         
-    def tf_model(self, input_shape, output_size, is_classification):
+    def tf_model(self, data_name, input_shape, output_size, is_classification):
         import tensorflow as tf
         layers = [
             tf.keras.layers.Input(shape=input_shape),
@@ -38,7 +38,7 @@ class IOT_DNL(NeuralNetworkABC):
         return tf.keras.models.Sequential(layers)
     
 
-    def torch_model(self, input_shape, output_size, is_classification):
+    def torch_model(self, data_name, input_shape, output_size, is_classification):
         import torch.nn as nn
         layers = [
             nn.Linear(input_shape[0], 64),

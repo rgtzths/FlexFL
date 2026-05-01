@@ -1,17 +1,32 @@
 #!/bin/bash
 
-# Load environment variables from .env file
 export $(grep -v '^#' .env | xargs)
 
-VM_LIST="scripts/ips.txt" # needs to end in empty line
-VM_LIST="vms/ips.txt"
 USERNAME=$VM_USERNAME
 PASSWORD=$VM_PASSWORD
 ARGS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q"
-DATASET=$1
 
-if [ -z "$DATASET" ]; then
-    echo "Usage: $0 <dataset>"
+usage() {
+    echo "Usage: $0 -d <dataset> [-f <ips_file>]" >&2
+    echo "Example: $0 -d clf_num_bank-marketing -f scripts/ips.txt" >&2
+}
+
+DATASET=""
+VM_LIST="scripts/ips.txt"
+
+while getopts ":d:f:" opt; do
+    case "$opt" in
+        d) DATASET="$OPTARG" ;;
+        f) VM_LIST="$OPTARG" ;;
+        *)
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+if [[ -z "$DATASET" ]]; then
+    usage
     exit 1
 fi
 
@@ -50,4 +65,3 @@ while read -r IP; do
 done < "$VM_LIST"
 wait
 echo "Dataset setup completed!"
-

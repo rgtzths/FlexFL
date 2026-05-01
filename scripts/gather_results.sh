@@ -1,23 +1,41 @@
 #!/bin/bash
 
-# Load environment variables from .env file
 export $(grep -v '^#' .env | xargs)
 
-VM_LIST="scripts/ips.txt" # needs to end in empty line
-VM_LIST="vms/ips.txt"
 USERNAME=$VM_USERNAME
 PASSWORD=$VM_PASSWORD
 ARGS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q"
+
+usage() {
+    echo "Usage: $0 [-f <ips_file>] [-o <output_dir>]" >&2
+    echo "Example: $0 -f scripts/ips.txt -o results/2_4_8/clf_num_bank-marketing/CentralizedSync" >&2
+}
+
+VM_LIST="scripts/ips.txt"
+OUTPUT_DIR="."
+
+while getopts ":f:o:" opt; do
+    case "$opt" in
+        f) VM_LIST="$OPTARG" ;;
+        o) OUTPUT_DIR="$OPTARG" ;;
+        *)
+            usage
+            exit 1
+            ;;
+    esac
+done
 
 if [ ! -f "$VM_LIST" ]; then
     echo "Error: VM list file '$VM_LIST' not found!"
     exit 1
 fi
 
+mkdir -p "$OUTPUT_DIR"
+
 function copy_results {
     local IP=$1
     echo "Copying results from $IP..."
-    sshpass -p "$PASSWORD" scp $ARGS -r "$USERNAME@$IP:~/flexfl/results" "."
+    sshpass -p "$PASSWORD" scp $ARGS -r "$USERNAME@$IP:~/flexfl/results/." "$OUTPUT_DIR/"
     if [ $? -eq 0 ]; then
         echo "Results copied from $IP successfully!"
     else
@@ -33,6 +51,3 @@ while read -r IP; do
 done < "$VM_LIST"
 wait
 echo "Results copying completed!"
-
-# echo "Cleaning remote files..."
-# bash scripts/run_commands.sh "rm -rf flexfl/results" > /dev/null 2>&1

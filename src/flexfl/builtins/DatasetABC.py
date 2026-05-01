@@ -27,7 +27,7 @@ class DatasetABC(ABC):
         self.output_size = 1
         if data_folder is not None:
             self.data_path = f"{self.base_path}/{data_folder}"
-        elif env_folder := os.getenv('DATA_FOLDER') is not None:
+        elif (env_folder := os.getenv('DATA_FOLDER')) is not None:
             self.data_path = f"{self.base_path}/{env_folder}"
         else:
             self.data_path = self.default_folder
@@ -158,14 +158,19 @@ class DatasetABC(ABC):
         self.save_metadata()
     
 
-    def data_division(self, num_workers, val_size = 0, test_size = 0, distribution='iid', distribution_percentage=0.9):
+    def data_division(self, num_workers, val_size = 0, test_size = 0, distribution='iid', distribution_percentage=0.9, alpha=0.5):
         for folder in  Path(self.base_path).glob('node_*'):
             for file in folder.glob('*'):
                 file.unlink()
             folder.rmdir()
         self.division_master()
 
-        x, y = self.division_iid(num_workers) if distribution == "iid" else self.division_non_iid(num_workers, distribution_percentage)
+        if distribution == "iid":
+            x, y = self.division_iid(num_workers)
+        elif distribution == "dirichlet":
+            x, y = self.division_non_iid_dirichlet(num_workers, alpha)
+        else:
+            x, y = self.division_non_iid(num_workers, distribution_percentage)
         for i in range(num_workers):
             self.division_worker(x[i], y[i], i+1, val_size, test_size)
 
@@ -206,11 +211,17 @@ class DatasetABC(ABC):
                     remove_classes.append(0)
 
             updated_classes = []
+            pending_start = None
             for idx, class_to_remove in enumerate(remove_classes):
                 if class_to_remove:
-                    updated_classes[-1] = (updated_classes[-1][0], classes[idx][1])
+                    if updated_classes:
+                        updated_classes[-1] = (updated_classes[-1][0], classes[idx][1])
+                    else:
+                        pending_start = classes[idx][0]
                 else:
-                    updated_classes.append(classes[idx])
+                    start = pending_start if pending_start is not None else classes[idx][0]
+                    updated_classes.append((start, classes[idx][1]))
+                    pending_start = None
 
             classes = updated_classes
             
@@ -242,7 +253,7 @@ class DatasetABC(ABC):
             dist = temp_dist
 
         for idx, c in enumerate(classes):
-            indexes = np.where(y == c)[0] if self.metadata["type"] == "classificaiton" else np.where( (y >= c[0]) & (y < c[1]))[0]
+            indexes = np.where(y == c)[0] if self.metadata["type"] == "classification" else np.where( (y >= c[0]) & (y < c[1]))[0]
 
             in_class = indexes[:int(len(indexes)*distribution_percentage)]
             out_class = indexes[int(len(indexes)*distribution_percentage):]
@@ -294,7 +305,68 @@ class DatasetABC(ABC):
             workers_y[worker] = np.concatenate(workers_y[worker], axis=0)
 
         return workers_x, workers_y
-    
+
+
+    def division_non_iid_dirichlet(self, num_workers, alpha=0.5, seed=42):
+        self.data_path = self.default_folder
+        x, y = self.load_data('train')
+        rng = np.random.default_rng(seed)
+
+        if self.metadata["type"] == "classification":
+            classes = list(np.unique(y))
+            def get_indexes(c):
+                return np.where(y == c)[0]
+        else:
+            bins = np.histogram_bin_edges(y, bins="auto")
+            bins[-1] += 1
+            classes = [(bins[i], bins[i + 1]) for i in range(len(bins) - 1)]
+
+            remove_classes = [
+                1 if len(np.where((y >= c[0]) & (y < c[1]))[0]) == 0 else 0
+                for c in classes
+            ]
+            updated_classes = []
+            pending_start = None
+            for idx, class_to_remove in enumerate(remove_classes):
+                if class_to_remove:
+                    if updated_classes:
+                        updated_classes[-1] = (updated_classes[-1][0], classes[idx][1])
+                    else:
+                        pending_start = classes[idx][0]
+                else:
+                    start = pending_start if pending_start is not None else classes[idx][0]
+                    updated_classes.append((start, classes[idx][1]))
+                    pending_start = None
+            classes = updated_classes
+
+            def get_indexes(c):
+                return np.where((y >= c[0]) & (y < c[1]))[0]
+
+        workers_x = [[] for _ in range(num_workers)]
+        workers_y = [[] for _ in range(num_workers)]
+
+        for c in classes:
+            indexes = get_indexes(c)
+            if len(indexes) == 0:
+                continue
+            rng.shuffle(indexes)
+            proportions = rng.dirichlet([alpha] * num_workers)
+            splits = (np.cumsum(proportions[:-1]) * len(indexes)).astype(int)
+            for worker, worker_indexes in enumerate(np.split(indexes, splits)):
+                if len(worker_indexes) > 0:
+                    workers_x[worker].append(x[worker_indexes])
+                    workers_y[worker].append(y[worker_indexes])
+
+        for worker in range(num_workers):
+            if workers_x[worker]:
+                workers_x[worker] = np.concatenate(workers_x[worker], axis=0)
+                workers_y[worker] = np.concatenate(workers_y[worker], axis=0)
+            else:
+                workers_x[worker] = np.empty((0, *x.shape[1:]), dtype=x.dtype)
+                workers_y[worker] = np.empty((0, *y.shape[1:]), dtype=y.dtype)
+
+        return workers_x, workers_y
+
 
     def division_worker(self, x, y, worker_id, val_size, test_size):
         x_train, y_train, x_val, y_val, x_test, y_test = self.split_data(x, y, val_size, test_size)

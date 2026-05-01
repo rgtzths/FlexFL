@@ -16,4 +16,4 @@ class NeuralNetworkABC(ABC):
         input_shape = tuple(dataset.metadata['input_shape'])
         output_size = dataset.metadata['output_size']
         is_classification = dataset.is_classification
-        return getattr(self, f"{ml_prefix}_model")(input_shape, output_size, is_classification)
+        return getattr(self, f"{ml_prefix}_model")(dataset.name, input_shape, output_size, is_classification)

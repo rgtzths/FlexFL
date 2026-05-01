@@ -1,13 +1,29 @@
 #!/bin/bash
 
-# Load environment variables from .env file
 export $(grep -v '^#' .env | xargs)
 
-VM_LIST="scripts/ips.txt" # needs to end in empty line
-VM_LIST="vms/ips.txt"
 USERNAME=$VM_USERNAME
 PASSWORD=$VM_PASSWORD
 ARGS="-n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q"
+
+usage() {
+    echo "Usage: $0 [-f <ips_file>] <interval> <chance> [run_args...]" >&2
+    echo "Example: $0 -f scripts/ips.txt 60 0.1 --dataset Benchmark" >&2
+}
+
+VM_LIST="scripts/ips.txt"
+
+while getopts ":f:" opt; do
+    case "$opt" in
+        f) VM_LIST="$OPTARG" ;;
+        *)
+            usage
+            exit 1
+            ;;
+    esac
+done
+shift $((OPTIND - 1))
+
 INTERVAL=$1
 CHANCE=$2
 shift 2
@@ -24,7 +40,7 @@ if [ ! -f "$VM_LIST" ]; then
 fi
 
 echo "Killing all sessions..."
-bash scripts/run_commands.sh "pkill -f flexfl" > /dev/null 2>&1
+bash scripts/run_commands.sh -i "$VM_LIST" "pkill -f flexfl" > /dev/null 2>&1
 
 read -r MASTER_IP < "$VM_LIST"
 
@@ -38,7 +54,6 @@ function run_command {
 
 echo "Running command on master..."
 INFO="interval_{$INTERVAL}_chance_{$CHANCE}"
-# --no-save_model
 COMMAND="cd flexfl && source venv/bin/activate && flexfl --is_anchor --data_folder my_data --info $INFO $RUN_ARGS"
 sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$MASTER_IP" "screen -dmS fl-master bash -c \"$COMMAND\""
 
@@ -56,6 +71,8 @@ done < <(tail -n +2 "$VM_LIST")
 wait
 echo "Command execution completed!"
 
-sshpass -p "$PASSWORD" ssh -tt $ARGS "$USERNAME@$MASTER_IP" "screen -r fl-master"
+echo "Waiting for master to finish..."
+sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$MASTER_IP" \
+    "while screen -list | grep -q fl-master; do sleep 30; done"
 
 echo "Done!"

@@ -2,7 +2,7 @@ from flexfl.builtins.NeuralNetworkABC import NeuralNetworkABC
 
 class TON_IOT(NeuralNetworkABC):
 
-    def keras_model(self, input_shape, output_size, is_classification):
+    def keras_model(self, data_name, input_shape, output_size, is_classification):
         import keras
         layers = [
             keras.layers.Input(shape=input_shape),
