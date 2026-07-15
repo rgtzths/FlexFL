@@ -20,17 +20,29 @@ def get_classes(folder: str) -> dict[str, str]:
     return classes
 
 
-def get_args_from_node(node: ast.FunctionDef) -> dict[str, tuple[type, str]]:
+def _literal_default(default: ast.expr | None) -> object:
+    """
+    Evaluate a kwonly default AST node to its Python value for display. Handles
+    negative/None/expression defaults (e.g. `= -1` → ast.UnaryOp) that have no
+    `.value` attribute; falls back to the source text for non-literal defaults
+    (names, calls) rather than crashing CLI discovery.
+    """
+    if default is None:
+        return None
+    try:
+        return ast.literal_eval(default)
+    except (ValueError, SyntaxError, TypeError):
+        return ast.unparse(default)
+
+
+def get_args_from_node(node: ast.FunctionDef) -> dict[str, tuple[type, object]]:
     args = {}
     for arg, default in zip(node.args.kwonlyargs, node.args.kw_defaults):
-        arg_name = arg.arg
-        arg_type = None
-        value = default.value if default else None
-        if arg.annotation:
-            arg_type_str = ast.unparse(arg.annotation)
-            arg_type = ALLOWED_TYPES.get(arg_type_str, None)
+        if not arg.annotation:
+            continue
+        arg_type = ALLOWED_TYPES.get(ast.unparse(arg.annotation), None)
         if arg_type is not None:
-            args[arg_name] = (arg_type, value)
+            args[arg.arg] = (arg_type, _literal_default(default))
     return args
 
 
@@ -48,17 +60,34 @@ def get_args_from_file(filename: str) -> dict[str, tuple[type, str]]:
     return {}
 
 
-def get_modules_and_args(folders: list[str]) -> tuple[dict[str, dict[str, str]], dict[str, tuple[type, str]]]:
+def get_modules_and_args(folders: list[str]) -> tuple[dict[str, dict[str, str]], dict[str, tuple[type, object]]]:
     modules: dict[str, dict[str, object]] = {
         module: get_classes(f"{Path(__file__).parent.parent}/{module}")
-        for module in folders 
+        for module in folders
     }
-    args: dict[str, tuple[type, str]] = {
-        arg: val
-        for module in modules.values()
-        for class_ in module.values()
-        for arg, val in get_args_from_file(class_).items()
-    }
+    # Merge kwonly args across all discovered classes into a single flag set.
+    # Iterate deterministically (rglob order is filesystem-dependent) so the
+    # displayed default for a shared arg is stable. Sibling classes intentionally
+    # share flags (e.g. every comm has `ip`/`is_anchor`), so an identical-type
+    # duplicate is kept silently; only an *incompatible-type* collision — which
+    # would misconfigure a single `--flag` — is a hard error at startup.
+    args: dict[str, tuple[type, object]] = {}
+    owners: dict[str, str] = {}
+    for module in modules.values():
+        for class_name, class_path in sorted(module.items()):
+            for arg, (type_, value) in get_args_from_file(class_path).items():
+                if arg in args:
+                    prev_type, _ = args[arg]
+                    if prev_type is not type_:
+                        raise ValueError(
+                            f"CLI argument name collision: '--{arg}' is declared with "
+                            f"incompatible types by {owners[arg]} ({prev_type.__name__}) "
+                            f"and {class_name} ({type_.__name__}). They would share one "
+                            f"CLI flag — rename one (e.g. prefix it, as with 'ca_penalty')."
+                        )
+                    continue
+                args[arg] = (type_, value)
+                owners[arg] = class_name
     return modules, args
 
 

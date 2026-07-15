@@ -23,7 +23,13 @@ LOSSES = {
 
 
 class PyTorch(MLFrameworkABC):
-    
+
+
+    @classmethod
+    def supports_gradients(cls, backend: str | None = None) -> bool:
+        # calculate_gradients/apply_gradients are not implemented for PyTorch.
+        return False
+
 
     @property
     def prefix(self) -> str:

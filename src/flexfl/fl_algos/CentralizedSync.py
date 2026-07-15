@@ -10,7 +10,9 @@ class Task:
 
 class CentralizedSync(FederatedABC):
 
-    def __init__(self, *, 
+    REQUIRES_GRADIENTS = True
+
+    def __init__(self, *,
         epoch_threshold: float = 0.5,
         **kwargs
     ):

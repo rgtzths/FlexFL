@@ -27,7 +27,20 @@ class Keras(MLFrameworkABC):
         **kwargs
     ) -> None:
         self.backend = backend
+        effective = keras.backend.backend()
+        if backend != effective:
+            raise RuntimeError(
+                f"Keras backend arg '{backend}' does not match the active keras backend "
+                f"'{effective}' (KERAS_BACKEND). They must agree, or the gradient path runs "
+                f"tensorflow ops on a non-tensorflow model."
+            )
         super().__init__(**kwargs)
+
+
+    @classmethod
+    def supports_gradients(cls, backend: str | None = None) -> bool:
+        # calculate_gradients/apply_gradients use tf.GradientTape — tensorflow only.
+        return (backend or "tensorflow") == "tensorflow"
 
 
     @property

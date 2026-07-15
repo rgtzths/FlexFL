@@ -7,13 +7,17 @@ from flexfl.builtins.DatasetABC import DatasetABC
 from flexfl.builtins.NeuralNetworkABC import NeuralNetworkABC
 
 
+CLASSIFICATION_LOSSES = {"scc"}
+REGRESSION_LOSSES = {"mse", "mae", "mape"}
+
+
 class MLFrameworkABC(ABC):
 
     def __init__(self, *,
         nn: NeuralNetworkABC,
         dataset: DatasetABC,
         optimizer: str = "adam",
-        loss: str = "scc",
+        loss: str | None = None,
         learning_rate: float = 0.001,
         batch_size: int = 1024,
         seed: int = 42,
@@ -22,7 +26,7 @@ class MLFrameworkABC(ABC):
     ) -> None:
         self.dataset = dataset
         self.optimizer_name = optimizer
-        self.loss_name = loss
+        self.loss_name = self.resolve_loss(loss, dataset.is_classification)
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.seed = seed
@@ -33,6 +37,35 @@ class MLFrameworkABC(ABC):
         self.model = nn.get_model(self.prefix, dataset)
         self.n_samples = None
         self.setup()
+
+
+    @staticmethod
+    def resolve_loss(loss_name: str | None, is_classification: bool) -> str:
+        """
+        Derive the training loss from the dataset task when not given, and
+        reject an explicit loss that contradicts the task.
+        """
+        allowed = CLASSIFICATION_LOSSES if is_classification else REGRESSION_LOSSES
+        if loss_name is None:
+            return "scc" if is_classification else "mse"
+        if loss_name not in allowed:
+            task = "classification" if is_classification else "regression"
+            raise SystemExit(
+                f"Loss '{loss_name}' is not valid for a {task} dataset; "
+                f"choose one of {sorted(allowed)} (or omit --loss to use the default)."
+            )
+        return loss_name
+
+
+    @classmethod
+    def supports_gradients(cls, backend: str | None = None) -> bool:
+        """
+        Whether this framework implements calculate_gradients/apply_gradients
+        (server-side gradient aggregation) for the given backend. Frameworks that
+        cannot must override this so cli/fl.py can reject a gradient-based FL
+        algorithm before any worker connects. Default: supported.
+        """
+        return True
 
 
     @property

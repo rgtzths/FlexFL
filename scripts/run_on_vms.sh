@@ -42,6 +42,10 @@ fi
 echo "Killing all sessions..."
 bash scripts/run_commands.sh -i "$VM_LIST" "pkill -f flexfl" > /dev/null 2>&1
 
+# Clear any prior run's results so the completion check below cannot match a stale
+# log_0.jsonl from an earlier run (e.g. a master that died before writing its own log).
+bash scripts/run_commands.sh -i "$VM_LIST" "rm -rf ~/flexfl/results" > /dev/null 2>&1
+
 read -r MASTER_IP < "$VM_LIST"
 
 function run_command {
@@ -75,4 +79,24 @@ echo "Waiting for master to finish..."
 sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$MASTER_IP" \
     "while screen -list | grep -q fl-master; do sleep 30; done"
 
-echo "Done!"
+# A clean master run logs a terminal 'end' event as the last thing it does.
+# A crash exits without it; a SIGTERM kill exits 0 (handler calls sys.exit(0))
+# but also without it. So the presence of that event is the only reliable
+# success signal, and it is what distinguishes a finished run from a corrupt one.
+echo "Checking master run completion..."
+MASTER_LOG=$(sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$MASTER_IP" \
+    "find ~/flexfl/results -name 'log_0.jsonl' 2>/dev/null | head -n 1")
+
+if [ -z "$MASTER_LOG" ]; then
+    echo "FAILURE: master produced no log_0.jsonl — the run did not start or died immediately."
+    exit 1
+fi
+
+if sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$MASTER_IP" \
+    "grep -q '\"event\": \"end\"' '$MASTER_LOG'"; then
+    echo "Done! Master run completed cleanly."
+    exit 0
+fi
+
+echo "FAILURE: master log has no terminal 'end' event — the run crashed or was killed."
+exit 1
