@@ -83,10 +83,10 @@ def keras_model(self, data_name, input_shape, output_size, is_classification): .
 
 ## Full Experiment Pipeline
 
-The complete experiment is automated by `scripts/run_dataset_divisions.sh`. Run from the `FlexFL/` directory after provisioning VMs with pxm-tools:
+The complete experiment is automated by `scripts/run_full_experiments.sh`. Run from the `FlexFL/` directory after provisioning VMs with pxm-tools:
 
 ```bash
-bash scripts/run_dataset_divisions.sh [extra_flexfl_args]
+bash scripts/run_full_experiments.sh [extra_flexfl_args]
 ```
 
 The script covers all combinations of node worker counts × distribution strategies × datasets × FL algorithms. Results are saved to:
