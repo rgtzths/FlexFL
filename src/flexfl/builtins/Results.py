@@ -108,9 +108,12 @@ class Results:
     @lru_cache(maxsize=1)
     def get_validations(self) -> pd.DataFrame:
         data = []
-        starts = self.yield_log(0, {"validation_start"})
-        ends = self.yield_log(0, {"validation_end"})
-        for start, end in zip(starts, ends, strict=True):
+        starts = list(self.yield_log(0, {"validation_start"}))
+        ends = list(self.yield_log(0, {"validation_end"}))
+        if len(starts) != len(ends):
+            print(f"Warning: [{self.results_folder}] validation start/end count mismatch "
+                  f"({len(starts)} starts, {len(ends)} ends); truncating to {min(len(starts), len(ends))} pairs.")
+        for start, end in zip(starts, ends):
             data.append((
                 datetime.fromtimestamp(start["timestamp"]),
                 datetime.fromtimestamp(end["timestamp"]),
@@ -192,10 +195,15 @@ class Results:
     @lru_cache(maxsize=1)
     def get_comms(self) -> pd.DataFrame:
         data = []
+        skew_count = 0
+        max_skew = 0.0
+        unmatched = 0
         for a1, a2, a3 in [("send", "recv", "receiver"), ("recv", "send", "sender")]:
             for log_id in set(self.logs.keys()) - {0}:
-                l1s = self.yield_log(0, None, lambda x: x["event"] == a1 and x[a3] == log_id)
-                l2s = self.yield_log(log_id, {a2})
+                l1s = list(self.yield_log(0, None, lambda x: x["event"] == a1 and x[a3] == log_id))
+                l2s = list(self.yield_log(log_id, {a2}))
+                if len(l1s) != len(l2s):
+                    unmatched += abs(len(l1s) - len(l2s))
                 for l1, l2 in zip(l1s, l2s):
                     t1 = l1["timestamp"]
                     t2 = l2["timestamp"]
@@ -209,7 +217,9 @@ class Results:
                         end = t1
                     duration = (end - start) * 1000
                     if duration < 0:
-                        raise ValueError(f"Negative duration: {duration} ms")
+                        skew_count += 1
+                        max_skew = max(max_skew, -duration)
+                        duration = 0.0
                     data.append((
                         self.log2node[sender],
                         sender,
@@ -220,6 +230,9 @@ class Results:
                         duration,
                         l1["payload_size"]
                     ))
+        if skew_count > 0 or unmatched > 0:
+            print(f"Warning: [{self.results_folder}] clamped {skew_count} negative comm durations to 0 "
+                  f"(max skew {max_skew:.1f} ms; likely clock skew); {unmatched} send/recv pairs unmatched.")
         df = pd.DataFrame(data, columns=["send_nid", "send_lid", "recv_nid", "recv_lid", "start", "end", "duration (ms)", "payload_size (bytes)"])
         df = df.sort_values(by=["start"])
         return df
@@ -273,7 +286,19 @@ class Results:
             "duration": "work_time (s)"
         })
         return df
-    
+
+
+    @lru_cache(maxsize=1)
+    def get_serialization_per_worker(self) -> pd.DataFrame:
+        data = []
+        for log_id in set(self.logs.keys()) - {0}:
+            total = sum(line["time"] for line in self.yield_log(log_id, {"encode", "decode"}))
+            data.append((self.log2node[log_id], total))
+        df = pd.DataFrame(data, columns=["worker", "serial_time (s)"])
+        df = df.groupby(["worker"]).agg({"serial_time (s)": "sum"})
+        df = df.reset_index()
+        return df
+
 
     @lru_cache(maxsize=1)
     def get_worker_start_end(self) -> pd.DataFrame:
@@ -309,11 +334,15 @@ class Results:
         cpm = self.get_comms_per_worker()
         wtpw = self.get_work_time_per_worker()
         wse = self.get_worker_start_end()
+        spw = self.get_serialization_per_worker()
         df = pd.merge(cpm, wtpw, on="worker", how="outer")
         df = pd.merge(df, wse, on="worker", how="outer")
-        df["other_time (s)"] = df["total_time (s)"] - df["work_time (s)"] - df["comm_time (s)"]
+        df = pd.merge(df, spw, on="worker", how="outer")
+        df["serial_time (s)"] = df["serial_time (s)"].fillna(0)
+        df["other_time (s)"] = df["total_time (s)"] - df["work_time (s)"] - df["comm_time (s)"] - df["serial_time (s)"]
         df["comm_time% (s)"] = df["comm_time (s)"] / df["total_time (s)"] * 100
         df["work_time% (s)"] = df["work_time (s)"] / df["total_time (s)"] * 100
+        df["serial_time% (s)"] = df["serial_time (s)"] / df["total_time (s)"] * 100
         df["other_time% (s)"] = df["other_time (s)"] / df["total_time (s)"] * 100
         df = df.drop(columns=["start", "end"])
         return df
@@ -367,6 +396,9 @@ class Results:
     @lru_cache(maxsize=1)
     def get_epochs(self) -> pd.DataFrame:
         validations = self.get_validations()
+        if len(validations) == 0:
+            print(f"Warning: [{self.results_folder}] no completed validations; skipping epoch breakdown.")
+            return pd.DataFrame(columns=["epoch", "start", "end", "duration (s)"])
         epochs = [(
             self.get_run_time().iloc[0]["Start"], 
             validations.iloc[0]["start"]
@@ -393,6 +425,9 @@ class Results:
     def get_worker_status(self) -> pd.DataFrame:
         data = []
         validations = self.get_validations()
+        if len(validations) == 0:
+            print(f"Warning: [{self.results_folder}] no completed validations; skipping worker status.")
+            return pd.DataFrame()
         epochs = [(
             self.get_run_time().iloc[0]["Start"], 
             validations.iloc[0]["start"]
@@ -441,8 +476,8 @@ class Results:
     @lru_cache(maxsize=1)
     def getp_worker_time(self) -> pd.DataFrame:
         df = self.get_worker_time_status()
-        df = df[["worker", "payload_size (MB)", "n_messages", "comm_time (s)", "comm_time% (s)", "work_time (s)", "work_time% (s)", "other_time (s)", "other_time% (s)"]]
-        df.columns = ["Worker", "Total transfered (MB)", "Total Messages", "Communication Time (s)", "Communication Time (%)", "Work Time (s)", "Work Time (%)", "Other Time (s)", "Other Time (%)"]
+        df = df[["worker", "payload_size (MB)", "n_messages", "comm_time (s)", "comm_time% (s)", "work_time (s)", "work_time% (s)", "serial_time (s)", "serial_time% (s)", "other_time (s)", "other_time% (s)"]]
+        df.columns = ["Worker", "Total transfered (MB)", "Total Messages", "Communication Time (s)", "Communication Time (%)", "Work Time (s)", "Work Time (%)", "Serialization Time (s)", "Serialization Time (%)", "Other Time (s)", "Other Time (%)"]
         return df
     
 
@@ -568,12 +603,13 @@ class Results:
         df = self.get_worker_time_status()
         df_melted = df.melt(
             id_vars="worker", 
-            value_vars=["comm_time% (s)", "work_time% (s)", "other_time% (s)"],
+            value_vars=["comm_time% (s)", "work_time% (s)", "serial_time% (s)", "other_time% (s)"],
             var_name="Time Type", value_name="Percentage"
         )
         label_map = {
             "comm_time% (s)": "Communication",
             "work_time% (s)": "Working",
+            "serial_time% (s)": "Serialization",
             "other_time% (s)": "Other"
         }
         df_melted["Time Type"] = df_melted["Time Type"].map(label_map)
@@ -674,14 +710,26 @@ class Results:
             )
         except Exception as e:
             print(f"Error plotting times: {e}")
-        self.plot_timeline(show)
-        self.plot_training(show)
-        self.plot_status(show)
-        self.save_results(
-            self.getp_metrics,
-            self.get_run_time,
-            self.get_overall_status,
-        )
+        try:
+            self.plot_timeline(show)
+        except Exception as e:
+            print(f"Error plotting timeline: {e}")
+        try:
+            self.plot_training(show)
+        except Exception as e:
+            print(f"Error plotting training: {e}")
+        try:
+            self.plot_status(show)
+        except Exception as e:
+            print(f"Error plotting status: {e}")
+        try:
+            self.save_results(
+                self.getp_metrics,
+                self.get_run_time,
+                self.get_overall_status,
+            )
+        except Exception as e:
+            print(f"Error saving results: {e}")
 
 
     def plot_cm(self, y_true: np.ndarray, y_pred: np.ndarray, labels: list = ["False", "True"], show = True) -> None:
