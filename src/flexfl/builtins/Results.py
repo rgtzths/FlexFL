@@ -338,8 +338,10 @@ class Results:
         df = pd.merge(cpm, wtpw, on="worker", how="outer")
         df = pd.merge(df, wse, on="worker", how="outer")
         df = pd.merge(df, spw, on="worker", how="outer")
-        df["serial_time (s)"] = df["serial_time (s)"].fillna(0)
-        df["other_time (s)"] = df["total_time (s)"] - df["work_time (s)"] - df["comm_time (s)"] - df["serial_time (s)"]
+        for col in ["comm_time (s)", "work_time (s)", "serial_time (s)", "payload_size (MB)", "n_messages"]:
+            if col in df.columns:
+                df[col] = df[col].fillna(0)
+        df["other_time (s)"] = (df["total_time (s)"] - df["work_time (s)"] - df["comm_time (s)"] - df["serial_time (s)"]).clip(lower=0)
         df["comm_time% (s)"] = df["comm_time (s)"] / df["total_time (s)"] * 100
         df["work_time% (s)"] = df["work_time (s)"] / df["total_time (s)"] * 100
         df["serial_time% (s)"] = df["serial_time (s)"] / df["total_time (s)"] * 100
