@@ -214,6 +214,12 @@ def assemble(results_dir: Path, metadata_dir: Path) -> tuple[list[dict], list[st
             **worker_compute(rep_dir.parent.parent.parent / "workers.txt", benchmark_dir),
             **targets,
         }
+        if row.get("n_workers") and row.get("n_workers_benchmarked", 0) < row["n_workers"]:
+            warnings.append(
+                f"worker compute features incomplete for {rep_dir}: "
+                f"{row['n_workers_benchmarked']}/{row['n_workers']} workers benchmarked "
+                f"(likely benchmark/run IP mismatch)"
+            )
         rows.append(row)
     return rows, warnings
 

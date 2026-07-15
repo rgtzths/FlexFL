@@ -129,6 +129,10 @@ TIER="${FLEXFL_TIER:-all}"
 if [ "$TIER" != "all" ]; then
     echo "=== Restricting to diversity tier: top ${TIER} datasets ==="
     mapfile -t datasets < <(printf '%s\n' "${datasets[@]}" | python3 scripts/select_dataset_tiers.py --tier "$TIER")
+    if [ "${#datasets[@]}" -eq 0 ]; then
+        echo "ERROR: tier selection for FLEXFL_TIER=${TIER} produced zero datasets; aborting." >&2
+        exit 1
+    fi
     echo "Active datasets (${#datasets[@]}): ${datasets[*]}"
 fi
 
