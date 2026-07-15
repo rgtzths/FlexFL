@@ -44,6 +44,13 @@ METRICS_FN: dict[str, Callable[[np.ndarray, np.ndarray], float]] = {
 
 class FederatedABC(ABC):
 
+    # Whether this algorithm relies on server-side gradient aggregation
+    # (calculate_gradients/apply_gradients). Gradient-free algorithms that only
+    # exchange weights via train() leave this False; algorithms that need
+    # gradients set it True so cli/fl.py can reject incompatible ML backends
+    # before any worker connects.
+    REQUIRES_GRADIENTS: bool = False
+
     def __init__(self, *,
         ml: MLFrameworkABC,
         wm: WorkerManager,

@@ -71,8 +71,12 @@ def main():
         args["comm"] = "MPI"
         if "min_workers" not in args:
             args["min_workers"] = int(os.environ["OMPI_COMM_WORLD_SIZE"]) - 1
-    if "backend" in args:
-        os.environ["KERAS_BACKEND"] = args["backend"]
+    # Keep the Keras backend arg and KERAS_BACKEND in lockstep so the gradient path
+    # can't run tensorflow ops on a non-tensorflow model. Only Keras reads it; other
+    # frameworks ignore the extra kwarg.
+    backend = args.get("backend", "tensorflow")
+    args["backend"] = backend
+    os.environ["KERAS_BACKEND"] = backend
     if not args.get("use_gpu", False):
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
@@ -102,6 +106,18 @@ def main():
     if verbose:
         status.stop()
         console.print("[bold green]Modules imported successfully!")
+
+    # Fail fast on an incompatible (fl_algo, ml_framework, backend) before any
+    # component is constructed or any worker connects. Gradient-aggregating
+    # algorithms need a framework that implements calculate_gradients/apply_gradients.
+    if getattr(fl_class, "REQUIRES_GRADIENTS", False) and not ml_class.supports_gradients(backend):
+        detail = f" (backend={backend})" if ml_class.__name__ == "Keras" else ""
+        raise SystemExit(
+            f"Incompatible configuration: --fl {fl_class.__name__} requires server-side "
+            f"gradients, but --ml {ml_class.__name__}{detail} does not implement them. "
+            f"Use a Decentralized* algorithm, or --ml Keras --backend tensorflow "
+            f"(or --ml TensorFlow)."
+        )
 
     f = fl_class(
         ml=ml_class(

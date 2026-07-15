@@ -1,4 +1,5 @@
 data/**
+*.zip
 keys
 .ruff_cache
 

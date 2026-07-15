@@ -11,7 +11,9 @@ class Task:
 
 class CentralizedAsync(FederatedABC):
 
-    def __init__(self, *, 
+    REQUIRES_GRADIENTS = True
+
+    def __init__(self, *,
         ca_penalty: float = 0.8,
         **kwargs
     ):
