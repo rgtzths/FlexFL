@@ -160,7 +160,7 @@ else
     # --- Machine benchmark ---
     echo "=== Running machine benchmark on all VMs ==="
     mkdir -p results/benchmark
-    bash scripts/run_machine_benchmark.sh "$IPS_ALL_TXT" results/benchmark
+    bash scripts/run_machine_benchmark.sh "$IDS_FILE" "$IPS_ALL" results/benchmark
 
     echo "=== Shutting down all VMs ==="
     (cd "$PXM_DIR" && uv run pxm-stop --ids "$IDS_FILE")
@@ -202,8 +202,12 @@ for strategy in "${distributions[@]}"; do
                 # Record the participating VMs for this (strategy, combo) so the
                 # meta-dataset assembler (T11) can join worker compute profiles from
                 # results/benchmark/. Line 1 is the anchor (frodo); the rest are workers.
+                # Each line is "<ip> <node> <vmid>".
                 mkdir -p "$run_root"
-                cp -f "$IPS_SUBSET_TXT" "$run_root/workers.txt"
+                if ! python3 scripts/vm_identity.py --ids "$IDS_SUBSET" --ips "$IPS_SUBSET" --out "$run_root/workers.txt"; then
+                    log_failure "vm_identity"
+                    continue
+                fi
 
                 for data_name in "${datasets[@]}"; do
                     base="${run_root}/${data_name}"
