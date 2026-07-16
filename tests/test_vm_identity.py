@@ -38,6 +38,30 @@ def test_load_mapping_aligns_positionally_and_preserves_anchor_first(tmp_path):
     assert rows[0]["node"] == "frodo"
 
 
+def test_load_mapping_pairs_each_vmid_with_its_own_ip(tmp_path):
+    ids_data = {
+        "frodo": {"api": "https://frodo", "ids": ["100"]},
+        "hobbit": {"api": "https://hobbit", "ids": ["108", "109"]},
+        "samwise": {"api": "https://samwise", "ids": ["203", "204", "205"]},
+    }
+    ips_data = {
+        "frodo": {"api": "https://frodo", "ips": ["10.0.0.100"]},
+        "hobbit": {"api": "https://hobbit", "ips": ["10.0.0.108", "10.0.0.109"]},
+        "samwise": {"api": "https://samwise", "ips": ["10.0.0.203", "10.0.0.204", "10.0.0.205"]},
+    }
+    ids_path, ips_path = write_ids_ips(tmp_path, ids_data, ips_data)
+
+    rows, warnings = load_mapping(ids_path, ips_path)
+
+    assert warnings == []
+    for row in rows:
+        assert row["ip"] == f"10.0.0.{row['vmid']}"
+    assert [r["node"] for r in rows] == [
+        "frodo", "hobbit", "hobbit", "samwise", "samwise", "samwise"
+    ]
+    assert [r["vmid"] for r in rows] == ["100", "108", "109", "203", "204", "205"]
+
+
 def test_load_mapping_raises_on_length_mismatch(tmp_path):
     ids_data = {"hobbit": {"api": "https://hobbit", "ids": ["108", "109"]}}
     ips_data = {"hobbit": {"api": "https://hobbit", "ips": ["10.0.0.2"]}}
