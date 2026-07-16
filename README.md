@@ -92,8 +92,25 @@ bash scripts/run_full_experiments.sh [extra_flexfl_args]
 The script covers all combinations of node worker counts × distribution strategies × datasets × FL algorithms. Results are saved to:
 
 ```
-results/atnog-test1_{n1}_hobbit_{n2}_samwise_{n3}/{dataset}/{fl_algo}/
+results/{strategy}/{combo}/{dataset}/{fl_algo}/rep_{r}/
 ```
+
+where `{combo}` is `atnog-test1_{n1}_hobbit_{n2}_samwise_{n3}`, `{strategy}` is one of `iid`, `non_iid`, `dirichlet`, and `{r}` is the repeat index.
+
+## Experiment Nodes
+
+Experiments run across four physical nodes:
+
+| Node | VMs | Cores/VM | RAM/VM | Disk | Role |
+|---|---|---|---|---|---|
+| atnog-test1 | 8 | 2 | 32 GB | 64G | Worker, swept ∈ {2,4,8} |
+| hobbit | 16 | 3 | 16 GB | 64G | Worker, swept ∈ {2,4,8,16} |
+| samwise | 32 | 4 | 12 GB | 64G | Worker, swept ∈ {2,4,8,16,32} |
+| **frodo** | **1** | **32** | **64 GB** | **256G** | **Anchor / master — fixed, never swept** |
+
+`frodo` contributes exactly one VM and is always present: every generated subset is seeded with `frodo`'s id before the swept worker counts from `atnog-test1`/`hobbit`/`samwise` are added, which is why the results path's `{n1}_{n2}_{n3}` combo has no `frodo` term.
+
+The anchor is always the first line of the IPs file — that host is launched with `--is_anchor`, while every later line is a worker launched against it. `--is_anchor` is a transport-level flag: on Zenoh it makes the node `listen` rather than `connect` and serve discovery, which is what assigns it `id = 0`. Being `id == 0` is what makes it the FL master (see [Architecture](#architecture)) — anchor and master are distinct layers that coincide by construction. The anchor never trains: it loads validation data and orchestrates, validates, and early-stops, while workers load training data.
 
 ## Individual Script Reference
 

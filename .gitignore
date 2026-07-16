@@ -3,6 +3,11 @@ data/**
 keys
 .ruff_cache
 
+scripts/ids*.json
+scripts/ids*.txt
+scripts/ips*.json
+scripts/ips*.txt
+
 paper/**
 results/*
 results/**/*.jsonl
