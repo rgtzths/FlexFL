@@ -57,6 +57,15 @@ class MLFrameworkABC(ABC):
         return loss_name
 
 
+    @staticmethod
+    def _check_flat_length(expected: int, got: int, label: str) -> None:
+        if expected != got:
+            raise ValueError(
+                f"{label}: flat vector length {got} does not match model layout "
+                f"({expected}); weight/gradient layouts have diverged."
+            )
+
+
     @classmethod
     def supports_gradients(cls, backend: str | None = None) -> bool:
         """
@@ -144,7 +153,9 @@ class MLFrameworkABC(ABC):
     @abstractmethod
     def predict(self, data: Any) -> np.ndarray:
         """
-        Predict the data
+        Predict the data. `data` is the backend-native feature container
+        stored by `load_data` (a batched `tf.data.Dataset` for Keras/TensorFlow,
+        a `torch.Tensor` for PyTorch).
         """
         pass
 

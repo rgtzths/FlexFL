@@ -49,12 +49,8 @@ class Keras(MLFrameworkABC):
     
 
     def set_seed(self, seed: int):
-        if self.backend == "tensorflow":
-            tf.random.set_seed(seed)
-        elif self.backend == "torch":
-            import torch
-            torch.manual_seed(seed)
-    
+        keras.utils.set_random_seed(seed)
+
 
     def setup(self):
         self.model: keras.Model = self.model
@@ -81,6 +77,8 @@ class Keras(MLFrameworkABC):
     
 
     def set_weights(self, weights: np.ndarray):
+        total = sum(int(np.prod(w.shape)) for w in self.model.get_weights())
+        self._check_flat_length(total, weights.size, "set_weights")
         start = 0
         new_weights = []
         for w in self.model.get_weights():
@@ -105,6 +103,8 @@ class Keras(MLFrameworkABC):
     def apply_gradients(self, gradients: np.ndarray):
         if self.backend != "tensorflow":
             raise NotImplementedError
+        total = sum(int(np.prod(param.shape)) for param in self.model.trainable_variables)
+        self._check_flat_length(total, gradients.size, "apply_gradients")
         start = 0
         gradient_tensors = []
         for param in self.model.trainable_variables:
