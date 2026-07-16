@@ -54,6 +54,8 @@ class TensorFlow(MLFrameworkABC):
     
 
     def set_weights(self, weights: np.ndarray):
+        total = sum(int(np.prod(w.shape)) for w in self.model.get_weights())
+        self._check_flat_length(total, weights.size, "set_weights")
         start = 0
         new_weights = []
         for w in self.model.get_weights():
@@ -74,6 +76,8 @@ class TensorFlow(MLFrameworkABC):
     
 
     def apply_gradients(self, gradients: np.ndarray):
+        total = sum(int(np.prod(param.shape)) for param in self.model.trainable_variables)
+        self._check_flat_length(total, gradients.size, "apply_gradients")
         start = 0
         gradient_tensors = []
         for param in self.model.trainable_variables:
