@@ -28,7 +28,7 @@ class UNSW(DatasetABC):
     
     def preprocess(self, val_size, test_size):
         data = pd.read_csv(f"{self.default_folder}/NF-UNSW-NB15-v2.csv")
-        data.dropna()
+        data = data.dropna()
         y = data['Label'].astype(int)
         x = data.drop(columns=['Label', "IPV4_SRC_ADDR", "L4_SRC_PORT", "IPV4_DST_ADDR", "L4_DST_PORT", "Attack"])
         self.save_features(x.columns)

@@ -1,5 +1,5 @@
 import pandas as pd
-from sklearn.preprocessing import QuantileTransformer
+from sklearn.preprocessing import StandardScaler
 
 from flexfl.builtins.DatasetABC import DatasetABC
 
@@ -13,7 +13,7 @@ class TON_IOT(DatasetABC):
 
     @property
     def scaler(self):
-        return QuantileTransformer
+        return StandardScaler
 
 
     def download(self):
@@ -27,7 +27,7 @@ class TON_IOT(DatasetABC):
 
     def preprocess(self, val_size, test_size):
         data = pd.read_parquet(f"{self.default_folder}/NF-ToN-IoT-V2.parquet")
-        data.dropna()
+        data = data.dropna()
         y = data['Label'].astype(int)
         x = data.drop(columns=['Label', "L4_SRC_PORT", "L4_DST_PORT", "Attack"])
         self.save_features(x.columns)

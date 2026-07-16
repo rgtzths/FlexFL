@@ -28,7 +28,7 @@ class IOT_DNL(DatasetABC):
     
     def preprocess(self, val_size, test_size):
         data = pd.read_csv(f"{self.default_folder}/Preprocessed_data.csv")
-        data.dropna()
+        data = data.dropna()
         x = data.drop('normality', axis=1)
         x = x.drop('frame.number', axis=1)
         x = x.drop('frame.time', axis=1)

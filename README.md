@@ -139,3 +139,4 @@ FlexFL is deployed to VMs via `rsync` (not installed from PyPI). `setup_vms.sh` 
 | `TF_CPP_MIN_LOG_LEVEL` | Suppress TensorFlow logs (set to `3`) |
 | `VM_USERNAME`, `VM_PASSWORD` | SSH credentials for remote VMs (via `.env`) |
 | `OMPI_COMM_WORLD_SIZE`, `OMPI_COMM_WORLD_RANK` | Set automatically when using MPI |
+| `SLICING5G_URL` | URL of the Slicing5g dataset archive (required to download the Slicing5g legacy dataset) |
