@@ -54,4 +54,9 @@ while read -r IP NODE VMID; do
 done <<< "$ROWS"
 
 wait
-echo "All benchmarks completed!"
+collected=$(find "$OUTPUT_DIR" -maxdepth 1 -name 'machine_benchmark_*.json' -type f | wc -l)
+if [ "$collected" -eq 0 ]; then
+    echo "Error: zero benchmark files collected — every remote benchmark failed" >&2
+    exit 1
+fi
+echo "All benchmarks completed! ($collected files)"

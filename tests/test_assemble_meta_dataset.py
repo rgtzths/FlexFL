@@ -124,7 +124,7 @@ def test_worker_compute_anchor_excluded_from_n_workers(tmp_path):
     assert result["n_workers"] == 1
 
 
-def test_worker_compute_missing_benchmark_file_partial_aggregate(tmp_path):
+def test_worker_compute_missing_benchmark_file_partial_set_nulls_aggregate(tmp_path):
     benchmark_dir = tmp_path / "benchmark"
     make_benchmark_file(benchmark_dir, "hobbit", "108", 2.0)
     workers_txt = tmp_path / "workers.txt"
@@ -138,7 +138,25 @@ def test_worker_compute_missing_benchmark_file_partial_aggregate(tmp_path):
 
     assert result["n_workers"] == 2
     assert result["n_workers_benchmarked"] == 1
-    assert result["worker_rate_mean"] == 2.0
+    assert result["worker_rate_mean"] is None
+
+
+def test_worker_compute_full_benchmark_set_populates_aggregate(tmp_path):
+    benchmark_dir = tmp_path / "benchmark"
+    make_benchmark_file(benchmark_dir, "hobbit", "108", 2.0)
+    make_benchmark_file(benchmark_dir, "samwise", "999", 4.0)
+    workers_txt = tmp_path / "workers.txt"
+    workers_txt.write_text(
+        "10.0.0.1 frodo 104\n"
+        "10.0.0.2 hobbit 108\n"
+        "10.0.0.3 samwise 999\n"
+    )
+
+    result = worker_compute(workers_txt, benchmark_dir)
+
+    assert result["n_workers"] == 2
+    assert result["n_workers_benchmarked"] == 2
+    assert result["worker_rate_mean"] == 3.0
 
 
 def test_worker_compute_different_nodes_sharing_vmid_resolve_to_different_files(tmp_path):
@@ -266,15 +284,80 @@ def test_assemble_no_epochs_dropped_no_nan_reaches_row(tmp_path):
     assert any("targets uncomputable" in w for w in warnings)
 
 
-def test_assemble_idempotent(tmp_path):
+def test_assemble_nan_metric_dropped_no_nan_reaches_csv(tmp_path):
     results_dir = tmp_path / "results"
     metadata_dir = tmp_path / "metadata"
-    build_synthetic_run(results_dir, metadata_dir)
+    rep_dir = results_dir / "iid" / "atnog-test1_0_hobbit_1_samwise_0" / "ds_a" / "fedavg" / "rep_1"
+    rep_dir.mkdir(parents=True, exist_ok=True)
+    write_jsonl(rep_dir / "log_0.jsonl", [
+        {"event": "start", "timestamp": 0},
+        {"event": "epoch", "mcc": float("nan")},
+        {"event": "end", "timestamp": 5},
+    ])
+    (rep_dir / "_SUCCESS").write_text("")
+    write_json(metadata_dir / "ds_a.json", {
+        "type": "classification", "input_shape": [4], "samples": 100, "output_size": 2,
+    })
 
-    rows1, _ = assemble(results_dir, metadata_dir)
-    rows2, _ = assemble(results_dir, metadata_dir)
+    rows, warnings = assemble(results_dir, metadata_dir)
 
-    assert rows1 == rows2
+    assert rows == []
+    assert any("targets uncomputable" in w for w in warnings)
+
+    out_csv = tmp_path / "meta_dataset.csv"
+    script = str(Path(__file__).resolve().parent.parent / "scripts" / "assemble_meta_dataset.py")
+    result = subprocess.run(
+        [sys.executable, script,
+         "--results-dir", str(results_dir),
+         "--metadata-dir", str(metadata_dir),
+         "--out", str(out_csv)],
+        capture_output=True, text=True,
+    )
+
+    assert result.returncode == 0
+    with open(out_csv, newline="") as f:
+        lines = list(csv.reader(f))
+    assert len(lines) == 1  # header only, no data row for the NaN run
+
+
+def run_assemble_cli(script: str, results_dir: Path, metadata_dir: Path, out_csv: Path):
+    return subprocess.run(
+        [sys.executable, script,
+         "--results-dir", str(results_dir),
+         "--metadata-dir", str(metadata_dir),
+         "--out", str(out_csv)],
+        capture_output=True, text=True,
+    )
+
+
+def test_assemble_idempotent_byte_identical_over_growing_tree(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    build_synthetic_run(results_dir, metadata_dir, dataset="ds_a")
+    script = str(Path(__file__).resolve().parent.parent / "scripts" / "assemble_meta_dataset.py")
+
+    out_a1 = tmp_path / "out_a1.csv"
+    result_a1 = run_assemble_cli(script, results_dir, metadata_dir, out_a1)
+    assert result_a1.returncode == 0
+
+    out_a2 = tmp_path / "out_a2.csv"
+    result_a2 = run_assemble_cli(script, results_dir, metadata_dir, out_a2)
+    assert result_a2.returncode == 0
+
+    assert out_a1.read_bytes() == out_a2.read_bytes()
+
+    a1_lines = out_a1.read_text().splitlines()
+    run_a_line = next(ln for ln in a1_lines if "ds_a" in ln)
+
+    build_synthetic_run(results_dir, metadata_dir, dataset="ds_b", combo="atnog-test1_1_hobbit_0_samwise_0")
+    out_b = tmp_path / "out_b.csv"
+    result_b = run_assemble_cli(script, results_dir, metadata_dir, out_b)
+    assert result_b.returncode == 0
+
+    b_lines = out_b.read_text().splitlines()
+    run_a_line_in_b = next(ln for ln in b_lines if "ds_a" in ln)
+    assert run_a_line_in_b == run_a_line
+    assert any("ds_b" in ln for ln in b_lines)
 
 
 def test_assemble_cli_writes_header_exactly_columns(tmp_path):

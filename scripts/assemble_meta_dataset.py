@@ -29,6 +29,7 @@ Targets (master log_0.jsonl, single clock; T09)
 import argparse
 import csv
 import json
+import math
 import statistics
 import sys
 from pathlib import Path
@@ -91,10 +92,12 @@ def compute_targets(events: list[dict], is_classification: bool) -> dict | None:
     if not starts or not ends or not epochs:
         return None
     main = "mcc" if is_classification else "mape"
-    vals = [e[main] for e in epochs if isinstance(e.get(main), (int, float))]
+    vals = [v for e in epochs if isinstance((v := e.get(main)), (int, float)) and math.isfinite(v)]
     if not vals:
         return None
     perf = max(vals) if is_classification else min(vals)
+    if not math.isfinite(perf):
+        return None
     sent = sum(e.get("payload_size", 0) for e in events if e.get("event") == "send")
     recv = sum(e.get("payload_size", 0) for e in events if e.get("event") == "recv")
     return {
@@ -131,13 +134,14 @@ def worker_compute(workers_txt: Path, benchmark_dir: Path) -> dict:
         if not bf.exists():
             continue
         results = load_json(bf).get("results", {})
-        model_rates = [m["avg_epochs_per_second"] for m in results.values()
-                       if isinstance(m.get("avg_epochs_per_second"), (int, float))]
+        model_rates = [r for m in results.values()
+                       if isinstance((r := m.get("avg_epochs_per_second")), (int, float)) and math.isfinite(r)]
         if model_rates:
             rates.append(statistics.fmean(model_rates))
     legacy_key = {"_legacy_workers_txt": str(workers_txt)} if legacy else {}
-    if not rates:
-        return {**empty, "n_workers": len(worker_entries), **legacy_key}
+    if not rates or len(rates) < len(worker_entries):
+        return {**empty, "n_workers": len(worker_entries),
+                "n_workers_benchmarked": len(rates), **legacy_key}
     mean = statistics.fmean(rates)
     std = statistics.pstdev(rates) if len(rates) > 1 else 0.0
     return {
