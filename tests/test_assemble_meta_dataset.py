@@ -196,7 +196,7 @@ def test_worker_compute_workers_sharing_ip_resolve_to_own_files(tmp_path):
     assert result["worker_rate_max"] == 4.0
 
 
-def test_worker_compute_legacy_ip_only_format_warns_not_silent(tmp_path):
+def test_worker_compute_legacy_ip_only_format_sets_legacy_sentinel_key(tmp_path):
     benchmark_dir = tmp_path / "benchmark"
     workers_txt = tmp_path / "workers.txt"
     workers_txt.write_text("10.0.0.1\n10.0.0.2\n")
@@ -294,6 +294,7 @@ def test_assemble_legacy_ip_only_workers_txt_warns(tmp_path):
 
     rows, warnings = assemble(results_dir, metadata_dir)
 
+    assert len(rows) == 1
     assert any("legacy IP-only workers.txt, worker compute skipped" in w for w in warnings)
 
 
@@ -312,7 +313,11 @@ def test_assemble_incomplete_worker_benchmark_warns(tmp_path):
 
     rows, warnings = assemble(results_dir, metadata_dir)
 
-    assert any("worker compute features incomplete" in w for w in warnings)
+    assert len(rows) == 1
+    assert any(
+        "worker compute features incomplete" in w and "1/2 workers benchmarked" in w
+        for w in warnings
+    )
 
 
 def test_assemble_nan_metric_dropped_no_nan_reaches_csv(tmp_path):
