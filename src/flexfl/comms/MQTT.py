@@ -10,10 +10,22 @@ from flexfl.builtins.Logger import Logger
 TOPIC = "fl"
 DISCOVER = "fl_discover"
 LIVELINESS = "fl_liveliness"
-QOS = 0
+QOS = 1
+TIMEOUT = 3
 
 class MQTT(CommABC):
-    
+    """
+    MQTT-based communication backend.
+
+    A graceful `close()` relies on the QoS-1 LEAVE publish being acknowledged
+    (waited on with `wait_for_publish(timeout=TIMEOUT)`) before the client
+    disconnects. A non-graceful crash does not run `close()`, so peers rely
+    instead on the broker's Last Will and Testament (LWT) message set on
+    `LIVELINESS` in `discover()`. `recv` has no timeout, so a data message
+    dropped on an unreliable link can still block indefinitely; QoS 1
+    mitigates but does not eliminate this.
+    """
+
     def __init__(self, *, 
         ip: str = "localhost",
         mqtt_port: int = 1883,
@@ -71,7 +83,8 @@ class MQTT(CommABC):
     
 
     def close(self) -> None:
-        self.client.publish(LIVELINESS, pickle.dumps(self._uuid), qos=QOS)
+        info = self.client.publish(LIVELINESS, pickle.dumps(self._uuid), qos=QOS)
+        info.wait_for_publish(timeout=TIMEOUT)
         self.client.loop_stop()
         self.client.disconnect()
 
