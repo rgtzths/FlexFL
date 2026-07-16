@@ -107,7 +107,7 @@ All scripts accept a `-f <ips_file>` flag to target a custom set of VMs. Run fro
 | `scripts/run_on_vms.sh` | `run_on_vms.sh [-f <ips>] <interval> <chance> [args]` |
 | `scripts/gather_results.sh` | `gather_results.sh [-f <ips>] [-o <output_dir>]` |
 | `scripts/run_commands.sh` | `run_commands.sh [-v] [-w] [-i <ips>] -f <script>` or `run_commands.sh [-v] [-w] [-i <ips>] <command>` |
-| `scripts/run_machine_benchmark.sh` | `run_machine_benchmark.sh [ips_file] [benchmark_args]` |
+| `scripts/run_machine_benchmark.sh` | `run_machine_benchmark.sh <ids.json> <ips.json> <output_dir> [benchmark_args]` |
 | `scripts/known_hosts.sh` | `known_hosts.sh [ips_file]` — rebuild local `~/.ssh/known_hosts` |
 
 ## VM Deployment

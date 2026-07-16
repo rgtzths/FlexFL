@@ -15,7 +15,8 @@ Features
   partition           strategy, alpha, distribution_percentage,
                       feat_entropy_{mean,min,max,std} (cross-worker split entropy)
   worker compute      mean/min/max/std/cv of per-worker epochs-per-second from the
-                      machine benchmark, over the participating workers
+                      machine benchmark, over the participating workers, joined by
+                      (node, vmid)
 Targets (master log_0.jsonl, single clock; T09)
   performance         best validation main metric (mcc↑ clf / smape↓ reg). NB: the
                       regression metric is logged under the key `mape` but is actually
@@ -28,6 +29,7 @@ Targets (master log_0.jsonl, single clock; T09)
 import argparse
 import csv
 import json
+import math
 import statistics
 import sys
 from pathlib import Path
@@ -90,10 +92,12 @@ def compute_targets(events: list[dict], is_classification: bool) -> dict | None:
     if not starts or not ends or not epochs:
         return None
     main = "mcc" if is_classification else "mape"
-    vals = [e[main] for e in epochs if isinstance(e.get(main), (int, float))]
+    vals = [v for e in epochs if isinstance((v := e.get(main)), (int, float)) and math.isfinite(v)]
     if not vals:
         return None
     perf = max(vals) if is_classification else min(vals)
+    if not math.isfinite(perf):
+        return None
     sent = sum(e.get("payload_size", 0) for e in events if e.get("event") == "send")
     recv = sum(e.get("payload_size", 0) for e in events if e.get("event") == "recv")
     return {
@@ -115,31 +119,40 @@ def worker_compute(workers_txt: Path, benchmark_dir: Path) -> dict:
     }
     if not workers_txt.exists():
         return empty
-    ips = [ln.strip() for ln in workers_txt.read_text().splitlines()
-           if ln.strip() and not ln.startswith("#")]
-    worker_ips = ips[1:]  # line 1 is the anchor (frodo)
+    lines = [ln.strip() for ln in workers_txt.read_text().splitlines()
+             if ln.strip() and not ln.startswith("#")]
+    entries = [ln.split() for ln in lines]
+    worker_entries = entries[1:]  # line 1 is the anchor (frodo)
     rates = []
-    for ip in worker_ips:
-        bf = benchmark_dir / f"machine_benchmark_{ip}.json"
+    legacy = False
+    for fields in worker_entries:
+        if len(fields) < 3:
+            legacy = True
+            continue
+        node, vmid = fields[1], fields[2]
+        bf = benchmark_dir / f"machine_benchmark_{node}_{vmid}.json"
         if not bf.exists():
             continue
         results = load_json(bf).get("results", {})
-        model_rates = [m["avg_epochs_per_second"] for m in results.values()
-                       if isinstance(m.get("avg_epochs_per_second"), (int, float))]
+        model_rates = [r for m in results.values()
+                       if isinstance((r := m.get("avg_epochs_per_second")), (int, float)) and math.isfinite(r)]
         if model_rates:
             rates.append(statistics.fmean(model_rates))
-    if not rates:
-        return {**empty, "n_workers": len(worker_ips)}
+    legacy_key = {"_legacy_workers_txt": str(workers_txt)} if legacy else {}
+    if not rates or len(rates) < len(worker_entries):
+        return {**empty, "n_workers": len(worker_entries),
+                "n_workers_benchmarked": len(rates), **legacy_key}
     mean = statistics.fmean(rates)
     std = statistics.pstdev(rates) if len(rates) > 1 else 0.0
     return {
-        "n_workers": len(worker_ips),
+        "n_workers": len(worker_entries),
         "n_workers_benchmarked": len(rates),
         "worker_rate_mean": mean,
         "worker_rate_min": min(rates),
         "worker_rate_max": max(rates),
         "worker_rate_std": std,
         "worker_rate_cv": (std / mean) if mean else None,
+        **legacy_key,
     }
 
 
@@ -214,11 +227,14 @@ def assemble(results_dir: Path, metadata_dir: Path) -> tuple[list[dict], list[st
             **worker_compute(rep_dir.parent.parent.parent / "workers.txt", benchmark_dir),
             **targets,
         }
+        legacy_workers_txt = row.get("_legacy_workers_txt")
+        if legacy_workers_txt is not None:
+            warnings.append(f"legacy IP-only workers.txt, worker compute skipped: {legacy_workers_txt}")
         if row.get("n_workers") and row.get("n_workers_benchmarked", 0) < row["n_workers"]:
             warnings.append(
                 f"worker compute features incomplete for {rep_dir}: "
                 f"{row['n_workers_benchmarked']}/{row['n_workers']} workers benchmarked "
-                f"(likely benchmark/run IP mismatch)"
+                f"(missing machine_benchmark_<node>_<vmid>.json for some workers)"
             )
         rows.append(row)
     return rows, warnings
