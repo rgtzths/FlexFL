@@ -6,6 +6,14 @@ same per-node order, positionally aligned within each node. This module joins
 them into a flat, ordered list of {"ip", "node", "vmid"} rows (anchor node
 first, matching subset_ids.py's convention), for use as the join key between
 run participants (workers.txt) and per-host benchmark files.
+
+Depends on pxm-tools >= 0.1.5, which writes both files with this schema: a
+top-level object keyed by node name, each value being {"api": str, "ids": list}
+in ids.json and {"api": str, "ips": list} in ips.json. Within each node the
+i-th entry of "ips" is the IP of the i-th vmid in "ids"; that positional
+alignment is the load_mapping join contract. pxm-tools guards it on the
+producer side in tests/test_proxmox.py (TestStartAllVmsPositionalAlignment);
+tests/test_vm_identity.py pins the consumer side here.
 """
 import argparse
 import json
