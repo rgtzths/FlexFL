@@ -8,5 +8,10 @@ def test_check_flat_length_raises_on_mismatch():
         MLFrameworkABC._check_flat_length(10, 5, "set_weights")
 
 
+def test_check_flat_length_raises_on_too_long():
+    with pytest.raises(ValueError):
+        MLFrameworkABC._check_flat_length(5, 10, "set_weights")
+
+
 def test_check_flat_length_returns_none_on_match():
     assert MLFrameworkABC._check_flat_length(10, 10, "set_weights") is None
