@@ -220,7 +220,7 @@ def build_synthetic_run(
     results_dir: Path, metadata_dir: Path, *,
     strategy="iid", combo="atnog-test1_0_hobbit_1_samwise_0",
     dataset="ds_a", fl_algo="fedavg", rep=1,
-    sentinel="_SUCCESS", with_epochs=True,
+    sentinel="_SUCCESS", with_epochs=True, workers_txt=None,
 ):
     rep_dir = results_dir / strategy / combo / dataset / fl_algo / f"rep_{rep}"
     rep_dir.mkdir(parents=True, exist_ok=True)
@@ -232,6 +232,9 @@ def build_synthetic_run(
     write_jsonl(rep_dir / "log_0.jsonl", events)
 
     (rep_dir / sentinel).write_text("")
+
+    if workers_txt is not None:
+        (rep_dir.parent.parent.parent / "workers.txt").write_text(workers_txt)
 
     write_json(metadata_dir / f"{dataset}.json", {
         "type": "classification", "input_shape": [4], "samples": 100, "output_size": 2,
@@ -282,6 +285,34 @@ def test_assemble_no_epochs_dropped_no_nan_reaches_row(tmp_path):
 
     assert rows == []
     assert any("targets uncomputable" in w for w in warnings)
+
+
+def test_assemble_legacy_ip_only_workers_txt_warns(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    build_synthetic_run(results_dir, metadata_dir, workers_txt="10.0.0.1\n10.0.0.2\n")
+
+    rows, warnings = assemble(results_dir, metadata_dir)
+
+    assert any("legacy IP-only workers.txt, worker compute skipped" in w for w in warnings)
+
+
+def test_assemble_incomplete_worker_benchmark_warns(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    make_benchmark_file(results_dir / "benchmark", "hobbit", "108", 2.0)
+    build_synthetic_run(
+        results_dir, metadata_dir,
+        workers_txt=(
+            "10.0.0.1 frodo 104\n"
+            "10.0.0.2 hobbit 108\n"
+            "10.0.0.3 samwise 999\n"
+        ),
+    )
+
+    rows, warnings = assemble(results_dir, metadata_dir)
+
+    assert any("worker compute features incomplete" in w for w in warnings)
 
 
 def test_assemble_nan_metric_dropped_no_nan_reaches_csv(tmp_path):
