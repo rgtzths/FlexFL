@@ -26,6 +26,9 @@ class Kafka(CommABC):
     topic will silently drop messages sent to partitions the consumer never
     reads. Configure the broker with `num.partitions=1` (as
     `requirements/kafka-compose.yml` does).
+
+    Data sends are batched and delivered on linger/batch/close, while control
+    messages (discover, heartbeat) flush synchronously.
     """
 
     def __init__(self, *, 
@@ -102,7 +105,7 @@ class Kafka(CommABC):
     def _owned(names: list[str]) -> list[str]:
         return [
             name for name in names
-            if name in (DISCOVER, HEARTBEAT) or name.startswith(f"{TOPIC}_")
+            if name.startswith(f"{TOPIC}_")
         ]
 
 
