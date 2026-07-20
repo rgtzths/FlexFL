@@ -54,6 +54,4 @@ class IOT_DNL(NeuralNetworkABC):
             nn.ReLU(),
             nn.Linear(64, output_size)
         ]
-        if is_classification:
-            layers.append(nn.Softmax(dim=1))
         return nn.Sequential(*layers)

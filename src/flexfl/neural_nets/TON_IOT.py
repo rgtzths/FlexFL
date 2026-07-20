@@ -43,6 +43,4 @@ class TON_IOT(NeuralNetworkABC):
             nn.Dropout(0.2),
             nn.Linear(16, output_size)
         ]
-        if is_classification:
-            layers.append(nn.Softmax(dim=1))
         return nn.Sequential(*layers)
