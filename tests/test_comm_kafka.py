@@ -1,3 +1,6 @@
+import queue
+import time
+
 import pytest
 
 pytest.importorskip("kafka")
@@ -59,3 +62,35 @@ def test_clear_scopes_to_owned():
 
 def test_clear_scopes_to_owned_empty():
     assert Kafka._owned([]) == []
+
+
+def test_handle_disconect_removes_node_and_unblocks_recv():
+    # A dead worker must be removed from all state and (node_id, None) enqueued
+    # so a blocked recv() unblocks with the death sentinel.
+    inst = Kafka.__new__(Kafka)
+    inst._nodes = {0, 1}
+    inst.id_mapping = {1: "worker-uuid"}
+    inst.hearbeats = {1: 123.0}
+    inst.admin = Mock()
+    inst.q = queue.Queue()
+
+    with patch("flexfl.comms.Kafka.Logger"):
+        inst.handle_disconect(1)
+
+    assert 1 not in inst._nodes
+    inst.admin.delete_topics.assert_called_once_with(["fl_worker-uuid"])
+    assert 1 not in inst.id_mapping
+    assert 1 not in inst.hearbeats
+    assert inst.q.get_nowait() == (1, None)
+
+
+def test_check_liveliness_disconnects_stale_node():
+    # A heartbeat older than TIMEOUT triggers handle_disconect for that node.
+    inst = Kafka.__new__(Kafka)
+    inst._nodes = {0, 1}
+    inst.hearbeats = {1: time.time() - 100}
+    inst.handle_disconect = Mock()
+
+    inst.check_liveliness()
+
+    inst.handle_disconect.assert_called_once_with(1)
