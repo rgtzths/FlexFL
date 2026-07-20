@@ -6,6 +6,16 @@ from flexfl.builtins.Logger import Logger
 
 
 class MPI(CommABC):
+    """
+    MPI-based communication backend.
+
+    This backend has no liveness detection: a non-graceful worker crash leaves
+    the blocking `recv` waiting on that rank indefinitely, since standard MPI
+    provides no portable way to detect a dead rank without ULFM (fault-tolerant
+    MPI, which OpenMPI supports only experimentally). Use it only with graceful
+    shutdown, where a departing worker sends a `None` sentinel that `recv`
+    surfaces as `(node_id, None)` and removes from `nodes`.
+    """
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -48,6 +58,7 @@ class MPI(CommABC):
             data = self.comm.recv(source=node_id, tag=0)
         if data is None:
             Logger.log(Logger.LEAVE, node_id=node_id)
+            self._nodes.discard(node_id)
             return node_id, None
         Logger.log(Logger.RECV, sender=node_id, receiver=self.id, payload_size=len(data))
         return node_id, data

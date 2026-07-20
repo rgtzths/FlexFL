@@ -10,10 +10,22 @@ from flexfl.builtins.Logger import Logger
 TOPIC = "fl"
 DISCOVER = "fl_discover"
 LIVELINESS = "fl_liveliness"
-QOS = 0
+QOS = 1
+TIMEOUT = 3
 
 class MQTT(CommABC):
-    
+    """
+    MQTT-based communication backend.
+
+    A graceful `close()` relies on the QoS-1 LEAVE publish being acknowledged
+    (waited on with `wait_for_publish(timeout=TIMEOUT)`) before the client
+    disconnects. A non-graceful crash does not run `close()`, so peers rely
+    instead on the broker's Last Will and Testament (LWT) message set on
+    `LIVELINESS` in `discover()`. `recv` has no timeout, so a data message
+    dropped on an unreliable link can still block indefinitely; QoS 1
+    mitigates but does not eliminate this.
+    """
+
     def __init__(self, *, 
         ip: str = "localhost",
         mqtt_port: int = 1883,
@@ -32,6 +44,8 @@ class MQTT(CommABC):
         self.q = queue.Queue()
         self.id_mapping = {}
         self.uuid_mapping = {}
+        self._send_seq = 0
+        self._last_seq = {}
         self.client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2, 
             reconnect_on_failure=False,
@@ -60,7 +74,8 @@ class MQTT(CommABC):
     def send(self, node_id: int, data: bytes) -> None:
         assert node_id in self.nodes, f"Node {node_id} not found"
         Logger.log(Logger.SEND, sender=self.id, receiver=node_id, payload_size=len(data))
-        data = self.id.to_bytes(4, "big") + data
+        data = self.id.to_bytes(4, "big") + self._send_seq.to_bytes(8, "big") + data
+        self._send_seq += 1
         self.client.publish(f"{TOPIC}/{self.id_mapping[node_id]}", data, qos=QOS)
 
 
@@ -71,21 +86,26 @@ class MQTT(CommABC):
     
 
     def close(self) -> None:
-        self.client.publish(LIVELINESS, pickle.dumps(self._uuid), qos=QOS)
-        self.client.loop_stop()
-        self.client.disconnect()
+        info = self.client.publish(LIVELINESS, pickle.dumps(self._uuid), qos=QOS)
+        try:
+            info.wait_for_publish(timeout=TIMEOUT)
+        except (ValueError, RuntimeError):
+            pass
+        finally:
+            self.client.loop_stop()
+            self.client.disconnect()
 
 
     def discover(self):
         self.client.on_message = self.on_message
         self.client.will_set(LIVELINESS, pickle.dumps(self._uuid), qos=QOS)
         self.client.connect(self.ip, self.port)
-        self.client.subscribe(f"{TOPIC}/{self._uuid}")
+        self.client.subscribe(f"{TOPIC}/{self._uuid}", qos=QOS)
         self.client.loop_start()
         if self.is_anchor:
             self._id = 0
-            self.client.subscribe(DISCOVER)
-            self.client.subscribe(LIVELINESS)
+            self.client.subscribe(DISCOVER, qos=QOS)
+            self.client.subscribe(LIVELINESS, qos=QOS)
         else:
             self.client.publish(DISCOVER, pickle.dumps(self._uuid), qos=QOS)
             _, (_, node_uuid, self._start_time) = self.q.get()
@@ -98,20 +118,26 @@ class MQTT(CommABC):
 
     def handle_discover(self, payload: bytes):
         node_uuid = pickle.loads(payload)
-        self.total_nodes += 1
-        Logger.log(Logger.JOIN, node_id=self.total_nodes)
-        self._nodes.add(self.total_nodes)
-        self.id_mapping[self.total_nodes] = node_uuid
-        self.uuid_mapping[node_uuid] = self.total_nodes
-        new_payload = (self.total_nodes, self._uuid, self.start_time)
+        if node_uuid in self.uuid_mapping:
+            node_id = self.uuid_mapping[node_uuid]
+        else:
+            self.total_nodes += 1
+            node_id = self.total_nodes
+            Logger.log(Logger.JOIN, node_id=node_id)
+            self._nodes.add(node_id)
+            self.id_mapping[node_id] = node_uuid
+            self.uuid_mapping[node_uuid] = node_id
+        new_payload = (node_id, self._uuid, self.start_time)
         self.client.publish(f"{TOPIC}/{node_uuid}", pickle.dumps(new_payload), qos=QOS)
 
 
     def handle_liveliness(self, payload: bytes):
         node_uuid = pickle.loads(payload)
+        if node_uuid not in self.uuid_mapping:
+            return
         node_id = self.uuid_mapping[node_uuid]
         Logger.log(Logger.LEAVE, node_id=node_id)
-        self._nodes.remove(node_id)
+        self._nodes.discard(node_id)
         self.id_mapping.pop(node_id)
         self.uuid_mapping.pop(node_uuid)
         self.q.put((node_id, None))
@@ -131,6 +157,10 @@ class MQTT(CommABC):
             node_id = int.from_bytes(payload[:4])
             if node_id not in self.nodes:
                 raise ValueError(f"Received message from unknown node {node_id}")
-            data = payload[4:]
+            seq = int.from_bytes(payload[4:12])
+            data = payload[12:]
+            if seq <= self._last_seq.get(node_id, -1):
+                return
+            self._last_seq[node_id] = seq
             Logger.log(Logger.RECV, sender=node_id, receiver=self.id, payload_size=len(data))
             self.q.put((node_id, data))

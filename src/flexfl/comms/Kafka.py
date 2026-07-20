@@ -17,6 +17,19 @@ TIMEOUT = 3
 HEARTBEAT_INTERVAL = 1
 
 class Kafka(CommABC):
+    """
+    Kafka-based communication backend.
+
+    Consumers statically assign partition 0 for every topic they read and
+    producers send keyless, so every topic used by this backend must have
+    exactly one partition. A broker default of more than one partition per
+    topic will silently drop messages sent to partitions the consumer never
+    reads. Configure the broker with `num.partitions=1` (as
+    `requirements/kafka-compose.yml` does).
+
+    Data sends are batched and delivered on linger/batch/close, while control
+    messages (discover, heartbeat) flush synchronously.
+    """
 
     def __init__(self, *, 
         ip: str = "localhost",
@@ -67,7 +80,6 @@ class Kafka(CommABC):
             topic=f"{TOPIC}_{self.id_mapping[node_id]}", 
             value=data, 
         )
-        self.producer.flush()
 
     
     def recv(self, node_id: int = None) -> tuple[int, bytes]:
@@ -89,13 +101,22 @@ class Kafka(CommABC):
             self.admin.close()
 
 
+    @staticmethod
+    def _owned(names: list[str]) -> list[str]:
+        return [
+            name for name in names
+            if name.startswith(f"{TOPIC}_")
+        ]
+
+
     def clear(self):
         self.admin = KafkaAdminClient(bootstrap_servers=self.kafka_broker, client_id="fl_admin")
         topics = self.admin.list_topics()
-        topics = [topic for topic in topics if not topic.startswith("__")]
+        topics = self._owned(topics)
         self.admin.delete_topics(topics)
         groups = self.admin.list_consumer_groups()
         groups = [g[0] for g in groups]
+        groups = self._owned(groups)
         self.admin.delete_consumer_groups(groups)
 
 
