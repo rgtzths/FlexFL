@@ -85,10 +85,11 @@ def test_handle_disconect_removes_node_and_unblocks_recv():
 
 
 def test_check_liveliness_disconnects_stale_node():
-    # A heartbeat older than TIMEOUT triggers handle_disconect for that node.
+    # A heartbeat older than TIMEOUT triggers handle_disconect for that node,
+    # while a node with a fresh heartbeat is left connected.
     inst = Kafka.__new__(Kafka)
-    inst._nodes = {0, 1}
-    inst.hearbeats = {1: time.time() - 100}
+    inst._nodes = {0, 1, 2}
+    inst.hearbeats = {1: time.time() - 100, 2: time.time()}
     inst.handle_disconect = Mock()
 
     inst.check_liveliness()
