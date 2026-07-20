@@ -29,6 +29,7 @@ class Slicing5g(DatasetABC):
         df = pd.read_excel(dataset, sheet_name="Model_Inputs_Outputs")
         le = LabelEncoder()
         df = df.drop(columns=["Unnamed: 0"], errors="ignore")
+        df = df.dropna()
         #Transform features into categories
         df["Use CaseType (Input 1)"] = le.fit_transform(df["Use CaseType (Input 1)"])
         df["LTE/5G UE Category (Input 2)"] = df["LTE/5G UE Category (Input 2)"].astype(str)

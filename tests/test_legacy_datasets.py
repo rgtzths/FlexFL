@@ -64,6 +64,26 @@ def _unsw_frame():
     return df
 
 
+def _slicing5g_frame():
+    n = 10
+    df = pd.DataFrame({
+        "Unnamed: 0": list(range(n)),
+        "Use CaseType (Input 1)": ["a", "b"] * (n // 2),
+        "LTE/5G UE Category (Input 2)": list(range(n)),
+        "Technology Supported (Input 3)": ["x", "y"] * (n // 2),
+        "Day (Input4)": ["mon", "tue"] * (n // 2),
+        "QCI (Input 6)": [1, 2] * (n // 2),
+        "Packet Loss Rate (Reliability)": [0.1, 0.2] * (n // 2),
+        "Packet Delay Budget (Latency)": [10, 20] * (n // 2),
+        "Raw Numeric Feature": [float(i) for i in range(n)],
+        "Slice Type (Output)": [0, 1, 2, 0, 1, 2, 0, 1, 2, 0],
+    })
+    # NaN in a non-encoded numeric feature: it survives to x_*.npy unless dropna runs.
+    df.loc[2, "Raw Numeric Feature"] = np.nan
+    df.loc[7, "Raw Numeric Feature"] = np.nan
+    return df
+
+
 def _assert_no_nan_and_row_count(ds, expected_rows):
     x_train, y_train = ds.load_data("train")
     x_val, y_val = ds.load_data("val")
@@ -94,6 +114,14 @@ def test_unsw_dropna_reassigned(monkeypatch, tmp_path):
     df = _unsw_frame()
     monkeypatch.setattr(pd, "read_csv", lambda *a, **kw: df.copy())
     ds = _build_dataset(monkeypatch, tmp_path, UNSW)
+    ds.preprocess(val_size=0.2, test_size=0.2)
+    _assert_no_nan_and_row_count(ds, 8)
+
+
+def test_slicing5g_dropna_reassigned(monkeypatch, tmp_path):
+    df = _slicing5g_frame()
+    monkeypatch.setattr(pd, "read_excel", lambda *a, **kw: df.copy())
+    ds = _build_dataset(monkeypatch, tmp_path, Slicing5g)
     ds.preprocess(val_size=0.2, test_size=0.2)
     _assert_no_nan_and_row_count(ds, 8)
 
