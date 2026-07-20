@@ -18,16 +18,18 @@ class Slicing5g(DatasetABC):
     
 
     def download(self):
-        self.download_file(
-            os.getenv('SLICING5G_URL'),
-        )
+        url = os.getenv('SLICING5G_URL')
+        if not url:
+            raise ValueError("SLICING5G_URL environment variable is not set; it must point to the Slicing5g dataset archive URL")
+        self.download_file(url)
 
 
     def preprocess(self, val_size, test_size):
         dataset = f"{self.default_folder}/5G_Dataset_Network_Slicing_CRAWDAD_Shared/5G_Dataset_Network_Slicing_CRAWDAD_Shared.xlsx"
         df = pd.read_excel(dataset, sheet_name="Model_Inputs_Outputs")
         le = LabelEncoder()
-        del df["Unnamed: 0"]
+        df = df.drop(columns=["Unnamed: 0"], errors="ignore")
+        df = df.dropna()
         #Transform features into categories
         df["Use CaseType (Input 1)"] = le.fit_transform(df["Use CaseType (Input 1)"])
         df["LTE/5G UE Category (Input 2)"] = df["LTE/5G UE Category (Input 2)"].astype(str)
