@@ -57,3 +57,41 @@ def test_torch_classification_model_outputs_logits(nn_cls, monkeypatch):
         monkeypatch.setattr(Benchmark, "_load", lambda self, data_name: ([8], 0.0))
     model = nn_cls().torch_model("dummy", INPUT_SHAPE, OUTPUT_SIZE, True)
     assert not any(isinstance(m, nn.Softmax) for m in model.modules())
+    # Behavioral proof (survives a softmax applied outside an nn.Softmax module):
+    # a logits tensor is not a probability simplex, so its rows do not sum to 1.
+    torch.manual_seed(0)
+    out = model(torch.randn(BATCH, *INPUT_SHAPE))
+    assert not torch.allclose(out.sum(dim=1), torch.ones(BATCH), atol=1e-5)
+
+
+def _discover_neural_nets():
+    import importlib
+    import pkgutil
+
+    import flexfl.neural_nets as nn_pkg
+    from flexfl.builtins.NeuralNetworkABC import NeuralNetworkABC
+
+    found = set()
+    for mod in pkgutil.iter_modules(nn_pkg.__path__):
+        module = importlib.import_module(f"flexfl.neural_nets.{mod.name}")
+        for obj in vars(module).values():
+            if (
+                isinstance(obj, type)
+                and issubclass(obj, NeuralNetworkABC)
+                and obj is not NeuralNetworkABC
+            ):
+                found.add(obj)
+    return found
+
+
+def test_all_neural_nets_guarded_against_torch_softmax():
+    # Every NeuralNetworkABC subclass must be covered by the logits guard above,
+    # so a new net cannot silently re-introduce the torch double-softmax bug.
+    # Pure import + subclass check, so it runs without any ML backend installed.
+    discovered = _discover_neural_nets()
+    uncovered = discovered ^ set(CLASSIFICATION_NETS)
+    assert discovered == set(CLASSIFICATION_NETS), (
+        "NeuralNetworkABC subclass(es) not covered by "
+        "test_torch_classification_model_outputs_logits: "
+        f"{sorted(c.__name__ for c in uncovered)}. Add each to CLASSIFICATION_NETS."
+    )
