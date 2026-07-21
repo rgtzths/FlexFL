@@ -16,7 +16,7 @@ try:
     from keras import layers
 except Exception as exc:  # pragma: no cover - import-time guard
     raise SystemExit(
-        "Keras backend is not available. Install tensorflow-cpu or set KERAS_BACKEND."
+        "Keras backend is not available. Install the ml extra (pip install '.[ml]') or set KERAS_BACKEND."
     ) from exc
 
 
