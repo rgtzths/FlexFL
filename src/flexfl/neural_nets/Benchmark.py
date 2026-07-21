@@ -52,8 +52,6 @@ class Benchmark(NeuralNetworkABC):
             layers.append(nn.Linear(sizes[i], sizes[i + 1]))
             layers.append(nn.ReLU())
         layers.append(nn.Linear(sizes[-2], sizes[-1]))
-        if is_classification:
-            layers.append(nn.Softmax(dim=1))
         model = nn.Sequential(*layers)
         model._weight_decay = wd
         return model

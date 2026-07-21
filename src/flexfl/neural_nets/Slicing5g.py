@@ -40,6 +40,4 @@ class Slicing5g(NeuralNetworkABC):
             nn.Dropout(0.1),
             nn.Linear(32, output_size)
         ]
-        if is_classification:
-            layers.append(nn.Softmax(dim=1))
         return nn.Sequential(*layers)

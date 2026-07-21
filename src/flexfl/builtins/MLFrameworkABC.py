@@ -156,6 +156,13 @@ class MLFrameworkABC(ABC):
         Predict the data. `data` is the backend-native feature container
         stored by `load_data` (a batched `tf.data.Dataset` for Keras/TensorFlow,
         a `torch.Tensor` for PyTorch).
+
+        Output space is backend-native and NOT uniform across backends: for
+        classification the PyTorch backend returns raw logits (its loss,
+        `CrossEntropyLoss`, applies log-softmax internally), while Keras and
+        TensorFlow return probabilities (their models end in a Softmax layer).
+        Consumers must therefore treat the output as argmax-comparable only and
+        must not assume a normalized probability vector.
         """
         pass
 
