@@ -14,6 +14,7 @@ FLEXFL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 usage() {
     echo "Usage: $0 [-f <ips_file>]" >&2
     echo "Example: $0 -f scripts/ips_all.txt" >&2
+    echo "Requires: sshpass on the control host" >&2
 }
 
 while getopts ":f:" opt; do
