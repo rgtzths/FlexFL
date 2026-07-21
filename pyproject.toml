@@ -41,7 +41,7 @@ flexfl-benchmark = "flexfl.cli.benchmark:main"
 [project.optional-dependencies]
 all = [
     "jax[cpu]>=0.5.3",
-    "tensorflow-cpu>=2.18.0",
+    "tensorflow>=2.18.0",
     "tf2onnx>=1.16.1",
     "torch>=2.6.0",
     "kafka-python>=2.1.2",
@@ -57,7 +57,7 @@ comms = [
 ]
 ml = [
     "jax[cpu]>=0.5.3",
-    "tensorflow-cpu>=2.18.0",
+    "tensorflow>=2.18.0",
     "tf2onnx>=1.16.1",
     "torch>=2.6.0",
 ]
