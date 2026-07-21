@@ -14,6 +14,7 @@ FLEXFL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 usage() {
     echo "Usage: $0 [-f <ips_file>]" >&2
     echo "Example: $0 -f scripts/ips_all.txt" >&2
+    echo "Requires: sshpass on the control host" >&2
 }
 
 while getopts ":f:" opt; do
@@ -38,7 +39,15 @@ if [ ! -f "$KEY_PATH" ]; then
     echo "SSH key generated at $KEY_PATH"
 fi
 
-sudo apt install -y sshpass
+if ! command -v sshpass >/dev/null 2>&1; then
+    echo "Error: sshpass not found on this control host." >&2
+    echo "Install it and re-run, e.g.:" >&2
+    echo "  Debian/Ubuntu: sudo apt install -y sshpass" >&2
+    echo "  Arch/CachyOS:  sudo pacman -S sshpass" >&2
+    echo "  Fedora:        sudo dnf install -y sshpass" >&2
+    echo "  macOS:         brew install sshpass" >&2
+    exit 1
+fi
 
 function setup_worker {
     local IP=$1
