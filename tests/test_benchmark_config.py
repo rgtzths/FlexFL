@@ -42,6 +42,15 @@ def test_load_falls_back_to_results_config(tmp_path, monkeypatch):
     assert wd == 0.01
 
 
+def test_load_resolves_config_cwd_relative(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_config(tmp_path / "data" / "dummy" / "dummy.json", DATA_CONFIG)
+
+    units, wd = Benchmark()._load("dummy")
+    assert units == [8, 4]
+    assert wd == 0.01
+
+
 def test_load_raises_when_neither_present(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     configs_dir = tmp_path / "results/hyperparameter_optimization"

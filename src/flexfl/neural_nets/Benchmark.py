@@ -3,9 +3,8 @@ from pathlib import Path
 
 from flexfl.builtins.NeuralNetworkABC import NeuralNetworkABC
 
-REPO_ROOT = Path(__file__).parent.parent.parent.parent
-CONFIGS_DIR = REPO_ROOT / "results/hyperparameter_optimization"
-DATA_DIR = REPO_ROOT / "data"
+CONFIGS_DIR = Path("results/hyperparameter_optimization")
+DATA_DIR = Path("data")
 
 
 class Benchmark(NeuralNetworkABC):
