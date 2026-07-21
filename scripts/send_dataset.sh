@@ -40,6 +40,8 @@ if [ ! -f "$VM_LIST" ]; then
     exit 1
 fi
 
+CONFIG_SRC="results/hyperparameter_optimization/$DATASET.json"
+
 function send_dataset {
     local IP=$1
     local NODE_ID=$2
@@ -48,7 +50,15 @@ function send_dataset {
     sshpass -p "$PASSWORD" ssh -n $ARGS "$USERNAME@$IP" "mkdir -p ~/flexfl/data/$DATASET" > /dev/null 2>&1 &&
     sshpass -p "$PASSWORD" scp $ARGS -r "data/$DATASET/node_$NODE_ID" "$USERNAME@$IP:~/flexfl/data/$DATASET" > /dev/null 2>&1 &&
     sshpass -p "$PASSWORD" ssh -n $ARGS "$USERNAME@$IP" "mv ~/flexfl/data/$DATASET/node_$NODE_ID ~/flexfl/data/$DATASET/my_data" > /dev/null 2>&1
-    if [ $? -eq 0 ]; then
+    local rc=$?
+
+    if [ -f "$CONFIG_SRC" ]; then
+        sshpass -p "$PASSWORD" scp $ARGS "$CONFIG_SRC" "$USERNAME@$IP:~/flexfl/data/$DATASET/$DATASET.json" > /dev/null 2>&1
+    else
+        echo "Warning: no HPO config at $CONFIG_SRC; --nn benchmark will fail on $IP for $DATASET" >&2
+    fi
+
+    if [ $rc -eq 0 ]; then
         echo "Dataset sent to $IP successfully!"
     else
         echo "Failed to send dataset to $IP!"

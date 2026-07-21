@@ -3,19 +3,28 @@ from pathlib import Path
 
 from flexfl.builtins.NeuralNetworkABC import NeuralNetworkABC
 
-CONFIGS_DIR = Path(__file__).parent.parent.parent.parent / "results/hyperparameter_optimization"
+REPO_ROOT = Path(__file__).parent.parent.parent.parent
+CONFIGS_DIR = REPO_ROOT / "results/hyperparameter_optimization"
+DATA_DIR = REPO_ROOT / "data"
 
 
 class Benchmark(NeuralNetworkABC):
 
+    def _config_path(self, data_name: str) -> Path:
+        data_path = DATA_DIR / data_name / f"{data_name}.json"
+        if data_path.exists():
+            return data_path
+        results_path = CONFIGS_DIR / f"{data_name}.json"
+        if results_path.exists():
+            return results_path
+        raise FileNotFoundError(
+            f"No hyperparameter config for '{data_name}'. "
+            f"Run src/other/model_finder.py for this dataset first. "
+            f"Expected: {data_path} or {results_path}"
+        )
+
     def _load(self, data_name: str) -> tuple[list[int], float]:
-        path = CONFIGS_DIR / f"{data_name}.json"
-        if not path.exists():
-            raise FileNotFoundError(
-                f"No hyperparameter config for '{data_name}'. "
-                f"Run src/other/model_finder.py for this dataset first. "
-                f"Expected: {path}"
-            )
+        path = self._config_path(data_name)
         with open(path) as f:
             config = json.load(f)
         units = [config[f"n_units_l{i}"] for i in range(config["n_layers"])]
