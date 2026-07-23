@@ -15,34 +15,17 @@ EXTRA_ARGS=("$@")
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PXM_DIR="${FLEXFL_PXM_DIR:-$SCRIPT_DIR/../../pxm-tools}"
 TEST_CONFIG="config-test.json"   # relative to PXM_DIR; generated below
-IDS_FILE="$SCRIPT_DIR/ids.json"
-IDS_SUBSET="$SCRIPT_DIR/ids_subset.json"
-IPS_SUBSET="$SCRIPT_DIR/ips_subset.json"
+IDS_FILE="$SCRIPT_DIR/ids_test.json"
+IDS_SUBSET="$SCRIPT_DIR/ids_subset_test.json"
+IPS_SUBSET="$SCRIPT_DIR/ips_subset_test.json"
 IPS_SUBSET_TXT="${IPS_SUBSET%.json}.txt"
-IPS_ALL="$SCRIPT_DIR/ips_all.json"
+IPS_ALL="$SCRIPT_DIR/ips_all_test.json"
 IPS_ALL_TXT="${IPS_ALL%.json}.txt"
+RESULTS_ROOT="results/test"
+SETUP_MARKER="$RESULTS_ROOT/.setup_complete"
+FAIL_LOG="$RESULTS_ROOT/_failures.log"
 
-SETUP_MARKER="results/.setup_complete"
-FAIL_LOG="results/_failures.log"
-
-mkdir -p results
-
-# Record a failed step (does not abort the sweep). Uses the loop vars in scope.
-log_failure() {
-    echo "$(date -u +%FT%TZ)  FAILED  step=$1  strategy=${strategy:-}  nodes=${n1:-}_${n2:-}_${n3:-}  dataset=${data_name:-}  fl=${fl_algo:-}" >> "$FAIL_LOG"
-    echo "  ! recorded failure: step=$1 (${strategy:-}/${n1:-}_${n2:-}_${n3:-}/${data_name:-}/${fl_algo:-})" >&2
-}
-
-is_done() {
-    local d="$1"
-    [ -f "$d/_SUCCESS" ]
-}
-
-run_output_complete() {
-    local d="$1" f
-    f="$(find "$d" -name 'log_0.jsonl' 2>/dev/null | head -n 1)"
-    [ -n "$f" ] && grep -q '"event": "end"' "$f"
-}
+mkdir -p "$RESULTS_ROOT"
 
 # --- Reduced test matrix ---
 datasets=(
@@ -64,10 +47,27 @@ RUN_TIMEOUT="${FLEXFL_RUN_TIMEOUT:-900}"   # per-run wall-clock cap (s); a hung 
 BENCH_ARGS="${FLEXFL_BENCH_ARGS:---epochs 3 --warmup-epochs 1 --repeats 1 --samples 2000}"
 
 SEEDS=(42 43 44 45 46 47 48 49 50 51)
-if [ "$REPEATS" -gt "${#SEEDS[@]}" ]; then
-    echo "FLEXFL_REPEATS=$REPEATS exceeds the ${#SEEDS[@]} predefined seeds in SEEDS — add more." >&2
-    exit 1
-fi
+
+execute_fl_run() {
+    local ips_file="$1" data_name="$2" fl_algo="$3" seed="$4" hp_args="$5"
+    # Kill any stale flexfl/screens from a prior (possibly timed-out) run so
+    # a fresh run starts clean, then clear remote results.
+    bash scripts/run_commands.sh -i "$ips_file" "pkill -f flexfl 2>/dev/null; screen -wipe >/dev/null 2>&1; rm -rf ~/flexfl/results"
+
+    # Cap wall-clock: a stuck run (a worker that never joins, a comm stall)
+    # otherwise hangs the sweep forever on the master-wait.
+    timeout "$RUN_TIMEOUT" bash scripts/run_on_vms.sh -f "$ips_file" 0 0 \
+        --dataset Benchmark --data_name "$data_name" --nn benchmark \
+        --fl "$fl_algo" --seed "$seed" $hp_args "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+    run_rc=$?
+    if [ "$run_rc" -eq 124 ]; then
+        echo "    ! ${fl_algo}: TIMED OUT after ${RUN_TIMEOUT}s — killing stale flexfl" >&2
+        bash scripts/run_commands.sh -i "$ips_file" "pkill -f flexfl 2>/dev/null; screen -wipe >/dev/null 2>&1 || true"
+    fi
+}
+
+source "$SCRIPT_DIR/_sweep_common.sh"
+check_seeds_or_exit
 
 # --- One-time VM creation, setup and benchmark (idempotent) ---
 if [ -f "$SETUP_MARKER" ]; then
@@ -159,8 +159,8 @@ PYEOF
 
     # --- Machine benchmark ---
     echo "=== Running machine benchmark on all VMs ($BENCH_ARGS) ==="
-    mkdir -p results/benchmark
-    bash scripts/run_machine_benchmark.sh "$IDS_FILE" "$IPS_ALL" results/benchmark $BENCH_ARGS
+    mkdir -p "$RESULTS_ROOT/benchmark"
+    bash scripts/run_machine_benchmark.sh "$IDS_FILE" "$IPS_ALL" "$RESULTS_ROOT/benchmark" $BENCH_ARGS
 
     echo "=== Shutting down all VMs ==="
     (cd "$PXM_DIR" && uv run pxm-stop --ids "$IDS_FILE")
@@ -170,137 +170,94 @@ PYEOF
     echo "=== Setup complete ==="
 fi
 
-# --- Sweep (fault-tolerant, resumable) ---
-for strategy in "${distributions[@]}"; do
-    for n1 in "${atnog_test1[@]}"; do
-        for n2 in "${hobbit[@]}"; do
-            for n3 in "${samwise[@]}"; do
-                total=$((n1 + n2 + n3))
-                combo="atnog-test1_${n1}_hobbit_${n2}_samwise_${n3}"
-                run_root="results/${strategy}/${combo}"
-                echo "=== distribution=$strategy  atnog-test1=$n1 hobbit=$n2 samwise=$n3 total=$total ==="
-
-                if ! python3 scripts/subset_ids.py \
-                    --ids "$IDS_FILE" --output "$IDS_SUBSET" \
-                    --atnog-test1 "$n1" --hobbit "$n2" --samwise "$n3"; then
-                    log_failure "subset_ids"
-                    continue
-                fi
-
-                if ! (cd "$PXM_DIR" && uv run pxm-start --ids "$IDS_SUBSET" --ips "$IPS_SUBSET"); then
-                    log_failure "pxm-start-subset"
-                    continue
-                fi
-
-                mkdir -p "$run_root"
-                if ! python3 scripts/vm_identity.py --ids "$IDS_SUBSET" --ips "$IPS_SUBSET" --out "$run_root/workers.txt"; then
-                    log_failure "vm_identity"
-                    continue
-                fi
-
-                for data_name in "${datasets[@]}"; do
-                    base="${run_root}/${data_name}"
-
-                    all_done=1
-                    for fl_algo in "${fl_algos[@]}"; do
-                        for r in $(seq 1 "$REPEATS"); do
-                            is_done "${base}/${fl_algo}/rep_${r}" || { all_done=0; break 2; }
-                        done
-                    done
-                    fl_algo=""; r=""
-                    if [ "$all_done" -eq 1 ]; then
-                        echo "  - ${combo}/${data_name}: all algos done, skipping"
-                        continue
-                    fi
-
-                    mkdir -p "$base"
-                    pflag=0
-                    [ -f "data/${data_name}/_data/x_train.npy" ] || pflag=1
-                    if ! bash scripts/dataset_division.sh -d "$data_name" -n "$total" -s "$strategy" -p "$pflag"; then
-                        log_failure "dataset_division"
-                        continue
-                    fi
-                    if ! bash scripts/send_dataset.sh -d "$data_name" -f "$IPS_SUBSET_TXT"; then
-                        log_failure "send_dataset"
-                        continue
-                    fi
-                    rm -rf "${base}/data"
-                    cat > "${base}/division.json" <<EOF
-{
-  "dataset": "${data_name}",
-  "num_workers": ${total},
-  "nodes": {"atnog-test1": ${n1}, "hobbit": ${n2}, "samwise": ${n3}},
-  "strategy": "${strategy}",
-  "val_size": 0,
-  "test_size": 0,
-  "distribution_percentage": 0.9,
-  "alpha": 0.5,
-  "seed": 42,
-  "preprocess": {"val_size": 0.2, "test_size": 0.2}
-}
-EOF
-                    uv run python scripts/compute_partition_entropy.py \
-                        --data-dir "data/${data_name}" --num-workers "$total" \
-                        --update-json "${base}/division.json" \
-                        || echo "  ! entropy computation failed for ${data_name} (continuing)" >&2
-
-                    for fl_algo in "${fl_algos[@]}"; do
-                        hp_args=$(python3 scripts/sample_hyperparameters.py \
-                            --algo "$fl_algo" --key "${combo}|${data_name}|${fl_algo}" \
-                            --json-out "${base}/.hp_${fl_algo}.json")
-
-                        for r in $(seq 1 "$REPEATS"); do
-                            seed="${SEEDS[$((r - 1))]}"
-                            run_dir="${base}/${fl_algo}/rep_${r}"
-                            if is_done "$run_dir"; then
-                                echo "    - ${fl_algo} rep ${r}: done, skipping"
-                                continue
-                            fi
-                            rm -rf "$run_dir"
-                            # Kill any stale flexfl/screens from a prior (possibly timed-out) run so
-                            # a fresh run starts clean, then clear remote results.
-                            bash scripts/run_commands.sh -i "$IPS_SUBSET_TXT" "pkill -f flexfl 2>/dev/null; screen -wipe >/dev/null 2>&1; rm -rf ~/flexfl/results"
-
-                            # Cap wall-clock: a stuck run (a worker that never joins, a comm stall)
-                            # otherwise hangs the sweep forever on the master-wait.
-                            timeout "$RUN_TIMEOUT" bash scripts/run_on_vms.sh -f "$IPS_SUBSET_TXT" 0 0 \
-                                --dataset Benchmark --data_name "$data_name" --nn benchmark \
-                                --fl "$fl_algo" --seed "$seed" $hp_args "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
-                            run_rc=$?
-                            if [ "$run_rc" -eq 124 ]; then
-                                echo "    ! ${fl_algo} rep ${r}: TIMED OUT after ${RUN_TIMEOUT}s — killing stale flexfl" >&2
-                                bash scripts/run_commands.sh -i "$IPS_SUBSET_TXT" "pkill -f flexfl 2>/dev/null; screen -wipe >/dev/null 2>&1 || true"
-                            fi
-
-                            bash scripts/gather_results.sh -f "$IPS_SUBSET_TXT" -o "$run_dir"
-
-                            if [ "$run_rc" -eq 0 ] && run_output_complete "$run_dir"; then
-                                cp -f "${base}/.hp_${fl_algo}.json" "$run_dir/hyperparameters.json"
-                                touch "$run_dir/_SUCCESS"
-                                echo "    - ${fl_algo} rep ${r}: success"
-                            else
-                                touch "$run_dir/_FAILED"
-                                log_failure "run_on_vms"
-                                echo "    - ${fl_algo} rep ${r}: FAILED (marked _FAILED, will retry on re-run)"
-                            fi
-                        done
-                        rm -f "${base}/.hp_${fl_algo}.json"
-                    done
-                    fl_algo=""; r=""
-
-                    rm -rf "data/${data_name}"/node_*
-                    bash scripts/run_commands.sh -i "$IPS_SUBSET_TXT" "rm -rf ~/flexfl/data/${data_name}"
-                    bash scripts/run_commands.sh -i "$IPS_SUBSET_TXT" "rm -rf ~/flexfl/results"
-                done
-
-            done
-        done
-    done
-done
+run_sweep
 
 echo "=== Test sweep complete. Shutting down all test VMs ==="
 (cd "$PXM_DIR" && uv run pxm-stop --ids "$IDS_FILE") || echo "  ! pxm-stop failed — VMs may still be running" >&2
 
 if [ -s "$FAIL_LOG" ]; then
     echo "Some steps failed and were skipped — see $FAIL_LOG ($(wc -l < "$FAIL_LOG") entries). Re-run this script to retry them; completed runs are skipped."
+fi
+
+echo "=== Verifying acceptance criteria ==="
+verify_ok=1
+
+expected_success=$(( ${#distributions[@]} * ${#datasets[@]} * ${#fl_algos[@]} * REPEATS ))
+strategy_dirs=()
+for d in "${distributions[@]}"; do strategy_dirs+=("$RESULTS_ROOT/$d"); done
+success_count=$(find "${strategy_dirs[@]}" -name _SUCCESS 2>/dev/null | wc -l)
+if [ "$success_count" -eq "$expected_success" ]; then
+    echo "  - _SUCCESS count: $success_count/$expected_success OK"
+else
+    echo "  ! _SUCCESS count: $success_count/$expected_success MISMATCH" >&2
+    verify_ok=0
+fi
+
+bench_files=("$RESULTS_ROOT"/benchmark/machine_benchmark_*.json)
+bench_count=0
+[ -e "${bench_files[0]}" ] && bench_count="${#bench_files[@]}"
+if [ "$bench_count" -eq 7 ]; then
+    for f in "${bench_files[@]}"; do
+        python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+models = d.get('results', {})
+ok = bool(models) and all(
+    isinstance(m.get('avg_epochs_per_second'), (int, float)) and m['avg_epochs_per_second'] == m['avg_epochs_per_second']
+    and abs(m['avg_epochs_per_second']) != float('inf')
+    for m in models.values()
+)
+sys.exit(0 if ok else 1)
+" "$f" || { echo "  ! $f: avg_epochs_per_second missing or not finite for some model" >&2; verify_ok=0; }
+    done
+    [ "$verify_ok" -eq 1 ] && echo "  - benchmark JSONs: $bench_count/7, all finite rates OK"
+else
+    echo "  ! benchmark JSON count: $bench_count/7 MISMATCH" >&2
+    verify_ok=0
+fi
+
+assemble_out=$(uv run python scripts/assemble_meta_dataset.py --results-dir "$RESULTS_ROOT" --out "$RESULTS_ROOT/meta_dataset.csv" 2>&1)
+assemble_rc=$?
+echo "$assemble_out"
+if [ "$assemble_rc" -eq 0 ]; then
+    skipped=$(echo "$assemble_out" | grep -oE '\([0-9]+ skipped\)' | grep -oE '[0-9]+' | tail -1)
+    skipped="${skipped:-0}"
+    row_count=$(($(wc -l < "$RESULTS_ROOT/meta_dataset.csv") - 1))
+    empty_cols=$(python3 -c "
+import csv, sys
+with open(sys.argv[1]) as f:
+    reader = csv.reader(f)
+    header = next(reader)
+    rows = list(reader)
+has_value = [False] * len(header)
+for row in rows:
+    for i, v in enumerate(row):
+        if v.strip():
+            has_value[i] = True
+print(','.join(header[i] for i, v in enumerate(has_value) if not v))
+" "$RESULTS_ROOT/meta_dataset.csv")
+    if [ "$row_count" -eq "$expected_success" ] && [ -z "$empty_cols" ]; then
+        echo "  - meta_dataset.csv: $row_count rows (warnings reported: $skipped), no empty columns OK"
+    else
+        echo "  ! meta_dataset.csv: $row_count rows (expected $expected_success), empty columns: [${empty_cols:-none}]" >&2
+        verify_ok=0
+    fi
+else
+    echo "  ! assemble_meta_dataset.py failed (rc=$assemble_rc)" >&2
+    verify_ok=0
+fi
+
+if [ "$verify_ok" -eq 1 ]; then
+    echo "=== ALL ACCEPTANCE CRITERIA PASSED ==="
+else
+    echo "=== ACCEPTANCE CRITERIA FAILED — see markers above ===" >&2
+fi
+
+if [ "$verify_ok" -eq 1 ] && { [ ! -s "$FAIL_LOG" ]; }; then
+    echo "=== Cleaning up test state (all checks passed) ==="
+    rm -rf "$RESULTS_ROOT" "$IDS_FILE" "$IPS_ALL" "$IPS_ALL_TXT" \
+           "$IDS_SUBSET" "$IPS_SUBSET" "$IPS_SUBSET_TXT" "$SCRIPT_DIR/ips_retry.txt"
+    rm -f "$PXM_DIR/$TEST_CONFIG"
+else
+    echo "=== Leaving test state in place for debugging (see $FAIL_LOG / verification output above) ===" >&2
 fi
