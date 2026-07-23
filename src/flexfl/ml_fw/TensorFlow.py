@@ -38,10 +38,10 @@ class TensorFlow(MLFrameworkABC):
 
     def load_data(self, split: str):
         x, y = self.dataset.load_data(split, loader="tf")
+        self._set_n_samples_and_clamp_batch_size(y.shape[0])
         x: tf.data.Dataset = x.batch(self.batch_size)
         y_: tf.data.Dataset = tf.data.Dataset.from_tensor_slices(y).batch(self.batch_size)
         data = tf.data.Dataset.zip((x, y_))
-        self.n_samples = y.shape[0]
         setattr(self, f"x_{split}", x)
         setattr(self, f"y_{split}", y)
         setattr(self, f"{split}_data", data)

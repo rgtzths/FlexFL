@@ -1,9 +1,26 @@
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
 torch = pytest.importorskip("torch")
 
 from flexfl.ml_fw.PyTorch import PyTorch, LOSSES, _MAPE_EPSILON
+
+
+def test_load_data_clamps_batch_size_to_n_samples():
+    x_tensor = torch.zeros((10, 3), dtype=torch.float32)
+    y = np.zeros((10,), dtype=np.int64)
+    instance = object.__new__(PyTorch)
+    instance.device = torch.device("cpu")
+    instance.batch_size = 2048
+    instance.dataset = SimpleNamespace(
+        load_data=lambda split, loader: (x_tensor, y),
+        is_classification=True,
+    )
+    instance.load_data("train")
+    assert instance.n_samples == 10
+    assert instance.batch_size == 10
 
 
 def test_target_dtype_classification():
