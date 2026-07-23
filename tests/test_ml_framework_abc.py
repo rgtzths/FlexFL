@@ -21,12 +21,11 @@ def test_clamp_leaves_batch_size_when_below_n_samples():
     assert instance.batch_size == 32
 
 
-def test_clamp_does_not_clamp_to_zero_when_n_samples_zero():
+def test_clamp_raises_when_n_samples_zero():
     instance = object.__new__(_FakeML)
     instance.batch_size = 32
-    instance._set_n_samples_and_clamp_batch_size(0)
-    assert instance.n_samples == 0
-    assert instance.batch_size == 32
+    with pytest.raises(ValueError):
+        instance._set_n_samples_and_clamp_batch_size(0)
 
 
 def test_check_flat_length_raises_on_mismatch():

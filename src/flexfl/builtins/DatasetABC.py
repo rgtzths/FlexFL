@@ -172,6 +172,13 @@ class DatasetABC(ABC):
         else:
             x, y = self.division_non_iid(num_workers, distribution_percentage)
         for i in range(num_workers):
+            if len(x[i]) == 0:
+                raise ValueError(
+                    f"{self.name}: worker {i+1}/{num_workers} received 0 training samples "
+                    f"under distribution='{distribution}' (dataset too small for this worker "
+                    f"count, or an extreme non-iid/dirichlet skew) -- reduce num_workers or "
+                    f"adjust distribution_percentage/alpha for this dataset."
+                )
             self.division_worker(x[i], y[i], i+1, val_size, test_size)
 
 

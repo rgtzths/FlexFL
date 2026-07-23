@@ -63,10 +63,18 @@ class MLFrameworkABC(ABC):
         """
         Record the loaded split's sample count and clamp batch_size to it so
         every worker forms at least one batch regardless of the sampled value.
+        Requires n_samples > 0 -- DatasetABC.data_division rejects a zero-sample
+        worker split before it ever reaches a backend's load_data().
         """
+        if n_samples <= 0:
+            raise ValueError(
+                f"{type(self).__name__}: load_data() loaded a split with "
+                f"{n_samples} samples; every split must have at least one "
+                f"sample (see DatasetABC.data_division's fail-fast check for "
+                f"training splits)."
+            )
         self.n_samples = n_samples
-        if n_samples > 0:
-            self.batch_size = min(self.batch_size, n_samples)
+        self.batch_size = min(self.batch_size, n_samples)
 
 
     @staticmethod
