@@ -86,7 +86,7 @@ echo "Command execution completed!"
 STALL_TIMEOUT="${FLEXFL_STALL_TIMEOUT:-1200}"
 STALL_BACKSTOP="${FLEXFL_STALL_BACKSTOP:-21600}"
 POLL_INTERVAL=30
-SSH_CHECK_ARGS="$ARGS -o ConnectTimeout=15"
+SSH_CHECK_ARGS="$ARGS -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3"
 
 echo "Waiting for master to finish (stall timeout ${STALL_TIMEOUT}s, backstop ${STALL_BACKSTOP}s)..."
 start_ts=$(date +%s)
@@ -94,13 +94,14 @@ last_progress_ts=$start_ts
 last_log_state=""
 stalled=0
 
+export SSHPASS="$PASSWORD"
 while true; do
     # Capture $? from the command itself, NOT from `if ! CMD; then` — inside that
     # then-branch, $? reflects the negated condition the `if` already resolved
     # (always 0), not CMD's real exit code, which would make the "screen ended
     # cleanly" branch below unreachable and kill every run, including successful
     # ones, once STALL_TIMEOUT elapses after completion.
-    sshpass -p "$PASSWORD" ssh $SSH_CHECK_ARGS "$USERNAME@$MASTER_IP" \
+    sshpass -e ssh $SSH_CHECK_ARGS "$USERNAME@$MASTER_IP" \
         "screen -list | grep -q fl-master" 2>/dev/null
     ssh_rc=$?
     if [ "$ssh_rc" -ne 0 ]; then
@@ -112,7 +113,7 @@ while true; do
         echo "  (transient SSH check failure, rc=$ssh_rc — retrying)" >&2
     fi
 
-    log_state=$(sshpass -p "$PASSWORD" ssh $SSH_CHECK_ARGS "$USERNAME@$MASTER_IP" \
+    log_state=$(sshpass -e ssh $SSH_CHECK_ARGS "$USERNAME@$MASTER_IP" \
         "find ~/flexfl/results -name 'log_0.jsonl' -printf '%T@ %s\n' 2>/dev/null | head -n 1")
     now=$(date +%s)
     if [ -n "$log_state" ] && [ "$log_state" != "$last_log_state" ]; then
@@ -133,6 +134,7 @@ while true; do
 
     sleep "$POLL_INTERVAL"
 done
+unset SSHPASS
 
 if [ "$stalled" -eq 1 ]; then
     bash scripts/run_commands.sh -i "$VM_LIST" "pkill -f flexfl 2>/dev/null; screen -wipe >/dev/null 2>&1 || true"

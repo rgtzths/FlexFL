@@ -161,14 +161,16 @@ else
     # VM's vm.sh failed, so a silently-broken worker would later hang the master in
     # wait_for_workers. Retry setup on any VM still missing the venv; abort if it
     # persists rather than starting the sweep with a doomed worker.
-    _vm_user="$(grep -E '^VM_USERNAME=' "$SCRIPT_DIR/../.env" | cut -d= -f2-)"
+    export $(grep -v '^#' "$SCRIPT_DIR/../.env" | xargs)
+    _vm_user="$VM_USERNAME"
     _ssh_key="$SCRIPT_DIR/../keys/id_rsa"
     list_missing_venvs() {
         local ip
         while read -r ip; do
             [[ -z "$ip" || "$ip" =~ ^# ]] && continue
             ssh -i "$_ssh_key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-                -o ConnectTimeout=10 -o BatchMode=yes -q "$_vm_user@$ip" 'test -f ~/flexfl/venv/bin/flexfl' 2>/dev/null \
+                -o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -o BatchMode=yes -q \
+                "$_vm_user@$ip" 'test -f ~/flexfl/venv/bin/flexfl' 2>/dev/null \
                 || echo "$ip"
         done < "$IPS_ALL_TXT"
     }
@@ -177,7 +179,7 @@ else
         [ "${#_missing[@]}" -eq 0 ] && break
         echo "=== venv missing on ${#_missing[@]} VM(s): ${_missing[*]} — retry setup (attempt $_attempt) ==="
         printf '%s\n' "${_missing[@]}" > "$SCRIPT_DIR/ips_retry.txt"
-        export SSHPASS="$(grep -E '^VM_PASSWORD=' "$SCRIPT_DIR/../.env" | cut -d= -f2-)"
+        export SSHPASS="$VM_PASSWORD"
         for _ip in "${_missing[@]}"; do
             sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q \
                 "$_vm_user@$_ip" "cloud-init status --wait >/dev/null 2>&1; sudo dpkg --configure -a >/dev/null 2>&1 || true" &

@@ -121,7 +121,7 @@ All scripts accept a `-f <ips_file>` flag to target a custom set of VMs. Run fro
 | `scripts/setup_vms.sh` | `setup_vms.sh [-f <ips>]` — rsyncs FlexFL folder (excluding `data/`/`results/`), installs dependencies |
 | `scripts/dataset_division.sh` | `dataset_division.sh -d <dataset> -n <workers> -s <strategy> [-p <0\|1>]` — `-p 0` skips preprocessing |
 | `scripts/send_dataset.sh` | `send_dataset.sh -d <dataset> -f <ips>` |
-| `scripts/run_on_vms.sh` | `run_on_vms.sh [-f <ips>] <interval> <chance> [args]` |
+| `scripts/run_on_vms.sh` | `run_on_vms.sh [-f <ips>] <interval> <chance> [args]` — exits non-zero if the master-wait watchdog detects a stall (see `FLEXFL_STALL_TIMEOUT`/`FLEXFL_STALL_BACKSTOP`) |
 | `scripts/gather_results.sh` | `gather_results.sh [-f <ips>] [-o <output_dir>]` |
 | `scripts/run_commands.sh` | `run_commands.sh [-v] [-w] [-i <ips>] -f <script>` or `run_commands.sh [-v] [-w] [-i <ips>] <command>` |
 | `scripts/run_machine_benchmark.sh` | `run_machine_benchmark.sh <ids.json> <ips.json> <output_dir> [benchmark_args]` |
@@ -140,3 +140,5 @@ FlexFL is deployed to VMs via `rsync` (not installed from PyPI). `setup_vms.sh` 
 | `VM_USERNAME`, `VM_PASSWORD` | SSH credentials for remote VMs (via `.env`) |
 | `OMPI_COMM_WORLD_SIZE`, `OMPI_COMM_WORLD_RANK` | Set automatically when using MPI |
 | `SLICING5G_URL` | URL of the Slicing5g dataset archive (required to download the Slicing5g legacy dataset) |
+| `FLEXFL_STALL_TIMEOUT` | Stall timeout in seconds for `run_on_vms.sh`'s master-wait watchdog (default `1200`) — a run whose master log stops advancing for this long is killed and marked `_FAILED` |
+| `FLEXFL_STALL_BACKSTOP` | Absolute wall-clock bound in seconds for `run_on_vms.sh`'s master-wait watchdog (default `21600`) — a backstop independent of stall detection |
