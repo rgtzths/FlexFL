@@ -144,6 +144,44 @@ else
 
     bash scripts/setup_vms.sh -f "$IPS_ALL_TXT"
 
+    # Verify every VM actually built the flexfl venv. setup_vms.sh exits 0 even when a
+    # VM's vm.sh failed, so a silently-broken worker would later hang the master in
+    # wait_for_workers. Retry setup on any VM still missing the venv; abort if it
+    # persists rather than starting the sweep with a doomed worker.
+    export $(grep -v '^#' "$SCRIPT_DIR/../.env" | xargs)
+    _vm_user="$VM_USERNAME"
+    _ssh_key="$SCRIPT_DIR/../keys/id_rsa"
+    list_missing_venvs() {
+        local ip
+        while read -r ip; do
+            [[ -z "$ip" || "$ip" =~ ^# ]] && continue
+            ssh -i "$_ssh_key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                -o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -o BatchMode=yes -q \
+                "$_vm_user@$ip" 'test -f ~/flexfl/venv/bin/flexfl' 2>/dev/null \
+                || echo "$ip"
+        done < "$IPS_ALL_TXT"
+    }
+    for _attempt in 1 2 3; do
+        mapfile -t _missing < <(list_missing_venvs)
+        [ "${#_missing[@]}" -eq 0 ] && break
+        echo "=== venv missing on ${#_missing[@]} VM(s): ${_missing[*]} — retry setup (attempt $_attempt) ==="
+        printf '%s\n' "${_missing[@]}" > "$SCRIPT_DIR/ips_retry.txt"
+        export SSHPASS="$VM_PASSWORD"
+        for _ip in "${_missing[@]}"; do
+            sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q \
+                "$_vm_user@$_ip" "cloud-init status --wait >/dev/null 2>&1; sudo dpkg --configure -a >/dev/null 2>&1 || true" &
+        done
+        wait
+        unset SSHPASS
+        bash scripts/setup_vms.sh -f "$SCRIPT_DIR/ips_retry.txt"
+    done
+    mapfile -t _missing < <(list_missing_venvs)
+    if [ "${#_missing[@]}" -ne 0 ]; then
+        echo "ERROR: flexfl venv still missing on ${_missing[*]} after 3 setup attempts — aborting." >&2
+        exit 1
+    fi
+    echo "=== venv verified on all $(wc -l < "$IPS_ALL_TXT") VMs ==="
+
     # --- Machine benchmark ---
     # Reduced epochs/samples for a faster benchmark on the slow ARM VMs. Override with FLEXFL_BENCH_ARGS.
     BENCH_ARGS="${FLEXFL_BENCH_ARGS:---epochs 25 --warmup-epochs 5 --repeats 3 --samples 10000}"
