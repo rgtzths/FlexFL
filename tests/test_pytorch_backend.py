@@ -23,6 +23,21 @@ def test_load_data_clamps_batch_size_to_n_samples():
     assert instance.batch_size == 10
 
 
+def test_load_data_leaves_batch_size_unchanged_when_already_fits():
+    x_tensor = torch.zeros((10, 3), dtype=torch.float32)
+    y = np.zeros((10,), dtype=np.int64)
+    instance = object.__new__(PyTorch)
+    instance.device = torch.device("cpu")
+    instance.batch_size = 2
+    instance.dataset = SimpleNamespace(
+        load_data=lambda split, loader: (x_tensor, y),
+        is_classification=True,
+    )
+    instance.load_data("train")
+    assert instance.batch_size == 2
+    assert instance.n_samples // instance.batch_size >= 1
+
+
 def test_target_dtype_classification():
     assert PyTorch._target_dtype(True) is torch.long
 
