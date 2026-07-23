@@ -157,6 +157,42 @@ else
 
     bash scripts/setup_vms.sh -f "$IPS_ALL_TXT"
 
+    # Verify every VM actually built the flexfl venv. setup_vms.sh exits 0 even when a
+    # VM's vm.sh failed, so a silently-broken worker would later hang the master in
+    # wait_for_workers. Retry setup on any VM still missing the venv; abort if it
+    # persists rather than starting the sweep with a doomed worker.
+    _vm_user="$(grep -E '^VM_USERNAME=' "$SCRIPT_DIR/../.env" | cut -d= -f2-)"
+    _ssh_key="$SCRIPT_DIR/../keys/id_rsa"
+    list_missing_venvs() {
+        local ip
+        while read -r ip; do
+            [[ -z "$ip" || "$ip" =~ ^# ]] && continue
+            ssh -i "$_ssh_key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                -o ConnectTimeout=10 -o BatchMode=yes -q "$_vm_user@$ip" 'test -f ~/flexfl/venv/bin/flexfl' 2>/dev/null \
+                || echo "$ip"
+        done < "$IPS_ALL_TXT"
+    }
+    for _attempt in 1 2 3; do
+        mapfile -t _missing < <(list_missing_venvs)
+        [ "${#_missing[@]}" -eq 0 ] && break
+        echo "=== venv missing on ${#_missing[@]} VM(s): ${_missing[*]} — retry setup (attempt $_attempt) ==="
+        printf '%s\n' "${_missing[@]}" > "$SCRIPT_DIR/ips_retry.txt"
+        export SSHPASS="$(grep -E '^VM_PASSWORD=' "$SCRIPT_DIR/../.env" | cut -d= -f2-)"
+        for _ip in "${_missing[@]}"; do
+            sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q \
+                "$_vm_user@$_ip" "cloud-init status --wait >/dev/null 2>&1; sudo dpkg --configure -a >/dev/null 2>&1 || true" &
+        done
+        wait
+        unset SSHPASS
+        bash scripts/setup_vms.sh -f "$SCRIPT_DIR/ips_retry.txt"
+    done
+    mapfile -t _missing < <(list_missing_venvs)
+    if [ "${#_missing[@]}" -ne 0 ]; then
+        echo "ERROR: flexfl venv still missing on ${_missing[*]} after 3 setup attempts — aborting." >&2
+        exit 1
+    fi
+    echo "=== venv verified on all $(wc -l < "$IPS_ALL_TXT") VMs ==="
+
     # --- Machine benchmark ---
     echo "=== Running machine benchmark on all VMs ==="
     mkdir -p results/benchmark
