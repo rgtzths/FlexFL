@@ -28,6 +28,8 @@ class MLFrameworkABC(ABC):
         self.optimizer_name = optimizer
         self.loss_name = self.resolve_loss(loss, dataset.is_classification)
         self.learning_rate = learning_rate
+        # self.batch_size may be clamped downward once load_data() runs — see
+        # _set_n_samples_and_clamp_batch_size.
         self.batch_size = batch_size
         self.seed = seed
         self.use_gpu = use_gpu
@@ -55,6 +57,16 @@ class MLFrameworkABC(ABC):
                 f"choose one of {sorted(allowed)} (or omit --loss to use the default)."
             )
         return loss_name
+
+
+    def _set_n_samples_and_clamp_batch_size(self, n_samples: int) -> None:
+        """
+        Record the loaded split's sample count and clamp batch_size to it so
+        every worker forms at least one batch regardless of the sampled value.
+        """
+        self.n_samples = n_samples
+        if n_samples > 0:
+            self.batch_size = min(self.batch_size, n_samples)
 
 
     @staticmethod
