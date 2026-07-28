@@ -127,14 +127,16 @@ PYEOF
     # wait_for_workers. Retry setup on any VM still missing the venv; abort if it
     # persists rather than starting the sweep with a doomed worker.
     _ssh_key="$SCRIPT_DIR/../keys/id_rsa"
+    # Iterate a pre-read array, not the file on the loop's stdin: ssh inherits that
+    # stdin and consumes the remaining IPs, ending the loop after the first VM.
+    mapfile -t _all_ips < <(grep -vE '^[[:space:]]*(#|$)' "$IPS_ALL_TXT")
     list_missing_venvs() {
         local ip
-        while read -r ip; do
-            [[ -z "$ip" || "$ip" =~ ^# ]] && continue
-            ssh -i "$_ssh_key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        for ip in "${_all_ips[@]}"; do
+            ssh -n -i "$_ssh_key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                 -o ConnectTimeout=10 -q "$_vm_user@$ip" 'test -f ~/flexfl/venv/bin/flexfl' 2>/dev/null \
                 || echo "$ip"
-        done < "$IPS_ALL_TXT"
+        done
     }
     for _attempt in 1 2 3; do
         mapfile -t _missing < <(list_missing_venvs)
@@ -155,7 +157,7 @@ PYEOF
         echo "ERROR: flexfl venv still missing on ${_missing[*]} after 3 setup attempts — aborting." >&2
         exit 1
     fi
-    echo "=== venv verified on all $(wc -l < "$IPS_ALL_TXT") VMs ==="
+    echo "=== venv verified on all ${#_all_ips[@]} VMs ==="
 
     # --- Machine benchmark ---
     echo "=== Running machine benchmark on all VMs ($BENCH_ARGS) ==="
@@ -254,6 +256,9 @@ else
 fi
 
 if [ "$verify_ok" -eq 1 ] && { [ ! -s "$FAIL_LOG" ]; }; then
+    echo "=== Destroying test VMs (all checks passed) ==="
+    (cd "$PXM_DIR" && uv run pxm-rm --ids "$IDS_FILE") || echo "  ! pxm-rm failed — VMs may still exist on the Proxmox nodes" >&2
+
     echo "=== Cleaning up test state (all checks passed) ==="
     rm -rf "$RESULTS_ROOT" "$IDS_FILE" "$IPS_ALL" "$IPS_ALL_TXT" \
            "$IDS_SUBSET" "$IPS_SUBSET" "$IPS_SUBSET_TXT" "$SCRIPT_DIR/ips_retry.txt"

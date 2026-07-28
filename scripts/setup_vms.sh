@@ -58,7 +58,7 @@ function setup_worker {
     sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "chmod 600 ~/.ssh/$KEY_NAME && touch ~/.ssh/known_hosts && mkdir -p ~/scripts" &&
     sshpass -p "$PASSWORD" scp $ARGS "$VM_LIST" "$USERNAME@$IP:~/scripts/ips.txt" &&
     sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "mkdir -p ~/flexfl" &&
-    rsync -az --exclude='data/' --exclude='results/' \
+    rsync -az --exclude='data/' --exclude='results/' --exclude='.venv/' \
         --rsh='sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q' \
         "$FLEXFL_DIR/" "$USERNAME@$IP:~/flexfl/" &&
     sshpass -p "$PASSWORD" ssh $ARGS "$USERNAME@$IP" "bash ~/flexfl/scripts/vm.sh"
