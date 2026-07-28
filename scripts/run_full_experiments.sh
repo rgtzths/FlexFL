@@ -142,6 +142,20 @@ else
     echo "Waiting for VMs to reboot after disk extension..."
     sleep 120
 
+    # The reboot puts the VMs back on a boot where cloud-init and unattended-upgrades
+    # still hold the dpkg lock; without this wait vm.sh's apt steps lose the race and
+    # the venv is never built.
+    echo "=== Waiting for cloud-init to complete on all VMs ==="
+    _vm_user_wait="$(grep -E '^VM_USERNAME=' "$SCRIPT_DIR/../.env" | cut -d= -f2-)"
+    export SSHPASS="$(grep -E '^VM_PASSWORD=' "$SCRIPT_DIR/../.env" | cut -d= -f2-)"
+    while read -r _ip; do
+        [[ -z "$_ip" || "$_ip" =~ ^# ]] && continue
+        sshpass -e ssh -n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -q \
+            "$_vm_user_wait@$_ip" "cloud-init status --wait >/dev/null 2>&1; sudo dpkg --configure -a >/dev/null 2>&1 || true" &
+    done < "$IPS_ALL_TXT"
+    wait
+    unset SSHPASS
+
     bash scripts/setup_vms.sh -f "$IPS_ALL_TXT"
 
     # Verify every VM actually built the flexfl venv. setup_vms.sh exits 0 even when a
@@ -151,15 +165,17 @@ else
     export $(grep -v '^#' "$SCRIPT_DIR/../.env" | xargs)
     _vm_user="$VM_USERNAME"
     _ssh_key="$SCRIPT_DIR/../keys/id_rsa"
+    # Iterate a pre-read array, not the file on the loop's stdin: ssh inherits that
+    # stdin and consumes the remaining IPs, ending the loop after the first VM.
+    mapfile -t _all_ips < <(grep -vE '^[[:space:]]*(#|$)' "$IPS_ALL_TXT")
     list_missing_venvs() {
         local ip
-        while read -r ip; do
-            [[ -z "$ip" || "$ip" =~ ^# ]] && continue
-            ssh -i "$_ssh_key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        for ip in "${_all_ips[@]}"; do
+            ssh -n -i "$_ssh_key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                 -o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -o BatchMode=yes -q \
                 "$_vm_user@$ip" 'test -f ~/flexfl/venv/bin/flexfl' 2>/dev/null \
                 || echo "$ip"
-        done < "$IPS_ALL_TXT"
+        done
     }
     for _attempt in 1 2 3; do
         mapfile -t _missing < <(list_missing_venvs)
@@ -180,7 +196,7 @@ else
         echo "ERROR: flexfl venv still missing on ${_missing[*]} after 3 setup attempts — aborting." >&2
         exit 1
     fi
-    echo "=== venv verified on all $(wc -l < "$IPS_ALL_TXT") VMs ==="
+    echo "=== venv verified on all ${#_all_ips[@]} VMs ==="
 
     # --- Machine benchmark ---
     # Reduced epochs/samples for a faster benchmark on the slow ARM VMs. Override with FLEXFL_BENCH_ARGS.
