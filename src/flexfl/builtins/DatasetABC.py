@@ -91,6 +91,12 @@ class DatasetABC(ABC):
 
 
     def save_data(self, x, y, split):
+        for name, arr in (('x', x), ('y', y)):
+            if np.asarray(arr).dtype == object:
+                raise ValueError(
+                    f"{type(self).__name__}: {name}_{split} has dtype=object; the ML backends "
+                    f"cannot convert it to a tensor. Preprocess it to a numeric dtype."
+                )
         folder = Path(self.data_path)
         folder.mkdir(parents=True, exist_ok=True)
         np.save(folder/f'x_{split}.npy', x)

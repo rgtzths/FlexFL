@@ -1,3 +1,5 @@
+import numpy as np
+
 from flexfl.builtins.DatasetABC import DatasetABC
 from datasets import load_dataset
 from sklearn.preprocessing import LabelEncoder
@@ -32,9 +34,9 @@ class Benchmark(DatasetABC):
 
     
     def preprocess(self, val_size, test_size):
-        ds = load_dataset("inria-soda/tabular-benchmark", self.name)["train"].to_pandas().values
-        x = ds[:,:-1]
-        y = ds[:,-1]
+        df = load_dataset("inria-soda/tabular-benchmark", self.name)["train"].to_pandas()
+        x = df.iloc[:,:-1].to_numpy(dtype=np.float64)
+        y = df.iloc[:,-1].to_numpy()
         if self.class_task:
             le = LabelEncoder()
             y = le.fit_transform(y)
