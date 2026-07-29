@@ -29,6 +29,8 @@ METRICS = {
 }
 
 def smape(y_true, y_pred):
+    y_true = np.asarray(y_true).ravel()
+    y_pred = np.asarray(y_pred).ravel()
     denominator = (np.abs(y_true) + np.abs(y_pred)) / 2
     smape_values = np.where(denominator == 0, 0, np.abs(y_true - y_pred) / denominator)
     return np.mean(smape_values)
@@ -199,6 +201,11 @@ class FederatedABC(ABC):
         loss = self.ml.calculate_loss(y, preds)
         if self.is_classification:
             preds = np.argmax(preds, axis=1)
+        else:
+            preds = np.asarray(preds).reshape(np.shape(y))
+        assert np.shape(y) == np.shape(preds), (
+            f"metric inputs must have matching shapes, got y{np.shape(y)} and preds{np.shape(preds)}"
+        )
         metrics = {name: METRICS_FN[name](y, preds) for name in self.metrics}
         delta_time = time.time() - self.epoch_start
         if verbose:
