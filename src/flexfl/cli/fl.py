@@ -2,6 +2,8 @@ import argparse
 import json
 import os
 import logging
+import sys
+import traceback
 from rich.console import Console
 
 from flexfl.cli.utils import get_modules_and_args, load_class
@@ -134,7 +136,13 @@ def main():
         **class_args,
     )
 
-    f.run()
+    try:
+        f.run()
+    except Exception:
+        traceback.print_exc()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(1)
 
 
 if __name__ == "__main__":
