@@ -120,7 +120,7 @@ PYEOF
     wait
     unset SSHPASS
 
-    bash scripts/setup_vms.sh -f "$IPS_ALL_TXT"
+    bash scripts/setup_vms.sh -f "$IPS_ALL_TXT" -j "$IPS_ALL"
 
     # Verify every VM actually built the flexfl venv. setup_vms.sh exits 0 even when a
     # VM's vm.sh failed, so a silently-broken worker would later hang the master in
