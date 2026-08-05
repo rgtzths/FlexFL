@@ -123,6 +123,29 @@ if [ "$TIER" != "all" ]; then
     echo "Active datasets (${#datasets[@]}): ${datasets[*]}"
 fi
 
+# Optional exclusion list (comma-separated data_name values) to defer specific
+# datasets to a later pass without disturbing the tier selection above. The
+# sweep is resumable, so re-running later with FLEXFL_EXCLUDE_DATASETS unset
+# picks up only the datasets skipped here.
+if [ -n "${FLEXFL_EXCLUDE_DATASETS:-}" ]; then
+    IFS=',' read -r -a exclude_datasets <<< "$FLEXFL_EXCLUDE_DATASETS"
+    echo "=== Excluding datasets: ${exclude_datasets[*]} ==="
+    filtered_datasets=()
+    for d in "${datasets[@]}"; do
+        skip=0
+        for x in "${exclude_datasets[@]}"; do
+            [ "$d" = "$x" ] && skip=1 && break
+        done
+        [ "$skip" -eq 0 ] && filtered_datasets+=("$d")
+    done
+    datasets=("${filtered_datasets[@]}")
+    if [ "${#datasets[@]}" -eq 0 ]; then
+        echo "ERROR: FLEXFL_EXCLUDE_DATASETS removed every active dataset; aborting." >&2
+        exit 1
+    fi
+    echo "Active datasets after exclusion (${#datasets[@]}): ${datasets[*]}"
+fi
+
 # --- One-time VM creation, setup, benchmark and preprocessing (idempotent) ---
 if [ -f "$SETUP_MARKER" ]; then
     echo "=== Setup already complete ($SETUP_MARKER present) — skipping provisioning, benchmark and preprocessing ==="
