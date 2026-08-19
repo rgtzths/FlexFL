@@ -11,7 +11,10 @@ Features
   identity            strategy, node counts, num_workers, dataset, fl_algo, repeat
   FL hyperparameters  learning_rate, batch_size, patience, delta, local_epochs (T07)
   dataset meta        task, is_classification, n_samples, n_features, n_classes,
-                      is_categorical (T08 option B — architecture held fixed)
+                      is_categorical (T08 option B — raw architecture held fixed, not used directly)
+  model architecture  total_parameters, n_layers, mean_layer_width, max_layer_width,
+                      weight_decay — from the dataset's HPO config (T44); size/shape
+                      scalars plus weight decay, not the raw per-layer unit list.
   partition           strategy, alpha, distribution_percentage,
                       feat_entropy_{mean,min,max,std} (cross-worker split entropy)
   worker compute      mean/min/max/std/cv of per-worker epochs-per-second from the
@@ -35,13 +38,16 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from extract_meta_features import DEFAULT_METADATA_DIR, meta_features  # noqa: E402
+from extract_meta_features import DEFAULT_METADATA_DIR, architecture_features, meta_features  # noqa: E402
+
+DEFAULT_HPO_DIR = Path(__file__).resolve().parent.parent / "results/hyperparameter_optimization"
 
 COLUMNS = [
     "strategy", "combo", "n_atnog_test1", "n_hobbit", "n_samwise", "num_workers",
     "dataset", "fl_algo", "repeat",
     "learning_rate", "batch_size", "patience", "delta", "local_epochs",
     "task", "is_classification", "is_categorical", "n_samples", "n_features", "n_classes",
+    "total_parameters", "n_layers", "mean_layer_width", "max_layer_width", "weight_decay",
     "alpha", "distribution_percentage",
     "feat_entropy_mean", "feat_entropy_min", "feat_entropy_max", "feat_entropy_std",
     "n_workers", "n_workers_benchmarked",
@@ -174,7 +180,7 @@ def fl_hyperparameters(rep_dir: Path) -> dict:
     }
 
 
-def assemble(results_dir: Path, metadata_dir: Path) -> tuple[list[dict], list[str]]:
+def assemble(results_dir: Path, metadata_dir: Path, hpo_dir: Path) -> tuple[list[dict], list[str]]:
     benchmark_dir = results_dir / "benchmark"
     rows, warnings = [], []
     for success in sorted(results_dir.rglob("_SUCCESS")):
@@ -197,6 +203,12 @@ def assemble(results_dir: Path, metadata_dir: Path) -> tuple[list[dict], list[st
             continue
         mf = meta_features(load_json(meta_file))
 
+        hpo_file = hpo_dir / f"{dataset}.json"
+        if not hpo_file.exists():
+            warnings.append(f"no HPO config for {dataset}, skipped: {rep_dir}")
+            continue
+        af = architecture_features(load_json(hpo_file), mf["n_features"], mf["n_classes"])
+
         events = read_master_events(rep_dir)
         targets = compute_targets(events, mf["is_classification"])
         if targets is None:
@@ -218,6 +230,11 @@ def assemble(results_dir: Path, metadata_dir: Path) -> tuple[list[dict], list[st
             "n_samples": mf["n_samples"],
             "n_features": mf["n_features"],
             "n_classes": mf["n_classes"],
+            "total_parameters": af["total_parameters"],
+            "n_layers": af["n_layers"],
+            "mean_layer_width": af["mean_layer_width"],
+            "max_layer_width": af["max_layer_width"],
+            "weight_decay": af["weight_decay"],
             "alpha": division.get("alpha"),
             "distribution_percentage": division.get("distribution_percentage"),
             "feat_entropy_mean": entropy.get("mean"),
@@ -244,10 +261,11 @@ def main():
     p = argparse.ArgumentParser(description="Assemble the per-run meta-learning table (T11).")
     p.add_argument("--results-dir", type=Path, default=Path("results"))
     p.add_argument("--metadata-dir", type=Path, default=DEFAULT_METADATA_DIR)
+    p.add_argument("--hpo-dir", type=Path, default=DEFAULT_HPO_DIR)
     p.add_argument("--out", type=Path, default=Path("results/meta_dataset.csv"))
     args = p.parse_args()
 
-    rows, warnings = assemble(args.results_dir, args.metadata_dir)
+    rows, warnings = assemble(args.results_dir, args.metadata_dir, args.hpo_dir)
     for w in warnings:
         print(f"  ! {w}", file=sys.stderr)
 

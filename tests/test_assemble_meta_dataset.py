@@ -217,10 +217,10 @@ def test_worker_compute_missing_workers_txt_returns_empty(tmp_path):
 # --- assemble end-to-end ---
 
 def build_synthetic_run(
-    results_dir: Path, metadata_dir: Path, *,
+    results_dir: Path, metadata_dir: Path, hpo_dir: Path, *,
     strategy="iid", combo="atnog-test1_0_hobbit_1_samwise_0",
     dataset="ds_a", fl_algo="fedavg", rep=1,
-    sentinel="_SUCCESS", with_epochs=True, workers_txt=None,
+    sentinel="_SUCCESS", with_epochs=True, workers_txt=None, with_hpo=True,
 ):
     rep_dir = results_dir / strategy / combo / dataset / fl_algo / f"rep_{rep}"
     rep_dir.mkdir(parents=True, exist_ok=True)
@@ -239,15 +239,20 @@ def build_synthetic_run(
     write_json(metadata_dir / f"{dataset}.json", {
         "type": "classification", "input_shape": [4], "samples": 100, "output_size": 2,
     })
+    if with_hpo:
+        write_json(hpo_dir / f"{dataset}.json", {
+            "n_layers": 2, "n_units_l0": 8, "n_units_l1": 4, "weight_decay": 0.001,
+        })
     return rep_dir
 
 
 def test_assemble_one_row_per_success(tmp_path):
     results_dir = tmp_path / "results"
     metadata_dir = tmp_path / "metadata"
-    build_synthetic_run(results_dir, metadata_dir)
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir)
 
-    rows, warnings = assemble(results_dir, metadata_dir)
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
 
     assert len(rows) == 1
     assert rows[0]["dataset"] == "ds_a"
@@ -256,9 +261,10 @@ def test_assemble_one_row_per_success(tmp_path):
 def test_assemble_excludes_failed(tmp_path):
     results_dir = tmp_path / "results"
     metadata_dir = tmp_path / "metadata"
-    build_synthetic_run(results_dir, metadata_dir, sentinel="_FAILED")
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, sentinel="_FAILED")
 
-    rows, warnings = assemble(results_dir, metadata_dir)
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
 
     assert rows == []
 
@@ -266,11 +272,12 @@ def test_assemble_excludes_failed(tmp_path):
 def test_assemble_too_shallow_path_warns_and_skipped(tmp_path):
     results_dir = tmp_path / "results"
     metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
     shallow = results_dir / "onlyonelevel"
     shallow.mkdir(parents=True)
     (shallow / "_SUCCESS").write_text("")
 
-    rows, warnings = assemble(results_dir, metadata_dir)
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
 
     assert rows == []
     assert any("unexpected path" in w for w in warnings)
@@ -279,9 +286,10 @@ def test_assemble_too_shallow_path_warns_and_skipped(tmp_path):
 def test_assemble_no_epochs_dropped_no_nan_reaches_row(tmp_path):
     results_dir = tmp_path / "results"
     metadata_dir = tmp_path / "metadata"
-    build_synthetic_run(results_dir, metadata_dir, with_epochs=False)
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, with_epochs=False)
 
-    rows, warnings = assemble(results_dir, metadata_dir)
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
 
     assert rows == []
     assert any("targets uncomputable" in w for w in warnings)
@@ -290,9 +298,10 @@ def test_assemble_no_epochs_dropped_no_nan_reaches_row(tmp_path):
 def test_assemble_legacy_ip_only_workers_txt_warns(tmp_path):
     results_dir = tmp_path / "results"
     metadata_dir = tmp_path / "metadata"
-    build_synthetic_run(results_dir, metadata_dir, workers_txt="10.0.0.1\n10.0.0.2\n")
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, workers_txt="10.0.0.1\n10.0.0.2\n")
 
-    rows, warnings = assemble(results_dir, metadata_dir)
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
 
     assert len(rows) == 1
     assert any("legacy IP-only workers.txt, worker compute skipped" in w for w in warnings)
@@ -301,9 +310,10 @@ def test_assemble_legacy_ip_only_workers_txt_warns(tmp_path):
 def test_assemble_incomplete_worker_benchmark_warns(tmp_path):
     results_dir = tmp_path / "results"
     metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
     make_benchmark_file(results_dir / "benchmark", "hobbit", "108", 2.0)
     build_synthetic_run(
-        results_dir, metadata_dir,
+        results_dir, metadata_dir, hpo_dir,
         workers_txt=(
             "10.0.0.1 frodo 104\n"
             "10.0.0.2 hobbit 108\n"
@@ -311,7 +321,7 @@ def test_assemble_incomplete_worker_benchmark_warns(tmp_path):
         ),
     )
 
-    rows, warnings = assemble(results_dir, metadata_dir)
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
 
     assert len(rows) == 1
     assert any(
@@ -323,6 +333,7 @@ def test_assemble_incomplete_worker_benchmark_warns(tmp_path):
 def test_assemble_nan_metric_dropped_no_nan_reaches_csv(tmp_path):
     results_dir = tmp_path / "results"
     metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
     rep_dir = results_dir / "iid" / "atnog-test1_0_hobbit_1_samwise_0" / "ds_a" / "fedavg" / "rep_1"
     rep_dir.mkdir(parents=True, exist_ok=True)
     write_jsonl(rep_dir / "log_0.jsonl", [
@@ -334,8 +345,11 @@ def test_assemble_nan_metric_dropped_no_nan_reaches_csv(tmp_path):
     write_json(metadata_dir / "ds_a.json", {
         "type": "classification", "input_shape": [4], "samples": 100, "output_size": 2,
     })
+    write_json(hpo_dir / "ds_a.json", {
+        "n_layers": 2, "n_units_l0": 8, "n_units_l1": 4, "weight_decay": 0.001,
+    })
 
-    rows, warnings = assemble(results_dir, metadata_dir)
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
 
     assert rows == []
     assert any("targets uncomputable" in w for w in warnings)
@@ -346,6 +360,7 @@ def test_assemble_nan_metric_dropped_no_nan_reaches_csv(tmp_path):
         [sys.executable, script,
          "--results-dir", str(results_dir),
          "--metadata-dir", str(metadata_dir),
+         "--hpo-dir", str(hpo_dir),
          "--out", str(out_csv)],
         capture_output=True, text=True,
     )
@@ -354,13 +369,16 @@ def test_assemble_nan_metric_dropped_no_nan_reaches_csv(tmp_path):
     with open(out_csv, newline="") as f:
         lines = list(csv.reader(f))
     assert len(lines) == 1  # header only, no data row for the NaN run
+    assert "targets uncomputable" in result.stderr
+    assert "no HPO config" not in result.stderr
 
 
-def run_assemble_cli(script: str, results_dir: Path, metadata_dir: Path, out_csv: Path):
+def run_assemble_cli(script: str, results_dir: Path, metadata_dir: Path, hpo_dir: Path, out_csv: Path):
     return subprocess.run(
         [sys.executable, script,
          "--results-dir", str(results_dir),
          "--metadata-dir", str(metadata_dir),
+         "--hpo-dir", str(hpo_dir),
          "--out", str(out_csv)],
         capture_output=True, text=True,
     )
@@ -369,15 +387,16 @@ def run_assemble_cli(script: str, results_dir: Path, metadata_dir: Path, out_csv
 def test_assemble_idempotent_byte_identical_over_growing_tree(tmp_path):
     results_dir = tmp_path / "results"
     metadata_dir = tmp_path / "metadata"
-    build_synthetic_run(results_dir, metadata_dir, dataset="ds_a")
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, dataset="ds_a")
     script = str(Path(__file__).resolve().parent.parent / "scripts" / "assemble_meta_dataset.py")
 
     out_a1 = tmp_path / "out_a1.csv"
-    result_a1 = run_assemble_cli(script, results_dir, metadata_dir, out_a1)
+    result_a1 = run_assemble_cli(script, results_dir, metadata_dir, hpo_dir, out_a1)
     assert result_a1.returncode == 0
 
     out_a2 = tmp_path / "out_a2.csv"
-    result_a2 = run_assemble_cli(script, results_dir, metadata_dir, out_a2)
+    result_a2 = run_assemble_cli(script, results_dir, metadata_dir, hpo_dir, out_a2)
     assert result_a2.returncode == 0
 
     assert out_a1.read_bytes() == out_a2.read_bytes()
@@ -385,9 +404,11 @@ def test_assemble_idempotent_byte_identical_over_growing_tree(tmp_path):
     a1_lines = out_a1.read_text().splitlines()
     run_a_line = next(ln for ln in a1_lines if "ds_a" in ln)
 
-    build_synthetic_run(results_dir, metadata_dir, dataset="ds_b", combo="atnog-test1_1_hobbit_0_samwise_0")
+    build_synthetic_run(
+        results_dir, metadata_dir, hpo_dir, dataset="ds_b", combo="atnog-test1_1_hobbit_0_samwise_0"
+    )
     out_b = tmp_path / "out_b.csv"
-    result_b = run_assemble_cli(script, results_dir, metadata_dir, out_b)
+    result_b = run_assemble_cli(script, results_dir, metadata_dir, hpo_dir, out_b)
     assert result_b.returncode == 0
 
     b_lines = out_b.read_text().splitlines()
@@ -399,7 +420,8 @@ def test_assemble_idempotent_byte_identical_over_growing_tree(tmp_path):
 def test_assemble_cli_writes_header_exactly_columns(tmp_path):
     results_dir = tmp_path / "results"
     metadata_dir = tmp_path / "metadata"
-    build_synthetic_run(results_dir, metadata_dir)
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir)
     out_csv = tmp_path / "meta_dataset.csv"
 
     script = str(Path(__file__).resolve().parent.parent / "scripts" / "assemble_meta_dataset.py")
@@ -407,11 +429,40 @@ def test_assemble_cli_writes_header_exactly_columns(tmp_path):
         [sys.executable, script,
          "--results-dir", str(results_dir),
          "--metadata-dir", str(metadata_dir),
+         "--hpo-dir", str(hpo_dir),
          "--out", str(out_csv)],
         capture_output=True, text=True,
     )
 
     assert result.returncode == 0
     with open(out_csv, newline="") as f:
-        header = next(csv.reader(f))
-    assert header == COLUMNS
+        lines = list(csv.reader(f))
+    assert lines[0] == COLUMNS
+    assert len(lines) == 2  # header + 1 data row
+
+
+def test_assemble_populates_architecture_columns(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, dataset="ds_a")
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert rows[0]["total_parameters"] == 86
+    assert rows[0]["n_layers"] == 2
+    assert rows[0]["mean_layer_width"] == 6.0
+    assert rows[0]["max_layer_width"] == 8
+    assert rows[0]["weight_decay"] == 0.001
+
+
+def test_assemble_no_hpo_config_warns_and_skipped(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, with_hpo=False)
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert rows == []
+    assert any("no HPO config for" in w for w in warnings)

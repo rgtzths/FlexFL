@@ -2,19 +2,27 @@
 """Extract per-dataset meta-features for the meta-learning table (T08, option B).
 
 The architecture is held fixed (one Optuna config per dataset in
-neural_nets/Benchmark.py), so raw architecture is collinear with dataset identity
-and is NOT used as a predictor. Instead the meta-model predicts from dataset
-meta-features that generalise across datasets. This reads them from
-datasets/_metadata/<dataset>.json (the authoritative catalog written by
-flexfl-preprocess) and emits them for the assembler (T11) to join per run.
+neural_nets/Benchmark.py). Raw per-layer architecture is collinear with dataset
+identity and is NOT used as a cross-dataset predictor; the meta-model predicts
+from dataset meta-features that generalise across datasets, below. Derived
+architecture *size/shape* scalars (total parameter count, depth, mean/max layer
+width) plus the config's weight decay ARE used, via `architecture_features()` —
+see T44 — because they are cheap, non-redundant summaries, not raw per-layer
+shape. This reads them from datasets/_metadata/<dataset>.json (the authoritative
+catalog written by flexfl-preprocess) and emits them for the assembler (T11) to
+join per run.
 
 Extracted: task (classification/regression), n_samples, n_features, n_classes,
 is_classification. Class balance is NOT present in _metadata and is intentionally
 left out here (computing it needs the raw labels) — see the task note.
+`architecture_features()` additionally computes total_parameters, n_layers,
+mean_layer_width, max_layer_width, weight_decay from a dataset's HPO config,
+joined with n_features/n_classes above.
 """
 import argparse
 import json
 import math
+import statistics
 from pathlib import Path
 
 DEFAULT_METADATA_DIR = Path(__file__).resolve().parent.parent / "src/flexfl/datasets/_metadata"
@@ -30,6 +38,19 @@ def meta_features(meta: dict) -> dict:
         "n_samples": meta.get("samples"),
         "n_features": n_features,
         "n_classes": meta.get("output_size"),
+    }
+
+
+def architecture_features(config: dict, n_features: int, n_classes: int) -> dict:
+    units = [config[f"n_units_l{i}"] for i in range(config["n_layers"])]
+    sizes = [n_features] + units + [n_classes]
+    total_parameters = sum(sizes[i] * sizes[i + 1] + sizes[i + 1] for i in range(len(sizes) - 1))
+    return {
+        "total_parameters": total_parameters,
+        "n_layers": config["n_layers"],
+        "mean_layer_width": statistics.fmean(units),
+        "max_layer_width": max(units),
+        "weight_decay": config["weight_decay"],
     }
 
 
