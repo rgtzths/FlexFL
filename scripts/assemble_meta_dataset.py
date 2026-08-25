@@ -9,7 +9,8 @@ targets). Re-runnable and idempotent over a growing results/ tree.
 
 Features
   identity            strategy, node counts, num_workers, dataset, fl_algo, repeat
-  FL hyperparameters  learning_rate, batch_size, patience, delta, local_epochs (T07)
+  FL hyperparameters  learning_rate, batch_size, patience, delta, local_epochs (T07;
+                      imputed 0 for Centralized, T46)
   dataset meta        task, is_classification, n_samples, n_features, n_classes,
                       is_categorical (T08 option B — architecture held fixed)
   partition           strategy, alpha, distribution_percentage,
@@ -227,6 +228,8 @@ def assemble(results_dir: Path, metadata_dir: Path) -> tuple[list[dict], list[st
             **worker_compute(rep_dir.parent.parent.parent / "workers.txt", benchmark_dir),
             **targets,
         }
+        if row["fl_algo"] in ("CentralizedSync", "CentralizedAsync") and row["local_epochs"] is None:
+            row["local_epochs"] = 0
         legacy_workers_txt = row.get("_legacy_workers_txt")
         if legacy_workers_txt is not None:
             warnings.append(f"legacy IP-only workers.txt, worker compute skipped: {legacy_workers_txt}")
