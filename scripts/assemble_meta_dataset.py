@@ -8,7 +8,8 @@ a run whose targets can't be computed is dropped with a warning (so no NaN
 targets). Re-runnable and idempotent over a growing results/ tree.
 
 Features
-  identity            strategy, node counts, num_workers, dataset, fl_algo, repeat
+  identity            strategy (+ strategy_* one-hot), node counts, num_workers, dataset,
+                      fl_algo (+ fl_algo_* one-hot), repeat
   FL hyperparameters  learning_rate, batch_size, patience, delta, local_epochs (T07)
   dataset meta        task, is_classification, n_samples, n_features, n_classes,
                       is_categorical (T08 option B — architecture held fixed)
@@ -38,8 +39,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from extract_meta_features import DEFAULT_METADATA_DIR, meta_features  # noqa: E402
 
 COLUMNS = [
-    "strategy", "combo", "n_atnog_test1", "n_hobbit", "n_samwise", "num_workers",
-    "dataset", "fl_algo", "repeat",
+    "strategy", "strategy_iid", "strategy_non_iid", "strategy_dirichlet",
+    "combo", "n_atnog_test1", "n_hobbit", "n_samwise", "num_workers",
+    "dataset", "fl_algo",
+    "fl_algo_CentralizedSync", "fl_algo_CentralizedAsync", "fl_algo_DecentralizedSync", "fl_algo_DecentralizedAsync",
+    "repeat",
     "learning_rate", "batch_size", "patience", "delta", "local_epochs",
     "task", "is_classification", "is_categorical", "n_samples", "n_features", "n_classes",
     "alpha", "distribution_percentage",
@@ -227,6 +231,10 @@ def assemble(results_dir: Path, metadata_dir: Path) -> tuple[list[dict], list[st
             **worker_compute(rep_dir.parent.parent.parent / "workers.txt", benchmark_dir),
             **targets,
         }
+        for algo in ("CentralizedSync", "CentralizedAsync", "DecentralizedSync", "DecentralizedAsync"):
+            row[f"fl_algo_{algo}"] = int(row["fl_algo"] == algo)
+        for strat in ("iid", "non_iid", "dirichlet"):
+            row[f"strategy_{strat}"] = int(row["strategy"] == strat)
         legacy_workers_txt = row.get("_legacy_workers_txt")
         if legacy_workers_txt is not None:
             warnings.append(f"legacy IP-only workers.txt, worker compute skipped: {legacy_workers_txt}")

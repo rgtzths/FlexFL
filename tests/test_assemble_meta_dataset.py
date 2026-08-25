@@ -4,6 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from assemble_meta_dataset import (
     COLUMNS,
     assemble,
@@ -415,3 +417,24 @@ def test_assemble_cli_writes_header_exactly_columns(tmp_path):
     with open(out_csv, newline="") as f:
         header = next(csv.reader(f))
     assert header == COLUMNS
+
+
+FL_ALGOS = ("CentralizedSync", "CentralizedAsync", "DecentralizedSync", "DecentralizedAsync")
+STRATEGIES = ("iid", "non_iid", "dirichlet")
+
+
+@pytest.mark.parametrize("fl_algo", FL_ALGOS)
+@pytest.mark.parametrize("strategy", STRATEGIES)
+def test_assemble_onehot_fl_algo_and_strategy(tmp_path, strategy, fl_algo):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    build_synthetic_run(results_dir, metadata_dir, strategy=strategy, fl_algo=fl_algo)
+
+    rows, warnings = assemble(results_dir, metadata_dir)
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert sum(row[f"fl_algo_{a}"] for a in FL_ALGOS) == 1
+    assert row[f"fl_algo_{fl_algo}"] == 1
+    assert sum(row[f"strategy_{s}"] for s in STRATEGIES) == 1
+    assert row[f"strategy_{strategy}"] == 1
