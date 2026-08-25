@@ -9,7 +9,8 @@ targets). Re-runnable and idempotent over a growing results/ tree.
 
 Features
   identity            strategy, node counts, num_workers, dataset, fl_algo, repeat
-  FL hyperparameters  learning_rate, batch_size, patience, delta, local_epochs (T07)
+  FL hyperparameters  learning_rate, batch_size, patience, delta, local_epochs (T07;
+                      imputed 0 for Centralized, T46)
   dataset meta        task, is_classification, n_samples, n_features, n_classes,
                       is_categorical (T08 option B — raw architecture held fixed, not used directly)
   model architecture  total_parameters, n_layers, mean_layer_width, max_layer_width,
@@ -20,6 +21,13 @@ Features
   worker compute      mean/min/max/std/cv of per-worker epochs-per-second from the
                       machine benchmark, over the participating workers, joined by
                       (node, vmid)
+
+local_epochs is 0 for every Centralized row by construction (T46) — a sentinel for
+"this algorithm has no local-training concept," not a measured zero. Do not use it as
+a multiplicative or log-scale compute term without gating on fl_algo; a consumer that
+drops fl_algo (e.g. after a groupby or column subset) cannot recover which zeros are
+structural.
+
 Targets (master log_0.jsonl, single clock; T09)
   performance         best validation main metric (mcc↑ clf / smape↓ reg). NB: the
                       regression metric is logged under the key `mape` but is actually
@@ -55,6 +63,8 @@ COLUMNS = [
     "performance", "main_metric", "total_time_s",
     "comm_bytes_sent", "comm_bytes_recv", "comm_bytes_total", "n_epochs",
 ]
+
+CENTRALIZED_ALGOS = {"centralizedsync", "centralizedasync", "cs", "ca"}
 
 
 def load_json(path: Path):
@@ -251,6 +261,12 @@ def assemble(results_dir: Path, metadata_dir: Path, hpo_dir: Path) -> tuple[list
             **worker_compute(rep_dir.parent.parent.parent / "workers.txt", benchmark_dir),
             **targets,
         }
+        if row["fl_algo"].lower() in CENTRALIZED_ALGOS and row["local_epochs"] is None:
+            row["local_epochs"] = 0
+        elif row["local_epochs"] is None:
+            warnings.append(f"local_epochs unrecorded for {rep_dir} (fl_algo={row['fl_algo']})")
+        if all(row[k] is None for k in ("learning_rate", "batch_size", "patience", "delta")):
+            warnings.append(f"no FL hyperparameters recorded for {rep_dir}")
         legacy_workers_txt = row.get("_legacy_workers_txt")
         if legacy_workers_txt is not None:
             warnings.append(f"legacy IP-only workers.txt, worker compute skipped: {legacy_workers_txt}")

@@ -4,6 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from assemble_meta_dataset import (
     COLUMNS,
     assemble,
@@ -221,6 +223,7 @@ def build_synthetic_run(
     strategy="iid", combo="atnog-test1_0_hobbit_1_samwise_0",
     dataset="ds_a", fl_algo="fedavg", rep=1,
     sentinel="_SUCCESS", with_epochs=True, workers_txt=None, with_hpo=True,
+    hyperparameters=None,
 ):
     rep_dir = results_dir / strategy / combo / dataset / fl_algo / f"rep_{rep}"
     rep_dir.mkdir(parents=True, exist_ok=True)
@@ -243,6 +246,8 @@ def build_synthetic_run(
         write_json(hpo_dir / f"{dataset}.json", {
             "n_layers": 2, "n_units_l0": 8, "n_units_l1": 4, "weight_decay": 0.001,
         })
+    if hyperparameters is not None:
+        write_json(rep_dir / "hyperparameters.json", hyperparameters)
     return rep_dir
 
 
@@ -578,3 +583,114 @@ def test_assemble_cli_no_hpo_config_skip_does_not_crash(tmp_path):
     with open(out_csv, newline="") as f:
         lines = list(csv.reader(f))
     assert len(lines) == 1  # header only, the sole dataset's row was skipped
+def test_assemble_cli_writes_local_epochs_zero_for_centralized(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(
+        results_dir, metadata_dir, hpo_dir, fl_algo="CentralizedSync",
+        hyperparameters={
+            "learning_rate": 0.001, "batch_size": 256, "patience": 5, "delta": 0.01,
+        },
+    )
+    out_csv = tmp_path / "meta_dataset.csv"
+    script = str(Path(__file__).resolve().parent.parent / "scripts" / "assemble_meta_dataset.py")
+    result = run_assemble_cli(script, results_dir, metadata_dir, hpo_dir, out_csv)
+
+    assert result.returncode == 0
+    with open(out_csv, newline="") as f:
+        row = next(csv.DictReader(f))
+    assert row["local_epochs"] == "0"
+
+
+@pytest.mark.parametrize("fl_algo", ("CentralizedSync", "CentralizedAsync"))
+def test_assemble_local_epochs_defaults_to_zero_for_centralized(tmp_path, fl_algo):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(
+        results_dir, metadata_dir, hpo_dir, fl_algo=fl_algo,
+        hyperparameters={
+            "learning_rate": 0.001, "batch_size": 256, "patience": 5, "delta": 0.01,
+        },
+    )
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    row = rows[0]
+    assert (row["learning_rate"], row["batch_size"], row["patience"], row["delta"], row["local_epochs"]) == (0.001, 256, 5, 0.01, 0)
+
+
+def test_assemble_local_epochs_preserves_sampled_value_for_decentralized(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(
+        results_dir, metadata_dir, hpo_dir, fl_algo="DecentralizedSync",
+        hyperparameters={
+            "learning_rate": 0.001, "batch_size": 256, "patience": 5,
+            "delta": 0.01, "local_epochs": 7,
+        },
+    )
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert rows[0]["local_epochs"] == 7
+
+
+def test_assemble_local_epochs_stays_null_when_genuinely_missing_for_decentralized(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, fl_algo="DecentralizedSync")
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert rows[0]["local_epochs"] is None
+    assert any("local_epochs unrecorded" in w for w in warnings)
+
+
+def test_assemble_local_epochs_zero_and_warns_when_no_hyperparameters_recorded_for_centralized(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, fl_algo="CentralizedSync")
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert rows[0]["local_epochs"] == 0
+    assert any("no FL hyperparameters recorded" in w for w in warnings)
+
+
+@pytest.mark.parametrize("fl_algo", ("cs", "ca"))
+def test_assemble_local_epochs_zero_for_centralized_alias_directory_names(tmp_path, fl_algo):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(
+        results_dir, metadata_dir, hpo_dir, fl_algo=fl_algo,
+        hyperparameters={
+            "learning_rate": 0.001, "batch_size": 256, "patience": 5, "delta": 0.01,
+        },
+    )
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert rows[0]["local_epochs"] == 0
+
+
+@pytest.mark.parametrize("fl_algo", ("CENTRALIZEDSYNC", "Cs"))
+def test_assemble_local_epochs_zero_for_centralized_mixed_case_directory_names(tmp_path, fl_algo):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(
+        results_dir, metadata_dir, hpo_dir, fl_algo=fl_algo,
+        hyperparameters={
+            "learning_rate": 0.001, "batch_size": 256, "patience": 5, "delta": 0.01,
+        },
+    )
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert rows[0]["local_epochs"] == 0
