@@ -10,14 +10,25 @@ targets). Re-runnable and idempotent over a growing results/ tree.
 Features
   identity            strategy (+ strategy_* one-hot), node counts, num_workers, dataset,
                       fl_algo (+ fl_algo_* one-hot), repeat
-  FL hyperparameters  learning_rate, batch_size, patience, delta, local_epochs (T07)
+  FL hyperparameters  learning_rate, batch_size, patience, delta, local_epochs (T07;
+                      imputed 0 for Centralized, T46)
   dataset meta        task, is_classification, n_samples, n_features, n_classes,
-                      is_categorical (T08 option B — architecture held fixed)
+                      is_categorical (T08 option B — raw architecture held fixed, not used directly)
+  model architecture  total_parameters, n_layers, mean_layer_width, max_layer_width,
+                      weight_decay — from the dataset's HPO config; size/shape
+                      scalars plus weight decay, not the raw per-layer unit list.
   partition           strategy, alpha, distribution_percentage,
                       feat_entropy_{mean,min,max,std} (cross-worker split entropy)
   worker compute      mean/min/max/std/cv of per-worker epochs-per-second from the
                       machine benchmark, over the participating workers, joined by
                       (node, vmid)
+
+local_epochs is 0 for every Centralized row by construction (T46) — a sentinel for
+"this algorithm has no local-training concept," not a measured zero. Do not use it as
+a multiplicative or log-scale compute term without gating on fl_algo; a consumer that
+drops fl_algo (e.g. after a groupby or column subset) cannot recover which zeros are
+structural.
+
 Targets (master log_0.jsonl, single clock; T09)
   performance         best validation main metric (mcc↑ clf / smape↓ reg). NB: the
                       regression metric is logged under the key `mape` but is actually
@@ -36,7 +47,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from extract_meta_features import DEFAULT_METADATA_DIR, meta_features  # noqa: E402
+from extract_meta_features import DEFAULT_METADATA_DIR, architecture_features, meta_features  # noqa: E402
+
+DEFAULT_HPO_DIR = Path(__file__).resolve().parent.parent / "results/hyperparameter_optimization"
 
 COLUMNS = [
     "strategy", "strategy_iid", "strategy_non_iid", "strategy_dirichlet",
@@ -46,6 +59,7 @@ COLUMNS = [
     "repeat",
     "learning_rate", "batch_size", "patience", "delta", "local_epochs",
     "task", "is_classification", "is_categorical", "n_samples", "n_features", "n_classes",
+    "total_parameters", "n_layers", "mean_layer_width", "max_layer_width", "weight_decay",
     "alpha", "distribution_percentage",
     "feat_entropy_mean", "feat_entropy_min", "feat_entropy_max", "feat_entropy_std",
     "n_workers", "n_workers_benchmarked",
@@ -53,6 +67,14 @@ COLUMNS = [
     "performance", "main_metric", "total_time_s",
     "comm_bytes_sent", "comm_bytes_recv", "comm_bytes_total", "n_epochs",
 ]
+
+ALGO_ALIASES = {
+    "centralizedsync": "CentralizedSync", "cs": "CentralizedSync",
+    "centralizedasync": "CentralizedAsync", "ca": "CentralizedAsync",
+    "decentralizedsync": "DecentralizedSync", "ds": "DecentralizedSync",
+    "decentralizedasync": "DecentralizedAsync", "da": "DecentralizedAsync",
+}
+CENTRALIZED_ALGOS = {"CentralizedSync", "CentralizedAsync"}
 
 
 def load_json(path: Path):
@@ -178,7 +200,7 @@ def fl_hyperparameters(rep_dir: Path) -> dict:
     }
 
 
-def assemble(results_dir: Path, metadata_dir: Path) -> tuple[list[dict], list[str]]:
+def assemble(results_dir: Path, metadata_dir: Path, hpo_dir: Path) -> tuple[list[dict], list[str]]:
     benchmark_dir = results_dir / "benchmark"
     rows, warnings = [], []
     for success in sorted(results_dir.rglob("_SUCCESS")):
@@ -200,6 +222,19 @@ def assemble(results_dir: Path, metadata_dir: Path) -> tuple[list[dict], list[st
             warnings.append(f"no metadata for {dataset}, skipped: {rep_dir}")
             continue
         mf = meta_features(load_json(meta_file))
+        if mf["n_features"] is None or mf["n_classes"] is None:
+            warnings.append(f"missing n_features/n_classes for {dataset}, skipped: {rep_dir}")
+            continue
+
+        hpo_file = hpo_dir / f"{dataset}.json"
+        if not hpo_file.exists():
+            warnings.append(f"no HPO config for {dataset}, skipped: {rep_dir}")
+            continue
+        try:
+            af = architecture_features(load_json(hpo_file), mf["n_features"], mf["n_classes"])
+        except (KeyError, TypeError, ValueError, statistics.StatisticsError) as e:
+            warnings.append(f"malformed HPO config for {dataset} ({e}), skipped: {rep_dir}")
+            continue
 
         events = read_master_events(rep_dir)
         targets = compute_targets(events, mf["is_classification"])
@@ -222,6 +257,11 @@ def assemble(results_dir: Path, metadata_dir: Path) -> tuple[list[dict], list[st
             "n_samples": mf["n_samples"],
             "n_features": mf["n_features"],
             "n_classes": mf["n_classes"],
+            "total_parameters": af["total_parameters"],
+            "n_layers": af["n_layers"],
+            "mean_layer_width": af["mean_layer_width"],
+            "max_layer_width": af["max_layer_width"],
+            "weight_decay": af["weight_decay"],
             "alpha": division.get("alpha"),
             "distribution_percentage": division.get("distribution_percentage"),
             "feat_entropy_mean": entropy.get("mean"),
@@ -231,13 +271,20 @@ def assemble(results_dir: Path, metadata_dir: Path) -> tuple[list[dict], list[st
             **worker_compute(rep_dir.parent.parent.parent / "workers.txt", benchmark_dir),
             **targets,
         }
-        for algo in ("CentralizedSync", "CentralizedAsync", "DecentralizedSync", "DecentralizedAsync"):
-            row[f"fl_algo_{algo}"] = int(row["fl_algo"] == algo)
-        for strat in ("iid", "non_iid", "dirichlet"):
-            row[f"strategy_{strat}"] = int(row["strategy"] == strat)
-        if sum(row[f"fl_algo_{a}"] for a in ("CentralizedSync", "CentralizedAsync", "DecentralizedSync", "DecentralizedAsync")) != 1:
+        canonical_fl_algo = ALGO_ALIASES.get(row["fl_algo"].lower())
+        if canonical_fl_algo is None:
             warnings.append(f"unrecognized fl_algo {row['fl_algo']!r}, skipped: {rep_dir}")
             continue
+        if canonical_fl_algo in CENTRALIZED_ALGOS and row["local_epochs"] is None:
+            row["local_epochs"] = 0
+        elif row["local_epochs"] is None:
+            warnings.append(f"local_epochs unrecorded for {rep_dir} (fl_algo={row['fl_algo']})")
+        if all(row[k] is None for k in ("learning_rate", "batch_size", "patience", "delta")):
+            warnings.append(f"no FL hyperparameters recorded for {rep_dir}")
+        for algo in ("CentralizedSync", "CentralizedAsync", "DecentralizedSync", "DecentralizedAsync"):
+            row[f"fl_algo_{algo}"] = int(canonical_fl_algo == algo)
+        for strat in ("iid", "non_iid", "dirichlet"):
+            row[f"strategy_{strat}"] = int(row["strategy"] == strat)
         if sum(row[f"strategy_{s}"] for s in ("iid", "non_iid", "dirichlet")) != 1:
             warnings.append(f"unrecognized strategy {row['strategy']!r}, skipped: {rep_dir}")
             continue
@@ -258,10 +305,11 @@ def main():
     p = argparse.ArgumentParser(description="Assemble the per-run meta-learning table (T11).")
     p.add_argument("--results-dir", type=Path, default=Path("results"))
     p.add_argument("--metadata-dir", type=Path, default=DEFAULT_METADATA_DIR)
+    p.add_argument("--hpo-dir", type=Path, default=DEFAULT_HPO_DIR)
     p.add_argument("--out", type=Path, default=Path("results/meta_dataset.csv"))
     args = p.parse_args()
 
-    rows, warnings = assemble(args.results_dir, args.metadata_dir)
+    rows, warnings = assemble(args.results_dir, args.metadata_dir, args.hpo_dir)
     for w in warnings:
         print(f"  ! {w}", file=sys.stderr)
 
