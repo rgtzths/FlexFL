@@ -13,7 +13,7 @@ Features
   dataset meta        task, is_classification, n_samples, n_features, n_classes,
                       is_categorical (T08 option B — raw architecture held fixed, not used directly)
   model architecture  total_parameters, n_layers, mean_layer_width, max_layer_width,
-                      weight_decay — from the dataset's HPO config (T44); size/shape
+                      weight_decay — from the dataset's HPO config; size/shape
                       scalars plus weight decay, not the raw per-layer unit list.
   partition           strategy, alpha, distribution_percentage,
                       feat_entropy_{mean,min,max,std} (cross-worker split entropy)
@@ -202,12 +202,19 @@ def assemble(results_dir: Path, metadata_dir: Path, hpo_dir: Path) -> tuple[list
             warnings.append(f"no metadata for {dataset}, skipped: {rep_dir}")
             continue
         mf = meta_features(load_json(meta_file))
+        if mf["n_features"] is None or mf["n_classes"] is None:
+            warnings.append(f"missing n_features/n_classes for {dataset}, skipped: {rep_dir}")
+            continue
 
         hpo_file = hpo_dir / f"{dataset}.json"
         if not hpo_file.exists():
             warnings.append(f"no HPO config for {dataset}, skipped: {rep_dir}")
             continue
-        af = architecture_features(load_json(hpo_file), mf["n_features"], mf["n_classes"])
+        try:
+            af = architecture_features(load_json(hpo_file), mf["n_features"], mf["n_classes"])
+        except (KeyError, TypeError, ValueError, statistics.StatisticsError) as e:
+            warnings.append(f"malformed HPO config for {dataset} ({e}), skipped: {rep_dir}")
+            continue
 
         events = read_master_events(rep_dir)
         targets = compute_targets(events, mf["is_classification"])

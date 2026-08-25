@@ -466,3 +466,115 @@ def test_assemble_no_hpo_config_warns_and_skipped(tmp_path):
 
     assert rows == []
     assert any("no HPO config for" in w for w in warnings)
+
+
+def build_run_with_metadata_and_hpo(
+    results_dir: Path, metadata_dir: Path, hpo_dir: Path, dataset: str, metadata: dict, hpo: dict,
+    combo="atnog-test1_0_hobbit_1_samwise_0", fl_algo="fedavg", rep=1,
+):
+    rep_dir = results_dir / "iid" / combo / dataset / fl_algo / f"rep_{rep}"
+    rep_dir.mkdir(parents=True, exist_ok=True)
+    write_jsonl(rep_dir / "log_0.jsonl", [
+        {"event": "start", "timestamp": 0},
+        {"event": "epoch", "mcc": 0.7},
+        {"event": "end", "timestamp": 5},
+    ])
+    (rep_dir / "_SUCCESS").write_text("")
+    write_json(metadata_dir / f"{dataset}.json", metadata)
+    write_json(hpo_dir / f"{dataset}.json", hpo)
+    return rep_dir
+
+
+def test_assemble_none_n_features_or_n_classes_warns_and_skipped(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, dataset="ds_good")
+    build_run_with_metadata_and_hpo(
+        results_dir, metadata_dir, hpo_dir, "ds_bad",
+        {"type": "classification", "samples": 100, "output_size": 2},  # no input_shape -> n_features None
+        {"n_layers": 2, "n_units_l0": 8, "n_units_l1": 4, "weight_decay": 0.001},
+    )
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert len(rows) == 1
+    assert rows[0]["dataset"] == "ds_good"
+    assert any("missing n_features/n_classes for ds_bad" in w for w in warnings)
+
+
+def test_assemble_malformed_hpo_config_warns_and_skipped(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, dataset="ds_good")
+    build_run_with_metadata_and_hpo(
+        results_dir, metadata_dir, hpo_dir, "ds_bad",
+        {"type": "classification", "input_shape": [4], "samples": 100, "output_size": 2},
+        {"n_layers": 2, "n_units_l0": 8, "n_units_l1": 4},  # missing weight_decay
+    )
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert len(rows) == 1
+    assert rows[0]["dataset"] == "ds_good"
+    assert any("malformed HPO config for ds_bad" in w for w in warnings)
+
+
+def test_assemble_empty_units_hpo_config_warns_and_skipped(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, dataset="ds_good")
+    build_run_with_metadata_and_hpo(
+        results_dir, metadata_dir, hpo_dir, "ds_bad",
+        {"type": "classification", "input_shape": [4], "samples": 100, "output_size": 2},
+        {"n_layers": 0, "weight_decay": 0.001},
+    )
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert len(rows) == 1
+    assert rows[0]["dataset"] == "ds_good"
+    assert any("malformed HPO config for ds_bad" in w for w in warnings)
+
+
+def test_assemble_mixed_hpo_coverage_populates_and_skips_selectively(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, dataset="ds_with_hpo")
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, dataset="ds_without_hpo", with_hpo=False)
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["dataset"] == "ds_with_hpo"
+    for col in ("total_parameters", "n_layers", "mean_layer_width", "max_layer_width", "weight_decay"):
+        assert row[col] is not None
+    assert any("no HPO config for ds_without_hpo" in w for w in warnings)
+
+
+def test_assemble_cli_no_hpo_config_skip_does_not_crash(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, dataset="ds_no_hpo", with_hpo=False)
+
+    out_csv = tmp_path / "meta_dataset.csv"
+    script = str(Path(__file__).resolve().parent.parent / "scripts" / "assemble_meta_dataset.py")
+    result = subprocess.run(
+        [sys.executable, script,
+         "--results-dir", str(results_dir),
+         "--metadata-dir", str(metadata_dir),
+         "--hpo-dir", str(hpo_dir),
+         "--out", str(out_csv)],
+        capture_output=True, text=True,
+    )
+
+    assert result.returncode == 0
+    assert "no HPO config for" in result.stderr
+    with open(out_csv, newline="") as f:
+        lines = list(csv.reader(f))
+    assert len(lines) == 1  # header only, the sole dataset's row was skipped

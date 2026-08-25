@@ -26,6 +26,8 @@ class Benchmark(NeuralNetworkABC):
         path = self._config_path(data_name)
         with open(path) as f:
             config = json.load(f)
+        # HPO config schema (n_layers, n_units_l{i}, weight_decay) also parsed in
+        # scripts/extract_meta_features.py's architecture_features() — keep both in sync.
         units = [config[f"n_units_l{i}"] for i in range(config["n_layers"])]
         return units, config["weight_decay"]
 
