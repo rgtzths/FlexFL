@@ -235,6 +235,12 @@ def assemble(results_dir: Path, metadata_dir: Path) -> tuple[list[dict], list[st
             row[f"fl_algo_{algo}"] = int(row["fl_algo"] == algo)
         for strat in ("iid", "non_iid", "dirichlet"):
             row[f"strategy_{strat}"] = int(row["strategy"] == strat)
+        if sum(row[f"fl_algo_{a}"] for a in ("CentralizedSync", "CentralizedAsync", "DecentralizedSync", "DecentralizedAsync")) != 1:
+            warnings.append(f"unrecognized fl_algo {row['fl_algo']!r}, skipped: {rep_dir}")
+            continue
+        if sum(row[f"strategy_{s}"] for s in ("iid", "non_iid", "dirichlet")) != 1:
+            warnings.append(f"unrecognized strategy {row['strategy']!r}, skipped: {rep_dir}")
+            continue
         legacy_workers_txt = row.get("_legacy_workers_txt")
         if legacy_workers_txt is not None:
             warnings.append(f"legacy IP-only workers.txt, worker compute skipped: {legacy_workers_txt}")

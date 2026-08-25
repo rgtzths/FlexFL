@@ -221,7 +221,7 @@ def test_worker_compute_missing_workers_txt_returns_empty(tmp_path):
 def build_synthetic_run(
     results_dir: Path, metadata_dir: Path, *,
     strategy="iid", combo="atnog-test1_0_hobbit_1_samwise_0",
-    dataset="ds_a", fl_algo="fedavg", rep=1,
+    dataset="ds_a", fl_algo="CentralizedSync", rep=1,
     sentinel="_SUCCESS", with_epochs=True, workers_txt=None,
 ):
     rep_dir = results_dir / strategy / combo / dataset / fl_algo / f"rep_{rep}"
@@ -438,3 +438,25 @@ def test_assemble_onehot_fl_algo_and_strategy(tmp_path, strategy, fl_algo):
     assert row[f"fl_algo_{fl_algo}"] == 1
     assert sum(row[f"strategy_{s}"] for s in STRATEGIES) == 1
     assert row[f"strategy_{strategy}"] == 1
+
+
+def test_assemble_unrecognized_fl_algo_warns_and_skips(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    build_synthetic_run(results_dir, metadata_dir, fl_algo="fedavg")
+
+    rows, warnings = assemble(results_dir, metadata_dir)
+
+    assert rows == []
+    assert any("unrecognized fl_algo" in w and "fedavg" in w for w in warnings)
+
+
+def test_assemble_unrecognized_strategy_warns_and_skips(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    build_synthetic_run(results_dir, metadata_dir, strategy="extreme_non_iid")
+
+    rows, warnings = assemble(results_dir, metadata_dir)
+
+    assert rows == []
+    assert any("unrecognized strategy" in w and "extreme_non_iid" in w for w in warnings)
