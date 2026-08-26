@@ -9,8 +9,9 @@
 #   IDS_FILE, IDS_SUBSET, IPS_SUBSET, IPS_SUBSET_TXT, RESULTS_ROOT, PXM_DIR, FAIL_LOG
 #   EXTRA_ARGS                                                        (array)
 # and a caller-defined execute_fl_run function (invoked as
-# `execute_fl_run "$ips_file" "$data_name" "$fl_algo" "$seed" "$hp_args"`) that must
-# set the global $run_rc to the run's exit code.
+# `execute_fl_run "$ips_file" "$data_name" "$fl_algo" "$seed" "$hp_args" "$total"`) that
+# must set the global $run_rc to the run's exit code. $total is the combo's worker
+# count, forwarded to the run as --min_workers.
 
 # Record a failed step (does not abort the sweep). Uses the loop vars in scope.
 log_failure() {
@@ -26,12 +27,17 @@ is_done() {
     [ -f "$d/_SUCCESS" ]
 }
 
-# True when gathered output holds a master log with a terminal 'end' event —
-# the authoritative "this run finished cleanly" check, run against the local copy.
+# True when gathered output holds a master log with a terminal 'end' event and,
+# when $2 is given, at least that many 'new_worker' events — the master-side
+# registrations that populate WorkerManager.worker_info, i.e. the aggregation pool.
 run_output_complete() {
-    local d="$1" f
+    local d="$1" expected="${2:-}" f joined
     f="$(find "$d" -name 'log_0.jsonl' 2>/dev/null | head -n 1)"
-    [ -n "$f" ] && grep -q '"event": "end"' "$f"
+    [ -n "$f" ] || return 1
+    grep -q '"event": "end"' "$f" || return 1
+    [ -n "$expected" ] || return 0
+    joined="$(grep -c '"event": "new_worker"' "$f" || true)"
+    [ "${joined:-0}" -ge "$expected" ]
 }
 
 check_seeds_or_exit() {
@@ -152,14 +158,14 @@ EOF
                                 fi
                                 # Fresh attempt: discard any partial/failed output from a prior try.
                                 rm -rf "$run_dir"
-                                execute_fl_run "$IPS_SUBSET_TXT" "$data_name" "$fl_algo" "$seed" "$hp_args"
+                                execute_fl_run "$IPS_SUBSET_TXT" "$data_name" "$fl_algo" "$seed" "$hp_args" "$total"
 
                                 # Gather regardless of outcome so a completed run's logs — and
                                 # partial logs on failure — are kept locally for the sentinel
                                 # check and for diagnosis.
                                 bash scripts/gather_results.sh -f "$IPS_SUBSET_TXT" -o "$run_dir"
 
-                                if [ "$run_rc" -eq 0 ] && run_output_complete "$run_dir"; then
+                                if [ "$run_rc" -eq 0 ] && run_output_complete "$run_dir" "$total"; then
                                     cp -f "${base}/.hp_${fl_algo}.json" "$run_dir/hyperparameters.json"
                                     touch "$run_dir/_SUCCESS"
                                     echo "    - ${fl_algo} rep ${r}: success"
