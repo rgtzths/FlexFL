@@ -49,7 +49,7 @@ BENCH_ARGS="${FLEXFL_BENCH_ARGS:---epochs 3 --warmup-epochs 1 --repeats 1 --samp
 SEEDS=(42 43 44 45 46 47 48 49 50 51)
 
 execute_fl_run() {
-    local ips_file="$1" data_name="$2" fl_algo="$3" seed="$4" hp_args="$5"
+    local ips_file="$1" data_name="$2" fl_algo="$3" seed="$4" hp_args="$5" total="$6"
     # Kill any stale flexfl/screens from a prior (possibly timed-out) run so
     # a fresh run starts clean, then clear remote results.
     bash scripts/run_commands.sh -i "$ips_file" "pkill -f flexfl 2>/dev/null; screen -wipe >/dev/null 2>&1; rm -rf ~/flexfl/results"
@@ -58,7 +58,8 @@ execute_fl_run() {
     # otherwise hangs the sweep forever on the master-wait.
     timeout "$RUN_TIMEOUT" bash scripts/run_on_vms.sh -f "$ips_file" 0 0 \
         --dataset Benchmark --data_name "$data_name" --nn benchmark \
-        --fl "$fl_algo" --seed "$seed" $hp_args "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+        --fl "$fl_algo" --seed "$seed" --min_workers "$total" \
+        $hp_args "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
     run_rc=$?
     if [ "$run_rc" -eq 124 ]; then
         echo "    ! ${fl_algo}: TIMED OUT after ${RUN_TIMEOUT}s — killing stale flexfl" >&2

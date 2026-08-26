@@ -97,11 +97,12 @@ REPEATS="${FLEXFL_REPEATS:-3}"
 SEEDS=(42 43 44 45 46 47 48 49 50 51)
 
 execute_fl_run() {
-    local ips_file="$1" data_name="$2" fl_algo="$3" seed="$4" hp_args="$5"
+    local ips_file="$1" data_name="$2" fl_algo="$3" seed="$4" hp_args="$5" total="$6"
     bash scripts/run_commands.sh -i "$ips_file" "rm -rf ~/flexfl/results"
     bash scripts/run_on_vms.sh -f "$ips_file" 0 0 \
         --dataset Benchmark --data_name "$data_name" --nn benchmark \
-        --fl "$fl_algo" --seed "$seed" $hp_args "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+        --fl "$fl_algo" --seed "$seed" --min_workers "$total" \
+        $hp_args "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
     run_rc=$?
 }
 

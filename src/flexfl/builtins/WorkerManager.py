@@ -1,3 +1,5 @@
+import signal
+import threading
 from typing import Any, Callable, Generator
 
 from flexfl.builtins.CommABC import CommABC
@@ -7,18 +9,24 @@ from flexfl.builtins.Logger import Logger
 JOIN_TYPE = "__joining__"
 WAITING_TYPE = "__waiting__"
 
+
+class WorkerJoinTimeout(RuntimeError):
+    """Raised inside the join barrier when the requested pool does not assemble in time."""
+
 class WorkerManager():
 
     MASTER_ID = 0
     EXIT_TYPE = "exit"
 
-    def __init__(self, *, 
+    def __init__(self, *,
         c: CommABC,
         m: MessageABC,
+        join_timeout: int = 180,
         **kwargs
     ) -> None:
         self.c = c
         self.m = m
+        self.join_timeout = join_timeout
         self.worker_info = {}
         self.callbacks: dict[str, Callable[[int, Any], None]] = {}
         self.on_joining: Callable[[], None] = self.default_on_joining
@@ -149,9 +157,40 @@ class WorkerManager():
         self._recv(WAITING_TYPE)
 
 
-    def wait_for_workers(self, n: int) -> None:
-        while len(self.worker_info) < n:
-            self.loop_once()
+    def wait_for_workers(self, n: int, timeout: int = None) -> None:
+        """
+        Block until `n` workers have registered, then return.
+
+        Raises SystemExit(1) if they have not registered within `timeout` seconds
+        (default: the instance's join_timeout). A timeout of 0 or less waits
+        indefinitely, as does a call made off the main thread.
+        """
+        if len(self.worker_info) >= n:
+            return
+
+        limit = self.join_timeout if timeout is None else timeout
+        if limit <= 0 or threading.current_thread() is not threading.main_thread():
+            while len(self.worker_info) < n:
+                self.loop_once()
+            return
+
+        def on_alarm(signum, frame):
+            raise WorkerJoinTimeout
+
+        previous = signal.signal(signal.SIGALRM, on_alarm)
+        try:
+            signal.alarm(limit)
+            while len(self.worker_info) < n:
+                self.loop_once()
+        except WorkerJoinTimeout:
+            joined = len(self.worker_info)
+            Logger.log(Logger.FAILURE, reason="join_timeout", joined=joined, expected=n, timeout=limit)
+            raise SystemExit(
+                f"Worker join barrier timed out after {limit}s: {joined} of {n} workers registered."
+            )
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, previous)
 
 
     def wait_for(self, condition: Callable[[], bool]) -> None:

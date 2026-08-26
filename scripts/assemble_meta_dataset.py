@@ -8,8 +8,8 @@ a run whose targets can't be computed is dropped with a warning (so no NaN
 targets). Re-runnable and idempotent over a growing results/ tree.
 
 Features
-  identity            strategy (+ strategy_* one-hot), node counts, num_workers, dataset,
-                      fl_algo (+ fl_algo_* one-hot), repeat
+  identity            strategy (+ strategy_* one-hot), node counts, num_workers,
+                      n_workers_joined, dataset, fl_algo (+ fl_algo_* one-hot), repeat
   FL hyperparameters  learning_rate, batch_size, patience, delta, local_epochs (T07;
                       imputed 0 for Centralized, T46)
   dataset meta        task, is_classification, n_samples, n_features, n_classes,
@@ -22,6 +22,12 @@ Features
   worker compute      mean/min/max/std/cv of per-worker epochs-per-second from the
                       machine benchmark, over the participating workers, joined by
                       (node, vmid)
+
+Three columns count workers and mean different things: num_workers is the intended count
+from division.json; n_workers is the number of worker lines in workers.txt; and
+n_workers_joined counts the master's `new_worker` events, i.e. the workers that actually
+registered and were eligible for the aggregation pool. n_workers_joined < num_workers marks
+a short-pool run.
 
 local_epochs is 0 for every Centralized row by construction (T46) — a sentinel for
 "this algorithm has no local-training concept," not a measured zero. Do not use it as
@@ -53,7 +59,7 @@ DEFAULT_HPO_DIR = Path(__file__).resolve().parent.parent / "results/hyperparamet
 
 COLUMNS = [
     "strategy", "strategy_iid", "strategy_non_iid", "strategy_dirichlet",
-    "combo", "n_atnog_test1", "n_hobbit", "n_samwise", "num_workers",
+    "combo", "n_atnog_test1", "n_hobbit", "n_samwise", "num_workers", "n_workers_joined",
     "dataset", "fl_algo",
     "fl_algo_CentralizedSync", "fl_algo_CentralizedAsync", "fl_algo_DecentralizedSync", "fl_algo_DecentralizedAsync",
     "repeat",
@@ -247,6 +253,7 @@ def assemble(results_dir: Path, metadata_dir: Path, hpo_dir: Path) -> tuple[list
             "combo": combo,
             **parse_combo(combo),
             "num_workers": division.get("num_workers"),
+            "n_workers_joined": sum(1 for e in events if e.get("event") == "new_worker"),
             "dataset": dataset,
             "fl_algo": fl_algo,
             "repeat": int(rep.split("_")[1]),

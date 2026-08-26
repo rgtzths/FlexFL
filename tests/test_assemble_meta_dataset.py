@@ -223,12 +223,16 @@ def build_synthetic_run(
     strategy="iid", combo="atnog-test1_0_hobbit_1_samwise_0",
     dataset="ds_a", fl_algo="CentralizedSync", rep=1,
     sentinel="_SUCCESS", with_epochs=True, workers_txt=None, with_hpo=True,
-    hyperparameters=None,
+    hyperparameters=None, new_workers=0,
 ):
     rep_dir = results_dir / strategy / combo / dataset / fl_algo / f"rep_{rep}"
     rep_dir.mkdir(parents=True, exist_ok=True)
 
-    events = [{"event": "start", "timestamp": 0}]
+    events = [
+        {"event": "new_worker", "node_id": i, "info": {}}
+        for i in range(1, new_workers + 1)
+    ]
+    events.append({"event": "start", "timestamp": 0})
     if with_epochs:
         events.append({"event": "epoch", "mcc": 0.7})
     events.append({"event": "end", "timestamp": 5})
@@ -759,3 +763,40 @@ def test_assemble_onehot_resolves_fl_algo_aliases_and_case_variants(tmp_path, fl
     row = rows[0]
     assert sum(row[f"fl_algo_{a}"] for a in FL_ALGOS) == 1
     assert row[f"fl_algo_{canonical}"] == 1
+
+
+def test_assemble_n_workers_joined_matches_num_workers_on_healthy_run(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    rep_dir = build_synthetic_run(results_dir, metadata_dir, hpo_dir, new_workers=4)
+    write_json(rep_dir.parent.parent / "division.json", {"strategy": "iid", "num_workers": 4})
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert rows[0]["n_workers_joined"] == 4
+    assert rows[0]["n_workers_joined"] == rows[0]["num_workers"]
+
+
+def test_assemble_n_workers_joined_below_num_workers_on_short_pool(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    rep_dir = build_synthetic_run(results_dir, metadata_dir, hpo_dir, new_workers=3)
+    write_json(rep_dir.parent.parent / "division.json", {"strategy": "iid", "num_workers": 4})
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert rows[0]["n_workers_joined"] == 3
+    assert rows[0]["n_workers_joined"] < rows[0]["num_workers"]
+
+
+def test_assemble_n_workers_joined_is_zero_when_no_worker_registered(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, new_workers=0)
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert rows[0]["n_workers_joined"] == 0
