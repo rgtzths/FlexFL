@@ -221,7 +221,7 @@ def test_worker_compute_missing_workers_txt_returns_empty(tmp_path):
 def build_synthetic_run(
     results_dir: Path, metadata_dir: Path, hpo_dir: Path, *,
     strategy="iid", combo="atnog-test1_0_hobbit_1_samwise_0",
-    dataset="ds_a", fl_algo="fedavg", rep=1,
+    dataset="ds_a", fl_algo="CentralizedSync", rep=1,
     sentinel="_SUCCESS", with_epochs=True, workers_txt=None, with_hpo=True,
     hyperparameters=None,
 ):
@@ -694,3 +694,68 @@ def test_assemble_local_epochs_zero_for_centralized_mixed_case_directory_names(t
     rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
 
     assert rows[0]["local_epochs"] == 0
+
+
+FL_ALGOS = ("CentralizedSync", "CentralizedAsync", "DecentralizedSync", "DecentralizedAsync")
+STRATEGIES = ("iid", "non_iid", "dirichlet")
+
+
+@pytest.mark.parametrize("fl_algo", FL_ALGOS)
+@pytest.mark.parametrize("strategy", STRATEGIES)
+def test_assemble_onehot_fl_algo_and_strategy(tmp_path, strategy, fl_algo):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, strategy=strategy, fl_algo=fl_algo)
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert sum(row[f"fl_algo_{a}"] for a in FL_ALGOS) == 1
+    assert row[f"fl_algo_{fl_algo}"] == 1
+    assert sum(row[f"strategy_{s}"] for s in STRATEGIES) == 1
+    assert row[f"strategy_{strategy}"] == 1
+
+
+def test_assemble_unrecognized_fl_algo_warns_and_skips(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, fl_algo="fedavg")
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert rows == []
+    assert any("unrecognized fl_algo" in w and "fedavg" in w for w in warnings)
+
+
+def test_assemble_unrecognized_strategy_warns_and_skips(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, strategy="extreme_non_iid")
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert rows == []
+    assert any("unrecognized strategy" in w and "extreme_non_iid" in w for w in warnings)
+
+
+@pytest.mark.parametrize("fl_algo,canonical", (
+    ("cs", "CentralizedSync"), ("ca", "CentralizedAsync"),
+    ("ds", "DecentralizedSync"), ("da", "DecentralizedAsync"),
+    ("CENTRALIZEDSYNC", "CentralizedSync"), ("Cs", "CentralizedSync"),
+))
+def test_assemble_onehot_resolves_fl_algo_aliases_and_case_variants(tmp_path, fl_algo, canonical):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, fl_algo=fl_algo)
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert sum(row[f"fl_algo_{a}"] for a in FL_ALGOS) == 1
+    assert row[f"fl_algo_{canonical}"] == 1

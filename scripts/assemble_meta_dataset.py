@@ -8,7 +8,8 @@ a run whose targets can't be computed is dropped with a warning (so no NaN
 targets). Re-runnable and idempotent over a growing results/ tree.
 
 Features
-  identity            strategy, node counts, num_workers, dataset, fl_algo, repeat
+  identity            strategy (+ strategy_* one-hot), node counts, num_workers, dataset,
+                      fl_algo (+ fl_algo_* one-hot), repeat
   FL hyperparameters  learning_rate, batch_size, patience, delta, local_epochs (T07;
                       imputed 0 for Centralized, T46)
   dataset meta        task, is_classification, n_samples, n_features, n_classes,
@@ -51,8 +52,11 @@ from extract_meta_features import DEFAULT_METADATA_DIR, architecture_features, m
 DEFAULT_HPO_DIR = Path(__file__).resolve().parent.parent / "results/hyperparameter_optimization"
 
 COLUMNS = [
-    "strategy", "combo", "n_atnog_test1", "n_hobbit", "n_samwise", "num_workers",
-    "dataset", "fl_algo", "repeat",
+    "strategy", "strategy_iid", "strategy_non_iid", "strategy_dirichlet",
+    "combo", "n_atnog_test1", "n_hobbit", "n_samwise", "num_workers",
+    "dataset", "fl_algo",
+    "fl_algo_CentralizedSync", "fl_algo_CentralizedAsync", "fl_algo_DecentralizedSync", "fl_algo_DecentralizedAsync",
+    "repeat",
     "learning_rate", "batch_size", "patience", "delta", "local_epochs",
     "task", "is_classification", "is_categorical", "n_samples", "n_features", "n_classes",
     "total_parameters", "n_layers", "mean_layer_width", "max_layer_width", "weight_decay",
@@ -64,7 +68,13 @@ COLUMNS = [
     "comm_bytes_sent", "comm_bytes_recv", "comm_bytes_total", "n_epochs",
 ]
 
-CENTRALIZED_ALGOS = {"centralizedsync", "centralizedasync", "cs", "ca"}
+ALGO_ALIASES = {
+    "centralizedsync": "CentralizedSync", "cs": "CentralizedSync",
+    "centralizedasync": "CentralizedAsync", "ca": "CentralizedAsync",
+    "decentralizedsync": "DecentralizedSync", "ds": "DecentralizedSync",
+    "decentralizedasync": "DecentralizedAsync", "da": "DecentralizedAsync",
+}
+CENTRALIZED_ALGOS = {"CentralizedSync", "CentralizedAsync"}
 
 
 def load_json(path: Path):
@@ -261,12 +271,23 @@ def assemble(results_dir: Path, metadata_dir: Path, hpo_dir: Path) -> tuple[list
             **worker_compute(rep_dir.parent.parent.parent / "workers.txt", benchmark_dir),
             **targets,
         }
-        if row["fl_algo"].lower() in CENTRALIZED_ALGOS and row["local_epochs"] is None:
+        canonical_fl_algo = ALGO_ALIASES.get(row["fl_algo"].lower())
+        if canonical_fl_algo is None:
+            warnings.append(f"unrecognized fl_algo {row['fl_algo']!r}, skipped: {rep_dir}")
+            continue
+        if canonical_fl_algo in CENTRALIZED_ALGOS and row["local_epochs"] is None:
             row["local_epochs"] = 0
         elif row["local_epochs"] is None:
             warnings.append(f"local_epochs unrecorded for {rep_dir} (fl_algo={row['fl_algo']})")
         if all(row[k] is None for k in ("learning_rate", "batch_size", "patience", "delta")):
             warnings.append(f"no FL hyperparameters recorded for {rep_dir}")
+        for algo in ("CentralizedSync", "CentralizedAsync", "DecentralizedSync", "DecentralizedAsync"):
+            row[f"fl_algo_{algo}"] = int(canonical_fl_algo == algo)
+        for strat in ("iid", "non_iid", "dirichlet"):
+            row[f"strategy_{strat}"] = int(row["strategy"] == strat)
+        if sum(row[f"strategy_{s}"] for s in ("iid", "non_iid", "dirichlet")) != 1:
+            warnings.append(f"unrecognized strategy {row['strategy']!r}, skipped: {rep_dir}")
+            continue
         legacy_workers_txt = row.get("_legacy_workers_txt")
         if legacy_workers_txt is not None:
             warnings.append(f"legacy IP-only workers.txt, worker compute skipped: {legacy_workers_txt}")
