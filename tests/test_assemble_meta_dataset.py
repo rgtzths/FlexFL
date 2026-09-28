@@ -919,7 +919,7 @@ def test_assemble_time_decomposition_counts_non_object_master_lines(tmp_path):
 def test_assemble_time_decomposition_ignores_suffixed_worker_names(tmp_path):
     results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
     run = build_timed_run(results_dir, metadata_dir, hpo_dir)
-    strays = [run / "worker_1_backup/log_9_backup.jsonl", run / "worker_1/log_1_old.jsonl"]
+    strays = [run / "worker_1_backup/log_9.jsonl", run / "worker_1/log_1_old.jsonl"]
     strays[0].parent.mkdir()
     for stray in strays:
         stray.write_text('{"event": "working_start", "timestamp": 101.0}\n')
