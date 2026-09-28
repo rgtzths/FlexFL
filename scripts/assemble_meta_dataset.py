@@ -43,19 +43,37 @@ Targets (master log_0.jsonl, single clock; T09)
   comm_bytes_{sent,recv,total}   Σ payload_size of the master's send/recv events
   n_epochs            rounds until early stop — an OUTCOME, not a feature; exclude it
                       from the predictor set (leakage) unless modelling it as a target.
+  compute_time_{total,max}_s, comm_time_{total,max}_s, serial_time_total_s, validation_time_s,
+  comm_skew_clamped   time decomposition from log_0.jsonl plus worker_N/log_M.jsonl
+                      (flexfl.builtins.event_metrics, the pairing Results uses): worker work,
+                      message transit and encode/decode seconds, every interval clipped to the
+                      master start-to-end window, _total summed over workers, _max the busiest
+                      worker. comm_time_* pairs a master and a worker clock; comm_skew_clamped
+                      counts pairs whose negative duration was clamped to 0. Empty, with a
+                      warning, when a run has no worker logs or no work inside the window.
+                      Outcomes, like n_epochs: not predictors.
 """
 import argparse
+from collections import Counter
 import csv
 import json
 import math
+import re
 import statistics
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from extract_meta_features import DEFAULT_METADATA_DIR, architecture_features, meta_features  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+from flexfl.builtins.event_metrics import decomposition  # noqa: E402
 
 DEFAULT_HPO_DIR = Path(__file__).resolve().parent.parent / "results/hyperparameter_optimization"
+
+DECOMPOSITION_COLUMNS = [
+    "compute_time_total_s", "compute_time_max_s", "comm_time_total_s", "comm_time_max_s",
+    "serial_time_total_s", "validation_time_s", "comm_skew_clamped",
+]
 
 COLUMNS = [
     "strategy", "strategy_iid", "strategy_non_iid", "strategy_dirichlet",
@@ -72,6 +90,7 @@ COLUMNS = [
     "worker_rate_mean", "worker_rate_min", "worker_rate_max", "worker_rate_std", "worker_rate_cv",
     "performance", "main_metric", "total_time_s",
     "comm_bytes_sent", "comm_bytes_recv", "comm_bytes_total", "n_epochs",
+    *DECOMPOSITION_COLUMNS,
 ]
 
 ALGO_ALIASES = {
@@ -101,20 +120,103 @@ def parse_combo(combo: str) -> dict:
     }
 
 
-def read_master_events(rep_dir: Path) -> list[dict]:
+def read_master_events(rep_dir: Path) -> tuple[Path | None, list[dict], int]:
     logs = sorted(rep_dir.rglob("log_0.jsonl"))
     if not logs:
-        return []
-    events = []
-    for line in logs[0].read_text().splitlines():
-        line = line.strip()
+        return None, [], 0
+    events, bad = read_jsonl(logs[0])
+    return logs[0], events, bad
+
+
+EVENT_FIELDS = {
+    "start": ("timestamp",), "end": ("timestamp",),
+    "send": ("sender", "receiver", "payload_size", "timestamp"),
+    "recv": ("sender", "receiver", "payload_size", "timestamp"),
+    "encode": ("time", "timestamp"), "decode": ("time", "timestamp"),
+    "working_start": ("timestamp",), "working_end": ("timestamp",), "failure": ("timestamp",),
+    "validation_start": ("timestamp",), "validation_end": ("timestamp",),
+}
+ANOMALY_WARNINGS = (
+    ("n_unmatched_comms", "send/recv events unmatched"),
+    ("n_orphan_comms", "master send/recv events address an absent worker log"),
+    ("n_unclosed_work_logs", "worker logs with unpaired working_start/end"),
+    ("n_unmatched_validations", "validation_start/end events unpaired"),
+)
+
+
+def read_jsonl(path: Path) -> tuple[list[dict], int]:
+    events, bad = [], 0
+    for raw in path.read_bytes().splitlines():
+        try:
+            line = raw.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            bad += 1
+            continue
         if not line:
             continue
         try:
-            events.append(json.loads(line))
+            event = json.loads(line)
         except json.JSONDecodeError:
+            bad += 1
             continue
-    return events
+        if isinstance(event, dict):
+            events.append(event)
+        else:
+            bad += 1
+    return events, bad
+
+
+def well_formed(event: object) -> bool:
+    if not isinstance(event, dict) or not isinstance(event.get("event"), str):
+        return False
+    return all(
+        isinstance(event.get(field), (int, float)) and not isinstance(event.get(field), bool)
+        for field in EVENT_FIELDS.get(event["event"], ())
+    )
+
+
+def time_decomposition(
+    rep_dir: Path, master_log: Path, events: list[dict], master_bad: int
+) -> tuple[dict, str | None, list[str]]:
+    empty = dict.fromkeys(DECOMPOSITION_COLUMNS)
+    master = [e for e in events if well_formed(e)]
+    notes = []
+    master_malformed = master_bad + len(events) - len(master)
+    if master_malformed:
+        notes.append(f"{master_malformed} malformed records skipped in {master_log}")
+    logs, log2node = {0: master}, {0: 0}
+    for path in sorted(master_log.parent.glob("worker_*/log_*.jsonl")):
+        log_match = re.fullmatch(r"log_([0-9]+)\.jsonl", path.name)
+        node_match = re.fullmatch(r"worker_([0-9]+)", path.parent.name)
+        if log_match is None or node_match is None:
+            notes.append(f"unrecognized worker log name, ignored: {path}")
+            continue
+        log_id, node_id = int(log_match[1]), int(node_match[1])
+        if log_id in logs:
+            notes.append(f"duplicate worker log id {log_id}, ignored: {path}")
+            continue
+        try:
+            parsed, bad = read_jsonl(path)
+        except OSError as e:
+            notes.append(f"unreadable worker log ({e}), ignored: {path}")
+            continue
+        worker_events = [e for e in parsed if well_formed(e)]
+        bad += len(parsed) - len(worker_events)
+        if bad:
+            notes.append(f"{bad} malformed records skipped in {path}")
+        logs[log_id] = worker_events
+        log2node[log_id] = node_id
+    if len(logs) == 1:
+        return empty, "no worker logs", notes
+    t0 = next(e["timestamp"] for e in events if e.get("event") == "start")
+    t1 = [e for e in events if e.get("event") == "end"][-1]["timestamp"]
+    split = decomposition(logs, log2node, t0, t1)
+    for key, label in ANOMALY_WARNINGS:
+        if split[key]:
+            notes.append(f"{split[key]} {label} in {rep_dir}")
+    if split["n_work_intervals_in_window"] == 0 and split["n_work_events_in_window"] == 0:
+        return empty, "no work inside the master window", notes
+    return {k: split[k] for k in DECOMPOSITION_COLUMNS}, None, notes
 
 
 def compute_targets(events: list[dict], is_classification: bool) -> dict | None:
@@ -242,11 +344,16 @@ def assemble(results_dir: Path, metadata_dir: Path, hpo_dir: Path) -> tuple[list
             warnings.append(f"malformed HPO config for {dataset} ({e}), skipped: {rep_dir}")
             continue
 
-        events = read_master_events(rep_dir)
+        master_log, events, master_bad = read_master_events(rep_dir)
         targets = compute_targets(events, mf["is_classification"])
         if targets is None:
             warnings.append(f"targets uncomputable (missing start/end/epoch), skipped: {rep_dir}")
             continue
+
+        decomposition_columns, null_cause, decomposition_notes = time_decomposition(rep_dir, master_log, events, master_bad)
+        warnings.extend(decomposition_notes)
+        if null_cause is not None:
+            warnings.append(f"time decomposition unavailable ({null_cause}): {rep_dir}")
 
         row = {
             "strategy": division.get("strategy", strategy),
@@ -277,6 +384,8 @@ def assemble(results_dir: Path, metadata_dir: Path, hpo_dir: Path) -> tuple[list
             "feat_entropy_std": entropy.get("std"),
             **worker_compute(rep_dir.parent.parent.parent / "workers.txt", benchmark_dir),
             **targets,
+            **decomposition_columns,
+            "_decomposition_null_cause": null_cause,
         }
         canonical_fl_algo = ALGO_ALIASES.get(row["fl_algo"].lower())
         if canonical_fl_algo is None:
@@ -326,6 +435,10 @@ def main():
         writer.writeheader()
         writer.writerows(rows)
     print(f"Wrote {len(rows)} rows to {args.out} ({len(warnings)} skipped).")
+    null_causes = Counter(r["_decomposition_null_cause"] for r in rows if r["_decomposition_null_cause"])
+    if null_causes:
+        detail = ", ".join(f"{cause}: {count}" for cause, count in sorted(null_causes.items()))
+        print(f"Time decomposition unavailable for {sum(null_causes.values())} of {len(rows)} rows ({detail}).")
 
 
 if __name__ == "__main__":

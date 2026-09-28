@@ -9,6 +9,7 @@ from functools import lru_cache
 import plotly.express as px
 import plotly.graph_objects as go
 import plotly.io as pio   
+from flexfl.builtins import event_metrics
 
 pio.kaleido.scope.mathjax = None
 
@@ -175,18 +176,10 @@ class Results:
 
     @lru_cache(maxsize=1)
     def get_work_times(self) -> pd.DataFrame:
-        data = []
-        for log_id in self.logs:
-            starts = self.yield_log(log_id, {"working_start"})
-            ends = self.yield_log(log_id, {"working_end", "failure"})
-            for start, end in zip(starts, ends):
-                data.append((
-                    self.log2node[log_id],
-                    log_id,
-                    datetime.fromtimestamp(start["timestamp"]),
-                    datetime.fromtimestamp(end["timestamp"]),
-                    end["timestamp"] - start["timestamp"],
-                ))
+        data = [
+            (nid, lid, datetime.fromtimestamp(start), datetime.fromtimestamp(end), end - start)
+            for nid, lid, start, end in event_metrics.work_intervals(self.logs, self.log2node)
+        ]
         df = pd.DataFrame(data, columns=[ "nid", "lid", "start", "end", "duration"])
         df = df.sort_values(by=["nid", "start"])
         return df
@@ -194,42 +187,12 @@ class Results:
 
     @lru_cache(maxsize=1)
     def get_comms(self) -> pd.DataFrame:
-        data = []
-        skew_count = 0
-        max_skew = 0.0
-        unmatched = 0
-        for a1, a2, a3 in [("send", "recv", "receiver"), ("recv", "send", "sender")]:
-            for log_id in set(self.logs.keys()) - {0}:
-                l1s = list(self.yield_log(0, None, lambda x: x["event"] == a1 and x[a3] == log_id))
-                l2s = list(self.yield_log(log_id, {a2}))
-                if len(l1s) != len(l2s):
-                    unmatched += abs(len(l1s) - len(l2s))
-                for l1, l2 in zip(l1s, l2s):
-                    t1 = l1["timestamp"]
-                    t2 = l2["timestamp"]
-                    sender = l1["sender"]
-                    receiver = l1["receiver"]
-                    if a1 == "send":
-                        start = t1
-                        end = t2
-                    else:
-                        start = t2
-                        end = t1
-                    duration = (end - start) * 1000
-                    if duration < 0:
-                        skew_count += 1
-                        max_skew = max(max_skew, -duration)
-                        duration = 0.0
-                    data.append((
-                        self.log2node[sender],
-                        sender,
-                        self.log2node[receiver],
-                        receiver,
-                        datetime.fromtimestamp(start),
-                        datetime.fromtimestamp(end),
-                        duration,
-                        l1["payload_size"]
-                    ))
+        assert 0 in self.logs, "Log 0 not found in results folder."
+        pairs, skew_count, max_skew, unmatched = event_metrics.comm_pairs(self.logs, self.log2node)
+        data = [
+            (send_nid, send_lid, recv_nid, recv_lid, datetime.fromtimestamp(start), datetime.fromtimestamp(end), duration, payload)
+            for send_nid, send_lid, recv_nid, recv_lid, start, end, duration, payload in pairs
+        ]
         if skew_count > 0 or unmatched > 0:
             print(f"Warning: [{self.results_folder}] clamped {skew_count} negative comm durations to 0 "
                   f"(max skew {max_skew:.1f} ms; likely clock skew); {unmatched} send/recv pairs unmatched.")
@@ -290,10 +253,7 @@ class Results:
 
     @lru_cache(maxsize=1)
     def get_serialization_per_worker(self) -> pd.DataFrame:
-        data = []
-        for log_id in set(self.logs.keys()) - {0}:
-            total = sum(line["time"] for line in self.yield_log(log_id, {"encode", "decode"}))
-            data.append((self.log2node[log_id], total))
+        data = event_metrics.serialization_totals(self.logs, self.log2node)
         df = pd.DataFrame(data, columns=["worker", "serial_time (s)"])
         df = df.groupby(["worker"]).agg({"serial_time (s)": "sum"})
         df = df.reset_index()
