@@ -5,17 +5,18 @@ import sys
 from pathlib import Path
 
 import pytest
+
 from run_logs import MASTER_EVENTS, write_run_logs
 
 from assemble_meta_dataset import (
     COLUMNS,
+    DECOMPOSITION_COLUMNS,
     assemble,
     compute_targets,
     parse_combo,
     worker_compute,
 )
 
-DECOMPOSITION = ["compute_time_total_s", "compute_time_max_s", "comm_time_total_s", "comm_time_max_s", "serial_time_total_s", "validation_time_s", "comm_skew_clamped"]
 GOLDEN = [6.5, 4.5, 2.0, 1.25, 1.0, 1.0, 1]
 
 
@@ -817,7 +818,7 @@ def test_assemble_time_decomposition_clips_to_master_window(tmp_path):
     results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
     build_timed_run(results_dir, metadata_dir, hpo_dir)
     rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
-    assert [rows[0][c] for c in DECOMPOSITION] == GOLDEN
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == GOLDEN
     assert rows[0]["total_time_s"] == 10.0
 
 
@@ -826,7 +827,7 @@ def test_assemble_time_decomposition_empty_without_worker_logs(tmp_path):
     build_synthetic_run(results_dir, metadata_dir, hpo_dir)
     rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
     assert len(rows) == 1
-    assert [rows[0][c] for c in DECOMPOSITION] == [None] * 7
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == [None] * 7
     assert any("time decomposition unavailable (no worker logs)" in w for w in warnings)
 
 
@@ -837,7 +838,7 @@ def test_assemble_time_decomposition_empty_when_no_work_in_window(tmp_path):
     for path in (run / "worker_1/log_1.jsonl", run / "worker_2/log_3.jsonl", run / "worker_2/log_4.jsonl"):
         path.write_text(late_work)
     rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
-    assert [rows[0][c] for c in DECOMPOSITION] == [None] * 7
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == [None] * 7
     assert any("(no work inside the master window)" in w for w in warnings)
     assert any("6 send/recv events unmatched" in w for w in warnings)
 
@@ -848,8 +849,104 @@ def test_assemble_time_decomposition_skips_malformed_worker_records(tmp_path):
     path = run / "worker_1/log_1.jsonl"
     path.write_text(path.read_text() + '{not json\n{"timestamp": 101}\n')
     rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
-    assert [rows[0][c] for c in DECOMPOSITION] == GOLDEN
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == GOLDEN
     assert any("2 malformed records skipped" in w for w in warnings)
+
+
+def test_assemble_time_decomposition_counts_malformed_master_records(tmp_path):
+    results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
+    run = build_timed_run(results_dir, metadata_dir, hpo_dir)
+    master = run / "log_0.jsonl"
+    master.write_text(master.read_text() + "{not json\n")
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == GOLDEN
+    assert any(w == f"1 malformed records skipped in {master}" for w in warnings)
+
+
+def test_assemble_time_decomposition_ignores_non_numeric_log_name(tmp_path):
+    results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
+    run = build_timed_run(results_dir, metadata_dir, hpo_dir)
+    stray = run / "worker_1/log_backup.jsonl"
+    stray.write_text('{"event": "working_start", "timestamp": 101.0}\n')
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == GOLDEN
+    assert any(w == f"unrecognized worker log name, ignored: {stray}" for w in warnings)
+
+
+def test_assemble_time_decomposition_ignores_non_numeric_worker_folder(tmp_path):
+    results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
+    run = build_timed_run(results_dir, metadata_dir, hpo_dir)
+    stray = run / "worker_backup/log_9.jsonl"
+    stray.parent.mkdir()
+    stray.write_text('{"event": "working_start", "timestamp": 101.0}\n')
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == GOLDEN
+    assert any(w == f"unrecognized worker log name, ignored: {stray}" for w in warnings)
+
+
+def test_assemble_time_decomposition_ignores_unreadable_worker_log(tmp_path):
+    results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
+    run = build_timed_run(results_dir, metadata_dir, hpo_dir)
+    stray = run / "worker_1/log_9.jsonl"
+    stray.mkdir()
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == GOLDEN
+    assert any(w.startswith("unreadable worker log (") and w.endswith(f"), ignored: {stray}") for w in warnings)
+
+
+def test_assemble_time_decomposition_counts_undecodable_worker_bytes(tmp_path):
+    results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
+    run = build_timed_run(results_dir, metadata_dir, hpo_dir)
+    path = run / "worker_1/log_1.jsonl"
+    path.write_bytes(path.read_bytes() + b'{"event": "working_start", "timestamp": 1\xc3\n')
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == GOLDEN
+    assert any(w == f"1 malformed records skipped in {path}" for w in warnings)
+
+
+def test_assemble_time_decomposition_ignores_duplicate_worker_log_id(tmp_path):
+    results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
+    run = build_timed_run(results_dir, metadata_dir, hpo_dir)
+    duplicate = run / "worker_3/log_1.jsonl"
+    duplicate.parent.mkdir()
+    duplicate.write_text('{"event": "working_start", "timestamp": 103.0}\n{"event": "working_end", "timestamp": 108.0}\n')
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == GOLDEN
+    assert any(w == f"duplicate worker log id 1, ignored: {duplicate}" for w in warnings)
+
+
+def test_assemble_time_decomposition_keeps_work_spanning_the_window(tmp_path):
+    results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
+    run = build_timed_run(results_dir, metadata_dir, hpo_dir)
+    spanning = '{"event": "working_start", "timestamp": 50.0}\n{"event": "working_end", "timestamp": 150.0}\n'
+    for path in (run / "worker_1/log_1.jsonl", run / "worker_2/log_3.jsonl", run / "worker_2/log_4.jsonl"):
+        path.write_text(spanning)
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == [30.0, 20.0, 0.0, 0.0, 0.5, 1.0, 0]
+    assert not any("no work inside the master window" in w for w in warnings)
+
+
+def test_assemble_time_decomposition_rejects_boolean_timestamps(tmp_path):
+    results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
+    run = build_timed_run(results_dir, metadata_dir, hpo_dir)
+    path = run / "worker_1/log_1.jsonl"
+    path.write_text(path.read_text() + '{"event": "working_start", "timestamp": true}\n')
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == GOLDEN
+    assert any(w == f"1 malformed records skipped in {path}" for w in warnings)
+
+
+def test_assemble_cli_reports_two_decomposition_null_causes_sorted(tmp_path):
+    results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir, dataset="ds_a")
+    run = build_timed_run(results_dir, metadata_dir, hpo_dir, dataset="ds_b", combo="atnog-test1_1_hobbit_0_samwise_0")
+    late_work = '{"event": "working_start", "timestamp": 111.0}\n{"event": "working_end", "timestamp": 113.0}\n'
+    for path in (run / "worker_1/log_1.jsonl", run / "worker_2/log_3.jsonl", run / "worker_2/log_4.jsonl"):
+        path.write_text(late_work)
+    script = str(Path(__file__).resolve().parent.parent / "scripts" / "assemble_meta_dataset.py")
+    result = run_assemble_cli(script, results_dir, metadata_dir, hpo_dir, tmp_path / "meta_dataset.csv")
+    assert result.returncode == 0, result.stderr
+    assert "Time decomposition unavailable for 2 of 2 rows (no work inside the master window: 1, no worker logs: 1)." in result.stdout
 
 
 def test_assemble_time_decomposition_warns_on_absent_worker_log(tmp_path):
@@ -857,7 +954,7 @@ def test_assemble_time_decomposition_warns_on_absent_worker_log(tmp_path):
     run = build_timed_run(results_dir, metadata_dir, hpo_dir)
     (run / "worker_2/log_4.jsonl").unlink()
     rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
-    assert [rows[0][c] for c in DECOMPOSITION] == [3.5, 2.0, 1.25, 0.75, 1.0, 1.0, 1]
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == [3.5, 2.0, 1.25, 0.75, 1.0, 1.0, 1]
     assert any("2 master send/recv events address an absent worker log" in w for w in warnings)
 
 
@@ -867,7 +964,7 @@ def test_assemble_time_decomposition_warns_on_unpaired_work(tmp_path):
     path = run / "worker_1/log_1.jsonl"
     path.write_text(path.read_text() + '{"event": "working_start", "timestamp": 109.5}\n')
     rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
-    assert [rows[0][c] for c in DECOMPOSITION] == GOLDEN
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == GOLDEN
     assert any("1 worker logs with unpaired working_start/end" in w for w in warnings)
 
 
@@ -891,9 +988,9 @@ def test_assemble_cli_decomposition_columns_non_empty_with_worker_logs(tmp_path)
     with open(out_csv, newline="") as f:
         reader = csv.DictReader(f)
         assert reader.fieldnames == COLUMNS
-        assert reader.fieldnames[-7:] == DECOMPOSITION
+        assert reader.fieldnames[-7:] == DECOMPOSITION_COLUMNS
         row = next(reader)
-    assert all(row[c] != "" for c in DECOMPOSITION)
+    assert all(row[c] != "" for c in DECOMPOSITION_COLUMNS)
 
 
 def test_assemble_time_decomposition_warns_on_unpaired_validation(tmp_path):
@@ -903,7 +1000,7 @@ def test_assemble_time_decomposition_warns_on_unpaired_validation(tmp_path):
     master = [*MASTER_EVENTS[:-1], {"event": "epoch", "mcc": 0.7, "timestamp": 105.0}, {"event": "validation_start", "timestamp": 109.5}, MASTER_EVENTS[-1]]
     write_run_logs(rep_dir / "2026-01-01_00:00:00", master)
     rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
-    assert [rows[0][c] for c in DECOMPOSITION] == GOLDEN
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == GOLDEN
     assert any("1 validation_start/end events unpaired" in w for w in warnings)
 
 

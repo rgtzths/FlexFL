@@ -119,20 +119,12 @@ def parse_combo(combo: str) -> dict:
     }
 
 
-def read_master_events(rep_dir: Path) -> list[dict]:
+def read_master_events(rep_dir: Path) -> tuple[Path | None, list[dict], int]:
     logs = sorted(rep_dir.rglob("log_0.jsonl"))
     if not logs:
-        return []
-    events = []
-    for line in logs[0].read_text().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            events.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return events
+        return None, [], 0
+    events, bad = read_jsonl(logs[0])
+    return logs[0], events, bad
 
 
 EVENT_FIELDS = {
@@ -153,7 +145,7 @@ ANOMALY_WARNINGS = (
 
 def read_jsonl(path: Path) -> tuple[list[dict], int]:
     events, bad = [], 0
-    for line in path.read_text().splitlines():
+    for line in path.read_text(errors="replace").splitlines():
         line = line.strip()
         if not line:
             continue
@@ -164,7 +156,7 @@ def read_jsonl(path: Path) -> tuple[list[dict], int]:
     return events, bad
 
 
-def well_formed(event) -> bool:
+def well_formed(event: object) -> bool:
     if not isinstance(event, dict) or not isinstance(event.get("event"), str):
         return False
     return all(
@@ -173,26 +165,37 @@ def well_formed(event) -> bool:
     )
 
 
-def time_decomposition(rep_dir: Path, events: list[dict]) -> tuple[dict, str | None, list[str]]:
+def time_decomposition(
+    rep_dir: Path, master_log: Path, events: list[dict], master_bad: int
+) -> tuple[dict, str | None, list[str]]:
     empty = dict.fromkeys(DECOMPOSITION_COLUMNS)
-    master_log = sorted(rep_dir.rglob("log_0.jsonl"))[0]
     master = [e for e in events if well_formed(e)]
     notes = []
-    if len(master) < len(events):
-        notes.append(f"{len(events) - len(master)} malformed records skipped in {master_log}")
+    master_malformed = master_bad + len(events) - len(master)
+    if master_malformed:
+        notes.append(f"{master_malformed} malformed records skipped in {master_log}")
     logs, log2node = {0: master}, {0: 0}
     for path in sorted(master_log.parent.glob("worker_*/log_*.jsonl")):
-        log_id = int(path.name.split("_")[1].split(".")[0])
+        try:
+            log_id = int(path.name.split("_")[1].split(".")[0])
+            node_id = int(path.parent.name.split("_")[1])
+        except ValueError:
+            notes.append(f"unrecognized worker log name, ignored: {path}")
+            continue
         if log_id in logs:
             notes.append(f"duplicate worker log id {log_id}, ignored: {path}")
             continue
-        parsed, bad = read_jsonl(path)
+        try:
+            parsed, bad = read_jsonl(path)
+        except OSError as e:
+            notes.append(f"unreadable worker log ({e}), ignored: {path}")
+            continue
         worker_events = [e for e in parsed if well_formed(e)]
         bad += len(parsed) - len(worker_events)
         if bad:
             notes.append(f"{bad} malformed records skipped in {path}")
         logs[log_id] = worker_events
-        log2node[log_id] = int(path.parent.name.split("_")[1])
+        log2node[log_id] = node_id
     if len(logs) == 1:
         return empty, "no worker logs", notes
     t0 = next(e["timestamp"] for e in events if e.get("event") == "start")
@@ -331,13 +334,13 @@ def assemble(results_dir: Path, metadata_dir: Path, hpo_dir: Path) -> tuple[list
             warnings.append(f"malformed HPO config for {dataset} ({e}), skipped: {rep_dir}")
             continue
 
-        events = read_master_events(rep_dir)
+        master_log, events, master_bad = read_master_events(rep_dir)
         targets = compute_targets(events, mf["is_classification"])
         if targets is None:
             warnings.append(f"targets uncomputable (missing start/end/epoch), skipped: {rep_dir}")
             continue
 
-        decomposition_columns, null_cause, decomposition_notes = time_decomposition(rep_dir, events)
+        decomposition_columns, null_cause, decomposition_notes = time_decomposition(rep_dir, master_log, events, master_bad)
         warnings.extend(decomposition_notes)
         if null_cause is not None:
             warnings.append(f"time decomposition unavailable ({null_cause}): {rep_dir}")

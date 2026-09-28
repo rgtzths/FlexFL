@@ -3,14 +3,16 @@
 Stdlib only: the assembler imports this module under a Python that has no pandas.
 """
 
-WORK_EVENTS = ("working_start", "working_end", "failure")
+WORK_END_EVENTS = ("working_end", "failure")
+WORK_EVENTS = ("working_start", *WORK_END_EVENTS)
+SERIAL_EVENTS = ("encode", "decode")
 
 
 def work_intervals(logs: dict[int, list[dict]], log2node: dict[int, int]) -> list[tuple[int, int, float, float]]:
     rows = []
     for log_id in logs:
         starts = [e for e in logs[log_id] if e["event"] == "working_start"]
-        ends = [e for e in logs[log_id] if e["event"] in ("working_end", "failure")]
+        ends = [e for e in logs[log_id] if e["event"] in WORK_END_EVENTS]
         for start, end in zip(starts, ends):
             rows.append((log2node[log_id], log_id, start["timestamp"], end["timestamp"]))
     return rows
@@ -47,7 +49,7 @@ def comm_pairs(
 
 def serialization_totals(logs: dict[int, list[dict]], log2node: dict[int, int]) -> list[tuple[int, float]]:
     return [
-        (log2node[log_id], sum(e["time"] for e in logs[log_id] if e["event"] in ("encode", "decode")))
+        (log2node[log_id], sum(e["time"] for e in logs[log_id] if e["event"] in SERIAL_EVENTS))
         for log_id in set(logs.keys()) - {0}
     ]
 
@@ -73,7 +75,7 @@ def decomposition(logs: dict[int, list[dict]], log2node: dict[int, int], t0: flo
         _overlap(e["timestamp"] - e["time"], e["timestamp"], t0, t1)
         for events in logs.values()
         for e in events
-        if e["event"] in ("encode", "decode")
+        if e["event"] in SERIAL_EVENTS
     )
     validation_starts = [e for e in logs[0] if e["event"] == "validation_start"]
     validation_ends = [e for e in logs[0] if e["event"] == "validation_end"]
@@ -101,7 +103,7 @@ def decomposition(logs: dict[int, list[dict]], log2node: dict[int, int], t0: flo
         "n_unclosed_work_logs": sum(
             1 for events in workers.values()
             if sum(e["event"] == "working_start" for e in events)
-            != sum(e["event"] in ("working_end", "failure") for e in events)
+            != sum(e["event"] in WORK_END_EVENTS for e in events)
         ),
         "n_unmatched_validations": abs(len(validation_starts) - len(validation_ends)),
     }
