@@ -894,6 +894,51 @@ def test_assemble_time_decomposition_ignores_unreadable_worker_log(tmp_path):
     assert any(w.startswith("unreadable worker log (") and w.endswith(f"), ignored: {stray}") for w in warnings)
 
 
+def test_assemble_time_decomposition_counts_master_records_in_one_note(tmp_path):
+    results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
+    run = build_timed_run(results_dir, metadata_dir, hpo_dir)
+    master = run / "log_0.jsonl"
+    master.write_text(master.read_text() + '{not json\n{"event": "send"}\n')
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == GOLDEN
+    assert [w for w in warnings if w.endswith(f"malformed records skipped in {master}")] == [
+        f"2 malformed records skipped in {master}"
+    ]
+
+
+def test_assemble_time_decomposition_counts_non_object_master_lines(tmp_path):
+    results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
+    run = build_timed_run(results_dir, metadata_dir, hpo_dir)
+    master = run / "log_0.jsonl"
+    master.write_text(master.read_text() + "null\n")
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == GOLDEN
+    assert any(w == f"1 malformed records skipped in {master}" for w in warnings)
+
+
+def test_assemble_time_decomposition_ignores_suffixed_worker_names(tmp_path):
+    results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
+    run = build_timed_run(results_dir, metadata_dir, hpo_dir)
+    strays = [run / "worker_1_backup/log_9_backup.jsonl", run / "worker_1/log_1_old.jsonl"]
+    strays[0].parent.mkdir()
+    for stray in strays:
+        stray.write_text('{"event": "working_start", "timestamp": 101.0}\n')
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == GOLDEN
+    for stray in strays:
+        assert any(w == f"unrecognized worker log name, ignored: {stray}" for w in warnings)
+
+
+def test_assemble_time_decomposition_counts_undecodable_bytes_inside_strings(tmp_path):
+    results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
+    run = build_timed_run(results_dir, metadata_dir, hpo_dir)
+    path = run / "worker_1/log_1.jsonl"
+    path.write_bytes(path.read_bytes() + b'{"event": "work\xc3ng_start", "timestamp": 101.0}\n')
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+    assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == GOLDEN
+    assert any(w == f"1 malformed records skipped in {path}" for w in warnings)
+
+
 def test_assemble_time_decomposition_counts_undecodable_worker_bytes(tmp_path):
     results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
     run = build_timed_run(results_dir, metadata_dir, hpo_dir)
@@ -988,7 +1033,10 @@ def test_assemble_cli_decomposition_columns_non_empty_with_worker_logs(tmp_path)
     with open(out_csv, newline="") as f:
         reader = csv.DictReader(f)
         assert reader.fieldnames == COLUMNS
-        assert reader.fieldnames[-7:] == DECOMPOSITION_COLUMNS
+        assert reader.fieldnames[-7:] == [
+            "compute_time_total_s", "compute_time_max_s", "comm_time_total_s", "comm_time_max_s",
+            "serial_time_total_s", "validation_time_s", "comm_skew_clamped",
+        ]
         row = next(reader)
     assert all(row[c] != "" for c in DECOMPOSITION_COLUMNS)
 

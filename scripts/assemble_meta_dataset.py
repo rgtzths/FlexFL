@@ -58,6 +58,7 @@ from collections import Counter
 import csv
 import json
 import math
+import re
 import statistics
 import sys
 from pathlib import Path
@@ -145,13 +146,22 @@ ANOMALY_WARNINGS = (
 
 def read_jsonl(path: Path) -> tuple[list[dict], int]:
     events, bad = [], 0
-    for line in path.read_text(errors="replace").splitlines():
-        line = line.strip()
+    for raw in path.read_bytes().splitlines():
+        try:
+            line = raw.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            bad += 1
+            continue
         if not line:
             continue
         try:
-            events.append(json.loads(line))
+            event = json.loads(line)
         except json.JSONDecodeError:
+            bad += 1
+            continue
+        if isinstance(event, dict):
+            events.append(event)
+        else:
             bad += 1
     return events, bad
 
@@ -176,12 +186,12 @@ def time_decomposition(
         notes.append(f"{master_malformed} malformed records skipped in {master_log}")
     logs, log2node = {0: master}, {0: 0}
     for path in sorted(master_log.parent.glob("worker_*/log_*.jsonl")):
-        try:
-            log_id = int(path.name.split("_")[1].split(".")[0])
-            node_id = int(path.parent.name.split("_")[1])
-        except ValueError:
+        log_match = re.fullmatch(r"log_([0-9]+)\.jsonl", path.name)
+        node_match = re.fullmatch(r"worker_([0-9]+)", path.parent.name)
+        if log_match is None or node_match is None:
             notes.append(f"unrecognized worker log name, ignored: {path}")
             continue
+        log_id, node_id = int(log_match[1]), int(node_match[1])
         if log_id in logs:
             notes.append(f"duplicate worker log id {log_id}, ignored: {path}")
             continue
