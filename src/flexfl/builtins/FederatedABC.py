@@ -141,7 +141,7 @@ class FederatedABC(ABC):
         Logger.setup(f"{self.base_path}/log_{self.id}.jsonl")
         if self.is_master:
             with open(f"{self.base_path}/args.json", "w") as f:
-                json.dump(self.all_args, f, indent=4)
+                json.dump({**self.all_args, "epochs": self.epochs}, f, indent=4)
             with open(f"{self.base_path}/.gitignore", "w") as f:
                 f.write("*\n")
 
@@ -249,6 +249,11 @@ class FederatedABC(ABC):
             return not any(score >= self.compare_score + self.delta for score in self.buffer)
         else:
             return not any(score <= self.compare_score - self.delta for score in self.buffer)
+
+
+    def at_epoch_cap(self, epoch: int, last_validated: int) -> bool:
+        # Moving validation before the send serializes it with worker compute.
+        return epoch > last_validated and epoch >= self.epochs
 
 
     def round_robin_single(self, workers: set) -> int:

@@ -99,7 +99,7 @@ class DecentralizedAsync(FederatedABC):
             f"Loss: [bold yellow]{loss:.4f}[/bold yellow], "
             f"Metrics: {', '.join([f'{k}: {v:.4f}' for k, v in metrics.items()])}\n"
         )
-        stop = self.early_stop() or epoch == self.epochs
+        stop = self.early_stop() or epoch >= self.epochs
         if stop:
             Logger.log(Logger.END)
             self.running = False
@@ -140,8 +140,9 @@ class DecentralizedAsync(FederatedABC):
         self.weights = self.linear_interpolation(
             self.weights, worker_weights, self.penalty
         )
-        self.send_work()
         self.handle_iteration()
+        if self.running:
+            self.send_work()
 
 
     def send_work(self):

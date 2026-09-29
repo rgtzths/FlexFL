@@ -11,6 +11,10 @@ Swept hyperparameters (decided in T07): learning_rate, batch_size, patience,
 delta for every algorithm, plus local_epochs for the Decentralized algorithms
 that do local training. The Centralized algorithms aggregate gradients per batch
 and ignore local_epochs, so it is not swept for them.
+
+Every vector also carries the fixed global epoch cap, epochs = EPOCH_CAP. It is
+assigned after the draws and consumes none, so the sampled values for a key are the
+same with or without it.
 """
 import argparse
 import hashlib
@@ -19,6 +23,7 @@ import math
 import random
 
 LOCAL_TRAINING_ALGOS = {"DecentralizedSync", "DecentralizedAsync"}
+EPOCH_CAP = 200
 
 
 def seed_from_key(key: str) -> int:
@@ -36,6 +41,7 @@ def sample(algo: str, key: str) -> dict:
     }
     if algo in LOCAL_TRAINING_ALGOS:
         params["local_epochs"] = rng.randint(1, 10)
+    params["epochs"] = EPOCH_CAP
     return params
 
 

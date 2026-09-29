@@ -33,6 +33,23 @@ datasets=(
 'reg_cat_abalone'
 )
 
+# Optional dataset override (comma-separated data_name values), e.g. to pilot a large
+# dataset. Override with FLEXFL_TEST_DATASETS.
+if [ -n "${FLEXFL_TEST_DATASETS+x}" ]; then
+    IFS=',' read -r -a datasets <<< "$FLEXFL_TEST_DATASETS"
+    if [ "${#datasets[@]}" -eq 0 ] || [[ "$FLEXFL_TEST_DATASETS" == *, ]]; then
+        echo "ERROR: FLEXFL_TEST_DATASETS is set but has an empty entry; aborting." >&2
+        exit 1
+    fi
+    for d in "${datasets[@]}"; do
+        if [ -z "$d" ] || [ ! -f "src/flexfl/datasets/_metadata/${d}.json" ] || [ ! -f "results/hyperparameter_optimization/${d}.json" ]; then
+            echo "ERROR: FLEXFL_TEST_DATASETS entry '${d}' is empty or lacks metadata or an HPO config; aborting." >&2
+            exit 1
+        fi
+    done
+    echo "=== Test datasets overridden: ${datasets[*]} ==="
+fi
+
 atnog_test1=(2)
 hobbit=(2)
 samwise=(2)
@@ -261,9 +278,26 @@ if [ "$verify_ok" -eq 1 ] && { [ ! -s "$FAIL_LOG" ]; }; then
     (cd "$PXM_DIR" && uv run pxm-rm --ids "$IDS_FILE") || echo "  ! pxm-rm failed — VMs may still exist on the Proxmox nodes" >&2
 
     echo "=== Cleaning up test state (all checks passed) ==="
-    rm -rf "$RESULTS_ROOT" "$IDS_FILE" "$IPS_ALL" "$IPS_ALL_TXT" \
+    # Kept results go outside results/: the campaign assembler walks all of results/, so
+    # a kept tree inside it would add the pilot's runs to the campaign meta-dataset.
+    keep_ok=1
+    if [ "${FLEXFL_KEEP_TEST_RESULTS:-0}" = "1" ]; then
+        kept="results_pilot/test_$(date -u +%Y%m%dT%H%M%SZ)"
+        if mkdir -p results_pilot && mv "$RESULTS_ROOT" "$kept"; then
+            rm -f "$kept/.setup_complete"
+            echo "=== Kept test results in $kept ==="
+        else
+            echo "  ! could not move $RESULTS_ROOT to $kept; left in place without its setup marker" >&2
+            rm -f "$SETUP_MARKER"
+            keep_ok=0
+        fi
+    fi
+    [ "$keep_ok" -eq 1 ] && rm -rf "$RESULTS_ROOT"
+    rm -rf "$IDS_FILE" "$IPS_ALL" "$IPS_ALL_TXT" \
            "$IDS_SUBSET" "$IPS_SUBSET" "$IPS_SUBSET_TXT" "$SCRIPT_DIR/ips_retry.txt"
     rm -f "$PXM_DIR/$TEST_CONFIG"
+    [ "$keep_ok" -eq 1 ] || exit 1
 else
     echo "=== Leaving test state in place for debugging (see $FAIL_LOG / verification output above) ===" >&2
+    exit 1
 fi

@@ -8,6 +8,7 @@ class _WorkerManager:
         self.max_sends = max_sends
         self.sends = 0
         self.ended = False
+        self.pending = []
 
     def wait_for_workers(self, n):
         pass
@@ -22,8 +23,12 @@ class _WorkerManager:
         self.sends += 1
         if self.sends > self.max_sends:
             raise RuntimeError(f"master_loop still running after {self.max_sends} rounds")
+        self.pending = list(workers)
 
     def recv_n(self, workers, type_=None):
+        if list(workers) != self.pending:
+            raise RuntimeError("recv_n for workers with no outstanding work")
+        self.pending = []
         for worker_id in workers:
             yield worker_id, 1.0
 
@@ -79,12 +84,13 @@ def test_early_stop_ends_a_non_divisible_run_before_the_cap(monkeypatch):
 def test_divisible_run_keeps_its_validation_points(monkeypatch):
     algo, validated, logged = _run_master_loop(monkeypatch, {1: 2, 2: 2}, epochs=3)
     assert validated == [1, 2, 3]
-    assert (algo.wm.sends, algo.ml.applied) == (7, 6)
+    assert (algo.wm.sends, algo.ml.applied) == (6, 6)
     assert logged.count(Logger.END) == 1
 
 
 def test_non_positive_epoch_cap_stops_after_the_first_epoch(monkeypatch):
     algo, validated, logged = _run_master_loop(monkeypatch, {1: 1, 2: 1}, epochs=0)
     assert validated == [1]
+    assert algo.wm.sends == 1
     assert logged.count(Logger.END) == 1
     assert algo.wm.ended

@@ -12,6 +12,13 @@ Features
                       n_workers_joined, dataset, fl_algo (+ fl_algo_* one-hot), repeat
   FL hyperparameters  learning_rate, batch_size, patience, delta, local_epochs (T07;
                       imputed 0 for Centralized, T46)
+  epoch cap           epoch_cap: the global epoch cap the run trained under, the `epochs`
+                      the master recorded in the args.json beside its log_0.jsonl. A run
+                      whose args.json has no `epochs` key is dropped with a warning, unless
+                      --legacy-epoch-cap N assigns N to such runs (runs made before the
+                      cap was recorded trained under the old default of 10).
+                      A recorded value that is not a positive int, and an unreadable
+                      args.json, always drop the run (T056).
   dataset meta        task, is_classification, n_samples, n_features, n_classes,
                       is_categorical (T08 option B — raw architecture held fixed, not used directly)
   model architecture  total_parameters, n_layers, mean_layer_width, max_layer_width,
@@ -89,7 +96,7 @@ COLUMNS = [
     "dataset", "fl_algo",
     "fl_algo_CentralizedSync", "fl_algo_CentralizedAsync", "fl_algo_DecentralizedSync", "fl_algo_DecentralizedAsync",
     "repeat",
-    "learning_rate", "batch_size", "patience", "delta", "local_epochs",
+    "learning_rate", "batch_size", "patience", "delta", "local_epochs", "epoch_cap",
     "task", "is_classification", "is_categorical", "n_samples", "n_features", "n_classes",
     "total_parameters", "n_layers", "mean_layer_width", "max_layer_width", "weight_decay",
     "alpha", "distribution_percentage",
@@ -323,7 +330,24 @@ def fl_hyperparameters(rep_dir: Path) -> dict:
     }
 
 
-def assemble(results_dir: Path, metadata_dir: Path, hpo_dir: Path) -> tuple[list[dict], list[str]]:
+def recorded_epoch_cap(master_log: Path | None) -> tuple[object, str | None, str | None]:
+    """The `epochs` in the args.json beside the master log, why it is missing, and any read error."""
+    if master_log is None or not (master_log.parent / "args.json").is_file():
+        return None, "no args.json beside the master log", None
+    try:
+        args = load_json(master_log.parent / "args.json")
+    except (OSError, ValueError) as e:
+        return None, None, str(e)
+    if not isinstance(args, dict):
+        return None, "args.json is not a JSON object", None
+    if "epochs" not in args:
+        return None, "args.json has no epochs", None
+    return args["epochs"], None, None
+
+
+def assemble(
+    results_dir: Path, metadata_dir: Path, hpo_dir: Path, legacy_epoch_cap: int | None = None
+) -> tuple[list[dict], list[str]]:
     benchmark_dir = results_dir / "benchmark"
     rows, warnings = [], []
     for success in sorted(results_dir.rglob("_SUCCESS")):
@@ -365,6 +389,19 @@ def assemble(results_dir: Path, metadata_dir: Path, hpo_dir: Path) -> tuple[list
             warnings.append(f"targets uncomputable (missing start/end/epoch or epoch number), skipped: {rep_dir}")
             continue
 
+        epoch_cap, missing_reason, read_error = recorded_epoch_cap(master_log)
+        if read_error is not None:
+            warnings.append(f"unreadable args.json ({read_error}), skipped: {rep_dir}")
+            continue
+        if missing_reason is not None:
+            if legacy_epoch_cap is None:
+                warnings.append(f"no recorded epoch cap ({missing_reason}), skipped: {rep_dir}")
+                continue
+            epoch_cap = legacy_epoch_cap
+        if not isinstance(epoch_cap, int) or isinstance(epoch_cap, bool) or epoch_cap < 1:
+            warnings.append(f"invalid epoch cap {epoch_cap!r} in args.json, skipped: {rep_dir}")
+            continue
+
         decomposition_columns, null_cause, decomposition_notes = time_decomposition(rep_dir, master_log, events, master_bad)
         warnings.extend(decomposition_notes)
         if null_cause is not None:
@@ -380,6 +417,7 @@ def assemble(results_dir: Path, metadata_dir: Path, hpo_dir: Path) -> tuple[list
             "fl_algo": fl_algo,
             "repeat": int(rep.split("_")[1]),
             **fl_hyperparameters(rep_dir),
+            "epoch_cap": epoch_cap,
             "task": mf["task"],
             "is_classification": mf["is_classification"],
             "is_categorical": "_cat_" in dataset,
@@ -438,9 +476,13 @@ def main():
     p.add_argument("--metadata-dir", type=Path, default=DEFAULT_METADATA_DIR)
     p.add_argument("--hpo-dir", type=Path, default=DEFAULT_HPO_DIR)
     p.add_argument("--out", type=Path, default=Path("results/meta_dataset.csv"))
+    p.add_argument("--legacy-epoch-cap", type=int, default=None,
+                   help="epoch cap to assign to runs that recorded none (default: drop them)")
     args = p.parse_args()
+    if args.legacy_epoch_cap is not None and args.legacy_epoch_cap < 1:
+        p.error("--legacy-epoch-cap must be a positive integer")
 
-    rows, warnings = assemble(args.results_dir, args.metadata_dir, args.hpo_dir)
+    rows, warnings = assemble(args.results_dir, args.metadata_dir, args.hpo_dir, args.legacy_epoch_cap)
     for w in warnings:
         print(f"  ! {w}", file=sys.stderr)
 

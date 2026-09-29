@@ -45,19 +45,23 @@ class DecentralizedSync(FederatedABC):
         epoch = 0
         stop = False
         while True:
-            self.wm.wait_for_workers(self.min_workers)
-            pool = self.wm.get_subpool(self.min_workers, self.subpool_fn)
-            self.wm.send_n(
-                workers = pool, 
-                payload = weights,
-                type_ = Task.WORK
-            )
+            at_cap = self.at_epoch_cap(epoch, 0)
+            if not at_cap:
+                self.wm.wait_for_workers(self.min_workers)
+                pool = self.wm.get_subpool(self.min_workers, self.subpool_fn)
+                self.wm.send_n(
+                    workers = pool, 
+                    payload = weights,
+                    type_ = Task.WORK
+                )
             if epoch > 0:
                 self.ml.set_weights(weights)
                 self.validate(epoch, split="val", verbose=True)
-                stop = self.early_stop() or epoch == self.epochs
+                stop = self.early_stop() or epoch >= self.epochs
                 if stop:
                     Logger.log(Logger.END)
+            if at_cap:
+                break
             weighted_sum = 0
             total_weight = 0
             for i, (worker_id, data) in enumerate(self.wm.recv_n(

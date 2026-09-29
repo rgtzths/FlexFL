@@ -97,6 +97,8 @@ results/{strategy}/{combo}/{dataset}/{fl_algo}/rep_{r}/
 
 where `{combo}` is `atnog-test1_{n1}_hobbit_{n2}_samwise_{n3}`, `{strategy}` is one of `iid`, `non_iid`, `dirichlet`, and `{r}` is the repeat index.
 
+Every campaign run trains for at most 200 global epochs by default and ends earlier when early stopping fires. `scripts/sample_hyperparameters.py` passes the cap (`EPOCH_CAP`) as `--epochs` with the sampled hyperparameters; an `--epochs` passed to the sweep script overrides it. The master records the cap it used as `epochs` in its `args.json`. `scripts/assemble_meta_dataset.py` writes that value as the `epoch_cap` column and drops runs that recorded no cap; `--legacy-epoch-cap N` assigns `N` to them instead, for example `--legacy-epoch-cap 10` for runs made before the cap was recorded, which trained under the old default of 10. A run whose `args.json` records an `epochs` value that is not a positive integer is always dropped, even with `--legacy-epoch-cap`. Set `FLEXFL_STALL_TIMEOUT`, `FLEXFL_STALL_BACKSTOP` and, for the reduced test sweep, `FLEXFL_RUN_TIMEOUT` at launch from a pilot of the 200-epoch runs.
+
 ## Experiment Nodes
 
 Experiments run across four physical nodes:
@@ -142,3 +144,6 @@ FlexFL is deployed to VMs via `rsync` (not installed from PyPI). `setup_vms.sh` 
 | `SLICING5G_URL` | URL of the Slicing5g dataset archive (required to download the Slicing5g legacy dataset) |
 | `FLEXFL_STALL_TIMEOUT` | Stall timeout in seconds for `run_on_vms.sh`'s master-wait watchdog (default `1200`) — a run whose master log stops advancing for this long is killed and marked `_FAILED` |
 | `FLEXFL_STALL_BACKSTOP` | Absolute wall-clock bound in seconds for `run_on_vms.sh`'s master-wait watchdog (default `21600`) — a backstop independent of stall detection |
+| `FLEXFL_RUN_TIMEOUT` | Per-run wall-clock cap in seconds for `run_test_experiment.sh` (default `900`); keep it above `FLEXFL_STALL_BACKSTOP` so the inner watchdog fires first |
+| `FLEXFL_TEST_DATASETS` | Comma-separated `data_name` list replacing `run_test_experiment.sh`'s two datasets, for example to pilot a large dataset; an unknown name aborts the sweep |
+| `FLEXFL_KEEP_TEST_RESULTS` | Set to `1` to keep a successful `run_test_experiment.sh` sweep's results in `results_pilot/test_<UTC timestamp>/` instead of deleting them; if the move fails, the results stay in `results/test/` and the script exits `1` |
