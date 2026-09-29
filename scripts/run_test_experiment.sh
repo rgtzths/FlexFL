@@ -42,7 +42,7 @@ if [ -n "${FLEXFL_TEST_DATASETS+x}" ]; then
         exit 1
     fi
     for d in "${datasets[@]}"; do
-        if [ -z "$d" ] || [ ! -f "src/flexfl/datasets/_metadata/${d}.json" ]             || [ ! -f "results/hyperparameter_optimization/${d}.json" ]; then
+        if [ -z "$d" ] || [ ! -f "src/flexfl/datasets/_metadata/${d}.json" ] || [ ! -f "results/hyperparameter_optimization/${d}.json" ]; then
             echo "ERROR: FLEXFL_TEST_DATASETS entry '${d}' is empty or lacks metadata or an HPO config; aborting." >&2
             exit 1
         fi
@@ -296,6 +296,9 @@ if [ "$verify_ok" -eq 1 ] && { [ ! -s "$FAIL_LOG" ]; }; then
     rm -rf "$IDS_FILE" "$IPS_ALL" "$IPS_ALL_TXT" \
            "$IDS_SUBSET" "$IPS_SUBSET" "$IPS_SUBSET_TXT" "$SCRIPT_DIR/ips_retry.txt"
     rm -f "$PXM_DIR/$TEST_CONFIG"
+    if [ "$keep_ok" -ne 1 ]; then
+        exit 1
+    fi
 else
     echo "=== Leaving test state in place for debugging (see $FAIL_LOG / verification output above) ===" >&2
 fi

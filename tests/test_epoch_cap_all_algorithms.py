@@ -20,6 +20,7 @@ class _WorkerManager:
         self.worker_info = dict(INFO)
         self.tasks = 0
         self.ended = False
+        self.pending = []
 
     def _task(self):
         self.tasks += 1
@@ -38,11 +39,15 @@ class _WorkerManager:
     def send_n(self, workers, payload=None, type_=None):
         for _ in workers:
             self._task()
+        self.pending = list(workers)
 
     def send(self, node_id, payload=None, type_=None):
         self._task()
 
     def recv_n(self, workers, type_=None):
+        if list(workers) != self.pending:
+            raise RuntimeError("recv_n for workers with no outstanding work")
+        self.pending = []
         for worker_id in workers:
             yield worker_id, 1.0
 
@@ -69,7 +74,7 @@ class _Quiet:
         pass
 
 
-def _run(cls, monkeypatch, stop_after=None):
+def _run(cls, monkeypatch, stop_after=None, epochs=CAP):
     logged = []
     monkeypatch.setattr(Logger, "log", lambda event, **kwargs: logged.append(event))
     validated = []
@@ -82,7 +87,7 @@ def _run(cls, monkeypatch, stop_after=None):
     algo.wm = _WorkerManager()
     algo.ml = _ML()
     algo.min_workers = len(INFO)
-    algo.epochs = CAP
+    algo.epochs = epochs
     algo.running = True
     algo.rr = set()
     algo.validate = validate
@@ -133,6 +138,14 @@ def test_sync_loops_send_no_round_past_the_cap(cls, monkeypatch):
 def test_sync_loops_keep_one_overlapped_round_after_early_stop(cls, monkeypatch):
     algo, validated, logged = _run(cls, monkeypatch, stop_after=3)
     assert algo.wm.tasks == len(INFO) * 4
+
+
+@pytest.mark.parametrize("cls", SYNC)
+def test_sync_loops_stop_after_the_first_epoch_on_a_non_positive_cap(cls, monkeypatch):
+    algo, validated, logged = _run(cls, monkeypatch, epochs=0)
+    assert validated == [1]
+    assert logged.count(Logger.END) == 1
+    assert algo.wm.ended
 
 
 @pytest.mark.parametrize("cls", ASYNC)

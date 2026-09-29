@@ -8,6 +8,7 @@ class _WorkerManager:
         self.max_sends = max_sends
         self.sends = 0
         self.ended = False
+        self.pending = []
 
     def wait_for_workers(self, n):
         pass
@@ -22,8 +23,12 @@ class _WorkerManager:
         self.sends += 1
         if self.sends > self.max_sends:
             raise RuntimeError(f"master_loop still running after {self.max_sends} rounds")
+        self.pending = list(workers)
 
     def recv_n(self, workers, type_=None):
+        if list(workers) != self.pending:
+            raise RuntimeError("recv_n for workers with no outstanding work")
+        self.pending = []
         for worker_id in workers:
             yield worker_id, 1.0
 

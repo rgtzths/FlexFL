@@ -251,6 +251,12 @@ class FederatedABC(ABC):
             return not any(score <= self.compare_score - self.delta for score in self.buffer)
 
 
+    def at_epoch_cap(self, epoch: int, last_validated: int) -> bool:
+        # Sync masters check this before sending the next round: validation runs after
+        # the send so it overlaps worker compute, and moving it before the send serializes them.
+        return epoch > last_validated and epoch >= self.epochs
+
+
     def round_robin_single(self, workers: set) -> int:
         assert len(workers) > 0, "No workers available"
         workers_ =  workers - self.rr

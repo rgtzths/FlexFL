@@ -18,7 +18,7 @@ Features
                       --legacy-epoch-cap N assigns N to such runs (runs made before the
                       cap was recorded trained under the old default of 10).
                       A recorded value that is not a positive int, and an unreadable
-                      args.json, always drop the run.
+                      args.json, always drop the run (T056).
   dataset meta        task, is_classification, n_samples, n_features, n_classes,
                       is_categorical (T08 option B — raw architecture held fixed, not used directly)
   model architecture  total_parameters, n_layers, mean_layer_width, max_layer_width,
@@ -330,20 +330,17 @@ def fl_hyperparameters(rep_dir: Path) -> dict:
     }
 
 
-def recorded_epoch_cap(master_log: Path | None) -> tuple[bool, object, str | None]:
-    """Whether the args.json beside the master log records `epochs`, its value, and any read error."""
-    if master_log is None:
-        return False, None, None
-    args_file = master_log.parent / "args.json"
-    if not args_file.is_file():
-        return False, None, None
+def recorded_epoch_cap(master_log: Path | None) -> tuple[object, str | None, str | None]:
+    """The `epochs` in the args.json beside the master log, why it is missing, and any read error."""
+    if master_log is None or not (master_log.parent / "args.json").is_file():
+        return None, "no args.json beside the master log", None
     try:
-        args = load_json(args_file)
+        args = load_json(master_log.parent / "args.json")
     except (OSError, ValueError) as e:
-        return False, None, str(e)
+        return None, None, str(e)
     if not isinstance(args, dict) or "epochs" not in args:
-        return False, None, None
-    return True, args["epochs"], None
+        return None, "args.json has no epochs", None
+    return args["epochs"], None, None
 
 
 def assemble(
@@ -390,13 +387,13 @@ def assemble(
             warnings.append(f"targets uncomputable (missing start/end/epoch or epoch number), skipped: {rep_dir}")
             continue
 
-        recorded, epoch_cap, read_error = recorded_epoch_cap(master_log)
+        epoch_cap, missing, read_error = recorded_epoch_cap(master_log)
         if read_error is not None:
             warnings.append(f"unreadable args.json ({read_error}), skipped: {rep_dir}")
             continue
-        if not recorded:
+        if missing is not None:
             if legacy_epoch_cap is None:
-                warnings.append(f"no recorded epoch cap (args.json epochs), skipped: {rep_dir}")
+                warnings.append(f"no recorded epoch cap ({missing}), skipped: {rep_dir}")
                 continue
             epoch_cap = legacy_epoch_cap
         if not isinstance(epoch_cap, int) or isinstance(epoch_cap, bool) or epoch_cap < 1:

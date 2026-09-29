@@ -1169,14 +1169,18 @@ def test_assemble_prefers_the_recorded_cap_over_the_sampled_one(tmp_path):
     assert [row["epoch_cap"] for row in rows] == [5]
 
 
-@pytest.mark.parametrize("args", [None, {"fl": "cs"}, ["epochs", 200]])
-def test_assemble_drops_a_run_without_a_recorded_cap(tmp_path, args):
+@pytest.mark.parametrize("args, missing", [
+    (None, "no args.json beside the master log"),
+    ({"fl": "cs"}, "args.json has no epochs"),
+    (["epochs", 200], "args.json has no epochs"),
+])
+def test_assemble_drops_a_run_without_a_recorded_cap(tmp_path, args, missing):
     rep_dir = build_synthetic_run(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo", epoch_cap=None)
     if args is not None:
         write_json(rep_dir / "args.json", args)
     rows, warnings = assemble(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo")
     assert rows == []
-    assert warnings == [f"no recorded epoch cap (args.json epochs), skipped: {rep_dir}"]
+    assert warnings == [f"no recorded epoch cap ({missing}), skipped: {rep_dir}"]
 
 
 @pytest.mark.parametrize("args", [None, {"fl": "cs"}])
@@ -1210,7 +1214,7 @@ def test_assemble_ignores_a_cap_only_in_hyperparameters_json(tmp_path):
                                                    "delta": 0.01, "epochs": 200})
     rows, warnings = assemble(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo")
     assert rows == []
-    assert warnings == [f"no recorded epoch cap (args.json epochs), skipped: {rep_dir}"]
+    assert warnings == [f"no recorded epoch cap (no args.json beside the master log), skipped: {rep_dir}"]
 
 
 @pytest.mark.parametrize("content", [b"{not json", b"\xff\xfe"])
