@@ -81,3 +81,10 @@ def test_divisible_run_keeps_its_validation_points(monkeypatch):
     assert validated == [1, 2, 3]
     assert (algo.wm.sends, algo.ml.applied) == (7, 6)
     assert logged.count(Logger.END) == 1
+
+
+def test_non_positive_epoch_cap_stops_after_the_first_epoch(monkeypatch):
+    algo, validated, logged = _run_master_loop(monkeypatch, {1: 1, 2: 1}, epochs=0)
+    assert validated == [1]
+    assert logged.count(Logger.END) == 1
+    assert algo.wm.ended

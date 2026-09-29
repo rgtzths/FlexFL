@@ -100,7 +100,18 @@ def test_compute_targets_n_epochs_is_last_logged_epoch_not_validation_count():
         {"event": "end", "timestamp": 5},
     ]
     result = compute_targets(events, is_classification=True)
-    assert (result["n_epochs"], result["n_validations"]) == (42, 3)
+    assert (result["n_epochs"], result["n_validations"], result["epoch_validation_gap"]) == (42, 3, True)
+
+
+def test_compute_targets_no_validation_gap_when_every_epoch_validated():
+    events = [
+        {"event": "start", "timestamp": 0},
+        {"event": "epoch", "epoch": 1, "mcc": 0.5},
+        {"event": "epoch", "epoch": 2, "mcc": 0.6},
+        {"event": "end", "timestamp": 5},
+    ]
+    result = compute_targets(events, is_classification=True)
+    assert (result["n_epochs"], result["n_validations"], result["epoch_validation_gap"]) == (2, 2, False)
 
 
 @pytest.mark.parametrize("last_epoch", ({}, {"epoch": None}, {"epoch": True}, {"epoch": 0}, {"epoch": 2.0}, {"epoch": "2"}))
@@ -109,6 +120,17 @@ def test_compute_targets_none_when_last_epoch_number_invalid(last_epoch):
         {"event": "start", "timestamp": 0},
         {"event": "epoch", "epoch": 1, "mcc": 0.5},
         {"event": "epoch", "mcc": 0.6, **last_epoch},
+        {"event": "end", "timestamp": 5},
+    ]
+    assert compute_targets(events, is_classification=True) is None
+
+
+@pytest.mark.parametrize("first_epoch", ({}, {"epoch": None}, {"epoch": True}, {"epoch": 0}, {"epoch": 1.0}, {"epoch": "1"}))
+def test_compute_targets_none_when_earlier_epoch_number_invalid(first_epoch):
+    events = [
+        {"event": "start", "timestamp": 0},
+        {"event": "epoch", "mcc": 0.5, **first_epoch},
+        {"event": "epoch", "epoch": 2, "mcc": 0.6},
         {"event": "end", "timestamp": 5},
     ]
     assert compute_targets(events, is_classification=True) is None
@@ -500,7 +522,7 @@ def test_assemble_cli_writes_n_epochs_and_n_validations(tmp_path):
     assert result.returncode == 0, result.stderr
     with open(out_csv, newline="") as f:
         row = next(csv.DictReader(f))
-    assert (row["n_epochs"], row["n_validations"]) == ("28", "2")
+    assert (row["n_epochs"], row["n_validations"], row["epoch_validation_gap"]) == ("28", "2", "True")
 
 
 def test_assemble_drops_run_whose_last_epoch_has_no_number(tmp_path):

@@ -43,12 +43,14 @@ Targets (master log_0.jsonl, single clock; T09)
   comm_bytes_{sent,recv,total}   Σ payload_size of the master's send/recv events
   n_epochs            last epoch reached: the `epoch` field of the final epoch event. An
                       OUTCOME, not a feature; exclude it from the predictor set (leakage)
-                      unless modelling it as a target. A run whose final epoch event has no
+                      unless modelling it as a target. A run with any epoch event lacking a
                       positive integer `epoch` is dropped with a warning.
   n_validations       number of epoch (validation) events. Equals n_epochs, except for
                       CentralizedSync runs logged before the per-epoch validation fix, which
                       validated every k > 1 epochs when min_workers did not divide the
                       pool's total batches.
+  epoch_validation_gap  n_validations != n_epochs: flags those pre-fix CentralizedSync runs,
+                      whose n_epochs can overshoot the epoch cap. Outcome, not a predictor.
   compute_time_{total,max}_s, comm_time_{total,max}_s, serial_time_total_s, validation_time_s,
   comm_skew_clamped   time decomposition from log_0.jsonl plus worker_N/log_M.jsonl
                       (flexfl.builtins.event_metrics, the pairing Results uses): worker work,
@@ -96,6 +98,7 @@ COLUMNS = [
     "worker_rate_mean", "worker_rate_min", "worker_rate_max", "worker_rate_std", "worker_rate_cv",
     "performance", "main_metric", "total_time_s",
     "comm_bytes_sent", "comm_bytes_recv", "comm_bytes_total", "n_epochs", "n_validations",
+    "epoch_validation_gap",
     *DECOMPOSITION_COLUMNS,
 ]
 
@@ -238,9 +241,10 @@ def compute_targets(events: list[dict], is_classification: bool) -> dict | None:
     perf = max(vals) if is_classification else min(vals)
     if not math.isfinite(perf):
         return None
-    last_epoch = epochs[-1].get("epoch")
-    if not isinstance(last_epoch, int) or isinstance(last_epoch, bool) or last_epoch < 1:
+    numbers = [e.get("epoch") for e in epochs]
+    if any(not isinstance(n, int) or isinstance(n, bool) or n < 1 for n in numbers):
         return None
+    last_epoch = numbers[-1]
     sent = sum(e.get("payload_size", 0) for e in events if e.get("event") == "send")
     recv = sum(e.get("payload_size", 0) for e in events if e.get("event") == "recv")
     return {
@@ -252,6 +256,7 @@ def compute_targets(events: list[dict], is_classification: bool) -> dict | None:
         "comm_bytes_total": sent + recv,
         "n_epochs": last_epoch,
         "n_validations": len(epochs),
+        "epoch_validation_gap": len(epochs) != last_epoch,
     }
 
 
