@@ -44,6 +44,7 @@ class CentralizedSync(FederatedABC):
         Logger.log(Logger.START)
         self.epoch_start = time.time()
         epoch = 0
+        last_validated = 0
         batch = 0
         stop = False
         while True:
@@ -54,9 +55,10 @@ class CentralizedSync(FederatedABC):
                 payload = self.ml.get_weights(),
                 type_ = Task.WORK
             )
-            if epoch > 0 and batch%total_batches == 0:
+            if epoch > last_validated:
                 self.validate(epoch, split="val", verbose=True)
-                stop = self.early_stop() or epoch == self.epochs
+                last_validated = epoch
+                stop = self.early_stop() or epoch >= self.epochs
                 if stop:
                     Logger.log(Logger.END)
             weighted_sum = 0

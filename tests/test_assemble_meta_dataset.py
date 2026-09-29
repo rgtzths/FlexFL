@@ -47,8 +47,8 @@ def test_parse_combo_missing_node_token():
 def test_compute_targets_classification_takes_max_mcc():
     events = [
         {"event": "start", "timestamp": 1000},
-        {"event": "epoch", "mcc": 0.5},
-        {"event": "epoch", "mcc": 0.8},
+        {"event": "epoch", "epoch": 1, "mcc": 0.5},
+        {"event": "epoch", "epoch": 2, "mcc": 0.8},
         {"event": "send", "payload_size": 100},
         {"event": "recv", "payload_size": 50},
         {"event": "end", "timestamp": 1010},
@@ -65,8 +65,8 @@ def test_compute_targets_classification_takes_max_mcc():
 def test_compute_targets_regression_takes_min_mape():
     events = [
         {"event": "start", "timestamp": 0},
-        {"event": "epoch", "mape": 0.3},
-        {"event": "epoch", "mape": 0.1},
+        {"event": "epoch", "epoch": 1, "mape": 0.3},
+        {"event": "epoch", "epoch": 2, "mape": 0.1},
         {"event": "end", "timestamp": 5},
     ]
     result = compute_targets(events, is_classification=False)
@@ -87,6 +87,51 @@ def test_compute_targets_none_when_no_epoch_has_numeric_main_metric():
         {"event": "start", "timestamp": 0},
         {"event": "epoch", "mcc": None},
         {"event": "end", "timestamp": 1},
+    ]
+    assert compute_targets(events, is_classification=True) is None
+
+
+def test_compute_targets_n_epochs_is_last_logged_epoch_not_validation_count():
+    events = [
+        {"event": "start", "timestamp": 0},
+        {"event": "epoch", "epoch": 14, "mcc": 0.5},
+        {"event": "epoch", "epoch": 28, "mcc": 0.6},
+        {"event": "epoch", "epoch": 42, "mcc": 0.7},
+        {"event": "end", "timestamp": 5},
+    ]
+    result = compute_targets(events, is_classification=True)
+    assert (result["n_epochs"], result["n_validations"], result["epoch_validation_gap"]) == (42, 3, True)
+
+
+def test_compute_targets_no_validation_gap_when_every_epoch_validated():
+    events = [
+        {"event": "start", "timestamp": 0},
+        {"event": "epoch", "epoch": 1, "mcc": 0.5},
+        {"event": "epoch", "epoch": 2, "mcc": 0.6},
+        {"event": "end", "timestamp": 5},
+    ]
+    result = compute_targets(events, is_classification=True)
+    assert (result["n_epochs"], result["n_validations"], result["epoch_validation_gap"]) == (2, 2, False)
+
+
+@pytest.mark.parametrize("last_epoch", ({}, {"epoch": None}, {"epoch": True}, {"epoch": 0}, {"epoch": 2.0}, {"epoch": "2"}))
+def test_compute_targets_none_when_last_epoch_number_invalid(last_epoch):
+    events = [
+        {"event": "start", "timestamp": 0},
+        {"event": "epoch", "epoch": 1, "mcc": 0.5},
+        {"event": "epoch", "mcc": 0.6, **last_epoch},
+        {"event": "end", "timestamp": 5},
+    ]
+    assert compute_targets(events, is_classification=True) is None
+
+
+@pytest.mark.parametrize("first_epoch", ({}, {"epoch": None}, {"epoch": True}, {"epoch": 0}, {"epoch": 1.0}, {"epoch": "1"}))
+def test_compute_targets_none_when_earlier_epoch_number_invalid(first_epoch):
+    events = [
+        {"event": "start", "timestamp": 0},
+        {"event": "epoch", "mcc": 0.5, **first_epoch},
+        {"event": "epoch", "epoch": 2, "mcc": 0.6},
+        {"event": "end", "timestamp": 5},
     ]
     assert compute_targets(events, is_classification=True) is None
 
@@ -239,7 +284,7 @@ def build_synthetic_run(
     ]
     events.append({"event": "start", "timestamp": 0})
     if with_epochs:
-        events.append({"event": "epoch", "mcc": 0.7})
+        events.append({"event": "epoch", "epoch": 1, "mcc": 0.7})
     events.append({"event": "end", "timestamp": 5})
     write_jsonl(rep_dir / "log_0.jsonl", events)
 
@@ -263,7 +308,7 @@ def build_synthetic_run(
 def build_timed_run(results_dir: Path, metadata_dir: Path, hpo_dir: Path, **kwargs) -> Path:
     rep_dir = build_synthetic_run(results_dir, metadata_dir, hpo_dir, **kwargs)
     (rep_dir / "log_0.jsonl").unlink()
-    master = [*MASTER_EVENTS[:-1], {"event": "epoch", "mcc": 0.7, "timestamp": 105.0}, MASTER_EVENTS[-1]]
+    master = [*MASTER_EVENTS[:-1], {"event": "epoch", "epoch": 1, "mcc": 0.7, "timestamp": 105.0}, MASTER_EVENTS[-1]]
     return write_run_logs(rep_dir / "2026-01-01_00:00:00", master)
 
 
@@ -460,6 +505,37 @@ def test_assemble_cli_writes_header_exactly_columns(tmp_path):
         lines = list(csv.reader(f))
     assert lines[0] == COLUMNS
     assert len(lines) == 2  # header + 1 data row
+
+
+def test_assemble_cli_writes_n_epochs_and_n_validations(tmp_path):
+    results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
+    rep_dir = build_synthetic_run(results_dir, metadata_dir, hpo_dir)
+    write_jsonl(rep_dir / "log_0.jsonl", [
+        {"event": "start", "timestamp": 0},
+        {"event": "epoch", "epoch": 14, "mcc": 0.6},
+        {"event": "epoch", "epoch": 28, "mcc": 0.7},
+        {"event": "end", "timestamp": 5},
+    ])
+    script = str(Path(__file__).resolve().parent.parent / "scripts" / "assemble_meta_dataset.py")
+    out_csv = tmp_path / "meta_dataset.csv"
+    result = run_assemble_cli(script, results_dir, metadata_dir, hpo_dir, out_csv)
+    assert result.returncode == 0, result.stderr
+    with open(out_csv, newline="") as f:
+        row = next(csv.DictReader(f))
+    assert (row["n_epochs"], row["n_validations"], row["epoch_validation_gap"]) == ("28", "2", "True")
+
+
+def test_assemble_drops_run_whose_last_epoch_has_no_number(tmp_path):
+    results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
+    rep_dir = build_synthetic_run(results_dir, metadata_dir, hpo_dir)
+    write_jsonl(rep_dir / "log_0.jsonl", [
+        {"event": "start", "timestamp": 0},
+        {"event": "epoch", "mcc": 0.7},
+        {"event": "end", "timestamp": 5},
+    ])
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+    assert rows == []
+    assert any("targets uncomputable (missing start/end/epoch or epoch number)" in w for w in warnings)
 
 
 def test_assemble_populates_architecture_columns(tmp_path):
@@ -1045,7 +1121,7 @@ def test_assemble_time_decomposition_warns_on_unpaired_validation(tmp_path):
     results_dir, metadata_dir, hpo_dir = tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo"
     rep_dir = build_synthetic_run(results_dir, metadata_dir, hpo_dir)
     (rep_dir / "log_0.jsonl").unlink()
-    master = [*MASTER_EVENTS[:-1], {"event": "epoch", "mcc": 0.7, "timestamp": 105.0}, {"event": "validation_start", "timestamp": 109.5}, MASTER_EVENTS[-1]]
+    master = [*MASTER_EVENTS[:-1], {"event": "epoch", "epoch": 1, "mcc": 0.7, "timestamp": 105.0}, {"event": "validation_start", "timestamp": 109.5}, MASTER_EVENTS[-1]]
     write_run_logs(rep_dir / "2026-01-01_00:00:00", master)
     rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
     assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == GOLDEN
