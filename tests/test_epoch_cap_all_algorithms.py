@@ -16,11 +16,12 @@ INFO = {1: {"n_batches": 1, "n_samples": 1}, 2: {"n_batches": 1, "n_samples": 1}
 
 
 class _WorkerManager:
-    def __init__(self):
+    def __init__(self, short_rounds=0):
         self.worker_info = dict(INFO)
         self.tasks = 0
         self.ended = False
         self.pending = []
+        self.short_rounds = short_rounds
 
     def _task(self):
         self.tasks += 1
@@ -48,6 +49,9 @@ class _WorkerManager:
         if list(workers) != self.pending:
             raise RuntimeError("recv_n for workers with no outstanding work")
         self.pending = []
+        if self.short_rounds > 0:
+            self.short_rounds -= 1
+            workers = workers[:1]
         for worker_id in workers:
             yield worker_id, 1.0
 
@@ -74,7 +78,7 @@ class _Quiet:
         pass
 
 
-def _run(cls, monkeypatch, stop_after=None, epochs=CAP):
+def _run(cls, monkeypatch, stop_after=None, epochs=CAP, short_rounds=0, epoch_threshold=0.5):
     logged = []
     monkeypatch.setattr(Logger, "log", lambda event, **kwargs: logged.append(event))
     validated = []
@@ -84,7 +88,7 @@ def _run(cls, monkeypatch, stop_after=None, epochs=CAP):
         return {"mcc": 0.0}, 0.0, 0.0
 
     algo = object.__new__(cls)
-    algo.wm = _WorkerManager()
+    algo.wm = _WorkerManager(short_rounds)
     algo.ml = _ML()
     algo.min_workers = len(INFO)
     algo.epochs = epochs
@@ -93,7 +97,7 @@ def _run(cls, monkeypatch, stop_after=None, epochs=CAP):
     algo.validate = validate
     algo.early_stop = lambda: stop_after is not None and len(validated) >= stop_after
     if cls in (CentralizedSync, DecentralizedSync):
-        algo.epoch_threshold = 0.5
+        algo.epoch_threshold = epoch_threshold
         algo.master_loop()
     else:
         algo.iteration = 0
@@ -145,6 +149,22 @@ def test_sync_loops_stop_after_the_first_epoch_on_a_non_positive_cap(cls, monkey
     algo, validated, logged = _run(cls, monkeypatch, epochs=0)
     assert validated == [1]
     assert logged.count(Logger.END) == 1
+    assert algo.wm.ended
+
+
+@pytest.mark.parametrize("cls", ASYNC)
+def test_async_loops_stop_after_the_first_epoch_on_a_non_positive_cap(cls, monkeypatch):
+    algo, validated, logged = _run(cls, monkeypatch, epochs=0)
+    assert validated == [1]
+    assert logged.count(Logger.END) == 1
+    assert not algo.running
+
+
+@pytest.mark.parametrize("cls", SYNC)
+def test_sync_loops_resend_a_round_that_too_few_workers_answered(cls, monkeypatch):
+    algo, validated, logged = _run(cls, monkeypatch, epochs=3, short_rounds=1, epoch_threshold=1.0)
+    assert validated == [1, 2, 3]
+    assert algo.wm.tasks == len(INFO) * 4
     assert algo.wm.ended
 
 

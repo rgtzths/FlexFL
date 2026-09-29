@@ -1172,7 +1172,7 @@ def test_assemble_prefers_the_recorded_cap_over_the_sampled_one(tmp_path):
 @pytest.mark.parametrize("args, missing", [
     (None, "no args.json beside the master log"),
     ({"fl": "cs"}, "args.json has no epochs"),
-    (["epochs", 200], "args.json has no epochs"),
+    (["epochs", 200], "args.json is not a JSON object"),
 ])
 def test_assemble_drops_a_run_without_a_recorded_cap(tmp_path, args, missing):
     rep_dir = build_synthetic_run(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo", epoch_cap=None)

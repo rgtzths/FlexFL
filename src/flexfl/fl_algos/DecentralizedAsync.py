@@ -99,7 +99,7 @@ class DecentralizedAsync(FederatedABC):
             f"Loss: [bold yellow]{loss:.4f}[/bold yellow], "
             f"Metrics: {', '.join([f'{k}: {v:.4f}' for k, v in metrics.items()])}\n"
         )
-        stop = self.early_stop() or epoch == self.epochs
+        stop = self.early_stop() or epoch >= self.epochs
         if stop:
             Logger.log(Logger.END)
             self.running = False

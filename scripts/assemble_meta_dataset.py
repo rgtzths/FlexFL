@@ -338,7 +338,9 @@ def recorded_epoch_cap(master_log: Path | None) -> tuple[object, str | None, str
         args = load_json(master_log.parent / "args.json")
     except (OSError, ValueError) as e:
         return None, None, str(e)
-    if not isinstance(args, dict) or "epochs" not in args:
+    if not isinstance(args, dict):
+        return None, "args.json is not a JSON object", None
+    if "epochs" not in args:
         return None, "args.json has no epochs", None
     return args["epochs"], None, None
 
@@ -387,13 +389,13 @@ def assemble(
             warnings.append(f"targets uncomputable (missing start/end/epoch or epoch number), skipped: {rep_dir}")
             continue
 
-        epoch_cap, missing, read_error = recorded_epoch_cap(master_log)
+        epoch_cap, missing_reason, read_error = recorded_epoch_cap(master_log)
         if read_error is not None:
             warnings.append(f"unreadable args.json ({read_error}), skipped: {rep_dir}")
             continue
-        if missing is not None:
+        if missing_reason is not None:
             if legacy_epoch_cap is None:
-                warnings.append(f"no recorded epoch cap ({missing}), skipped: {rep_dir}")
+                warnings.append(f"no recorded epoch cap ({missing_reason}), skipped: {rep_dir}")
                 continue
             epoch_cap = legacy_epoch_cap
         if not isinstance(epoch_cap, int) or isinstance(epoch_cap, bool) or epoch_cap < 1:

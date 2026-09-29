@@ -252,8 +252,7 @@ class FederatedABC(ABC):
 
 
     def at_epoch_cap(self, epoch: int, last_validated: int) -> bool:
-        # Sync masters check this before sending the next round: validation runs after
-        # the send so it overlaps worker compute, and moving it before the send serializes them.
+        # Moving validation before the send serializes it with worker compute.
         return epoch > last_validated and epoch >= self.epochs
 
 

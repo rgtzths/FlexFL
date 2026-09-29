@@ -65,7 +65,7 @@ class CentralizedAsync(FederatedABC):
             return
         epoch = self.iteration // self.total_batches
         self.validate(epoch, split="val", verbose=True)
-        stop = self.early_stop() or epoch == self.epochs
+        stop = self.early_stop() or epoch >= self.epochs
         if stop:
             Logger.log(Logger.END)
             self.running = False
