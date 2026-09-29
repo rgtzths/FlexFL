@@ -41,8 +41,14 @@ Targets (master log_0.jsonl, single clock; T09)
                       SMAPE (FederatedABC.smape); `main_metric` reports that key verbatim.
   total_time_s        master start→end delta
   comm_bytes_{sent,recv,total}   Σ payload_size of the master's send/recv events
-  n_epochs            rounds until early stop — an OUTCOME, not a feature; exclude it
-                      from the predictor set (leakage) unless modelling it as a target.
+  n_epochs            last epoch reached: the `epoch` field of the final epoch event. An
+                      OUTCOME, not a feature; exclude it from the predictor set (leakage)
+                      unless modelling it as a target. A run whose final epoch event has no
+                      positive integer `epoch` is dropped with a warning.
+  n_validations       number of epoch (validation) events. Equals n_epochs, except for
+                      CentralizedSync runs logged before the per-epoch validation fix, which
+                      validated every k > 1 epochs when min_workers did not divide the
+                      pool's total batches.
   compute_time_{total,max}_s, comm_time_{total,max}_s, serial_time_total_s, validation_time_s,
   comm_skew_clamped   time decomposition from log_0.jsonl plus worker_N/log_M.jsonl
                       (flexfl.builtins.event_metrics, the pairing Results uses): worker work,
@@ -89,7 +95,7 @@ COLUMNS = [
     "n_workers", "n_workers_benchmarked",
     "worker_rate_mean", "worker_rate_min", "worker_rate_max", "worker_rate_std", "worker_rate_cv",
     "performance", "main_metric", "total_time_s",
-    "comm_bytes_sent", "comm_bytes_recv", "comm_bytes_total", "n_epochs",
+    "comm_bytes_sent", "comm_bytes_recv", "comm_bytes_total", "n_epochs", "n_validations",
     *DECOMPOSITION_COLUMNS,
 ]
 
@@ -232,6 +238,9 @@ def compute_targets(events: list[dict], is_classification: bool) -> dict | None:
     perf = max(vals) if is_classification else min(vals)
     if not math.isfinite(perf):
         return None
+    last_epoch = epochs[-1].get("epoch")
+    if not isinstance(last_epoch, int) or isinstance(last_epoch, bool) or last_epoch < 1:
+        return None
     sent = sum(e.get("payload_size", 0) for e in events if e.get("event") == "send")
     recv = sum(e.get("payload_size", 0) for e in events if e.get("event") == "recv")
     return {
@@ -241,7 +250,8 @@ def compute_targets(events: list[dict], is_classification: bool) -> dict | None:
         "comm_bytes_sent": sent,
         "comm_bytes_recv": recv,
         "comm_bytes_total": sent + recv,
-        "n_epochs": len(epochs),
+        "n_epochs": last_epoch,
+        "n_validations": len(epochs),
     }
 
 
@@ -347,7 +357,7 @@ def assemble(results_dir: Path, metadata_dir: Path, hpo_dir: Path) -> tuple[list
         master_log, events, master_bad = read_master_events(rep_dir)
         targets = compute_targets(events, mf["is_classification"])
         if targets is None:
-            warnings.append(f"targets uncomputable (missing start/end/epoch), skipped: {rep_dir}")
+            warnings.append(f"targets uncomputable (missing start/end/epoch or epoch number), skipped: {rep_dir}")
             continue
 
         decomposition_columns, null_cause, decomposition_notes = time_decomposition(rep_dir, master_log, events, master_bad)
