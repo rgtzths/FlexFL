@@ -140,8 +140,9 @@ class DecentralizedAsync(FederatedABC):
         self.weights = self.linear_interpolation(
             self.weights, worker_weights, self.penalty
         )
-        self.send_work()
         self.handle_iteration()
+        if self.running:
+            self.send_work()
 
 
     def send_work(self):

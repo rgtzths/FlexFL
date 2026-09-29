@@ -89,8 +89,9 @@ class CentralizedAsync(FederatedABC):
             return
         grads *= self.penalty
         self.ml.apply_gradients(grads)
-        self.send_work()
         self.handle_iteration()
+        if self.running:
+            self.send_work()
 
 
     def send_work(self):

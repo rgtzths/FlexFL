@@ -48,19 +48,25 @@ class CentralizedSync(FederatedABC):
         batch = 0
         stop = False
         while True:
-            self.wm.wait_for_workers(self.min_workers)
-            pool = self.wm.get_subpool(self.min_workers, self.subpool_fn)
-            self.wm.send_n(
-                workers = pool, 
-                payload = self.ml.get_weights(),
-                type_ = Task.WORK
-            )
+            # Validating before this send would serialize validation with worker compute
+            # on every epoch; only the cap is known before the send.
+            at_cap = epoch > last_validated and epoch >= self.epochs
+            if not at_cap:
+                self.wm.wait_for_workers(self.min_workers)
+                pool = self.wm.get_subpool(self.min_workers, self.subpool_fn)
+                self.wm.send_n(
+                    workers = pool, 
+                    payload = self.ml.get_weights(),
+                    type_ = Task.WORK
+                )
             if epoch > last_validated:
                 self.validate(epoch, split="val", verbose=True)
                 last_validated = epoch
                 stop = self.early_stop() or epoch >= self.epochs
                 if stop:
                     Logger.log(Logger.END)
+            if at_cap:
+                break
             weighted_sum = 0
             total_weight = 0
             for i, (worker_id, data) in enumerate(self.wm.recv_n(

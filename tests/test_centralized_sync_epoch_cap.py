@@ -79,12 +79,13 @@ def test_early_stop_ends_a_non_divisible_run_before_the_cap(monkeypatch):
 def test_divisible_run_keeps_its_validation_points(monkeypatch):
     algo, validated, logged = _run_master_loop(monkeypatch, {1: 2, 2: 2}, epochs=3)
     assert validated == [1, 2, 3]
-    assert (algo.wm.sends, algo.ml.applied) == (7, 6)
+    assert (algo.wm.sends, algo.ml.applied) == (6, 6)
     assert logged.count(Logger.END) == 1
 
 
 def test_non_positive_epoch_cap_stops_after_the_first_epoch(monkeypatch):
     algo, validated, logged = _run_master_loop(monkeypatch, {1: 1, 2: 1}, epochs=0)
     assert validated == [1]
+    assert algo.wm.sends == 1
     assert logged.count(Logger.END) == 1
     assert algo.wm.ended

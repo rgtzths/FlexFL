@@ -273,7 +273,7 @@ def build_synthetic_run(
     strategy="iid", combo="atnog-test1_0_hobbit_1_samwise_0",
     dataset="ds_a", fl_algo="CentralizedSync", rep=1,
     sentinel="_SUCCESS", with_epochs=True, workers_txt=None, with_hpo=True,
-    hyperparameters=None, new_workers=0,
+    hyperparameters=None, new_workers=0, epoch_cap=200,
 ):
     rep_dir = results_dir / strategy / combo / dataset / fl_algo / f"rep_{rep}"
     rep_dir.mkdir(parents=True, exist_ok=True)
@@ -287,6 +287,8 @@ def build_synthetic_run(
         events.append({"event": "epoch", "epoch": 1, "mcc": 0.7})
     events.append({"event": "end", "timestamp": 5})
     write_jsonl(rep_dir / "log_0.jsonl", events)
+    if epoch_cap is not None:
+        write_json(rep_dir / "args.json", {"epochs": epoch_cap})
 
     (rep_dir / sentinel).write_text("")
 
@@ -309,7 +311,11 @@ def build_timed_run(results_dir: Path, metadata_dir: Path, hpo_dir: Path, **kwar
     rep_dir = build_synthetic_run(results_dir, metadata_dir, hpo_dir, **kwargs)
     (rep_dir / "log_0.jsonl").unlink()
     master = [*MASTER_EVENTS[:-1], {"event": "epoch", "epoch": 1, "mcc": 0.7, "timestamp": 105.0}, MASTER_EVENTS[-1]]
-    return write_run_logs(rep_dir / "2026-01-01_00:00:00", master)
+    folder = write_run_logs(rep_dir / "2026-01-01_00:00:00", master)
+    args_file = rep_dir / "args.json"
+    if args_file.exists():
+        args_file.replace(folder / "args.json")
+    return folder
 
 
 def test_assemble_one_row_per_success(tmp_path):
@@ -1122,7 +1128,8 @@ def test_assemble_time_decomposition_warns_on_unpaired_validation(tmp_path):
     rep_dir = build_synthetic_run(results_dir, metadata_dir, hpo_dir)
     (rep_dir / "log_0.jsonl").unlink()
     master = [*MASTER_EVENTS[:-1], {"event": "epoch", "epoch": 1, "mcc": 0.7, "timestamp": 105.0}, {"event": "validation_start", "timestamp": 109.5}, MASTER_EVENTS[-1]]
-    write_run_logs(rep_dir / "2026-01-01_00:00:00", master)
+    folder = write_run_logs(rep_dir / "2026-01-01_00:00:00", master)
+    (rep_dir / "args.json").replace(folder / "args.json")
     rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
     assert [rows[0][c] for c in DECOMPOSITION_COLUMNS] == GOLDEN
     assert any("1 validation_start/end events unpaired" in w for w in warnings)
@@ -1136,3 +1143,113 @@ def test_assembler_import_is_stdlib_only():
         str(scripts),
     ], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+# --- epoch cap ---
+
+def test_assemble_records_the_epoch_cap(tmp_path):
+    build_synthetic_run(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo")
+    rows, warnings = assemble(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo")
+    assert [row["epoch_cap"] for row in rows] == [200]
+    assert COLUMNS.index("epoch_cap") == COLUMNS.index("local_epochs") + 1
+
+
+def test_assemble_reads_the_cap_beside_the_master_log(tmp_path):
+    folder = build_timed_run(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo", epoch_cap=7)
+    assert (folder / "args.json").exists()
+    rows, warnings = assemble(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo")
+    assert [row["epoch_cap"] for row in rows] == [7]
+
+
+def test_assemble_prefers_the_recorded_cap_over_the_sampled_one(tmp_path):
+    build_synthetic_run(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo", epoch_cap=5,
+                        hyperparameters={"learning_rate": 0.001, "batch_size": 256, "patience": 3,
+                                         "delta": 0.01, "epochs": 200})
+    rows, warnings = assemble(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo")
+    assert [row["epoch_cap"] for row in rows] == [5]
+
+
+@pytest.mark.parametrize("args", [None, {"fl": "cs"}, ["epochs", 200]])
+def test_assemble_drops_a_run_without_a_recorded_cap(tmp_path, args):
+    rep_dir = build_synthetic_run(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo", epoch_cap=None)
+    if args is not None:
+        write_json(rep_dir / "args.json", args)
+    rows, warnings = assemble(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo")
+    assert rows == []
+    assert warnings == [f"no recorded epoch cap (args.json epochs), skipped: {rep_dir}"]
+
+
+@pytest.mark.parametrize("args", [None, {"fl": "cs"}])
+def test_assemble_legacy_epoch_cap_fills_a_missing_cap(tmp_path, args):
+    rep_dir = build_synthetic_run(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo", epoch_cap=None)
+    if args is not None:
+        write_json(rep_dir / "args.json", args)
+    rows, warnings = assemble(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo", legacy_epoch_cap=10)
+    assert [row["epoch_cap"] for row in rows] == [10]
+
+
+@pytest.mark.parametrize("value", ["200", 0, -1, True, 2.5])
+def test_assemble_drops_an_invalid_recorded_cap(tmp_path, value):
+    rep_dir = build_synthetic_run(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo", epoch_cap=value)
+    rows, warnings = assemble(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo", legacy_epoch_cap=10)
+    assert rows == []
+    assert warnings == [f"invalid epoch cap {value!r} in args.json, skipped: {rep_dir}"]
+
+
+def test_assemble_drops_a_null_recorded_cap_even_with_a_legacy_cap(tmp_path):
+    rep_dir = build_synthetic_run(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo", epoch_cap=None)
+    write_json(rep_dir / "args.json", {"epochs": None})
+    rows, warnings = assemble(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo", legacy_epoch_cap=10)
+    assert rows == []
+    assert warnings == [f"invalid epoch cap None in args.json, skipped: {rep_dir}"]
+
+
+def test_assemble_ignores_a_cap_only_in_hyperparameters_json(tmp_path):
+    rep_dir = build_synthetic_run(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo", epoch_cap=None,
+                                  hyperparameters={"learning_rate": 0.001, "batch_size": 256, "patience": 3,
+                                                   "delta": 0.01, "epochs": 200})
+    rows, warnings = assemble(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo")
+    assert rows == []
+    assert warnings == [f"no recorded epoch cap (args.json epochs), skipped: {rep_dir}"]
+
+
+@pytest.mark.parametrize("content", [b"{not json", b"\xff\xfe"])
+def test_assemble_skips_a_run_with_an_unreadable_args_json(tmp_path, content):
+    rep_dir = build_synthetic_run(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo")
+    build_synthetic_run(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo", dataset="ds_b")
+    (rep_dir / "args.json").write_bytes(content)
+    rows, warnings = assemble(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo", legacy_epoch_cap=10)
+    assert [row["dataset"] for row in rows] == ["ds_b"]
+    cap_warnings = [w for w in warnings if "args.json" in w]
+    assert len(cap_warnings) == 1
+    assert cap_warnings[0].startswith("unreadable args.json (")
+    assert cap_warnings[0].endswith(f"), skipped: {rep_dir}")
+
+
+def _run_assembler_cli(tmp_path, *extra):
+    script = str(Path(__file__).resolve().parent.parent / "scripts" / "assemble_meta_dataset.py")
+    return subprocess.run(
+        [sys.executable, script,
+         "--results-dir", str(tmp_path / "results"),
+         "--metadata-dir", str(tmp_path / "metadata"),
+         "--hpo-dir", str(tmp_path / "hpo"),
+         "--out", str(tmp_path / "meta_dataset.csv"), *extra],
+        capture_output=True, text=True,
+    )
+
+
+def test_assemble_cli_legacy_epoch_cap_writes_the_column(tmp_path):
+    build_synthetic_run(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo", epoch_cap=None)
+    assert _run_assembler_cli(tmp_path).returncode == 0
+    with open(tmp_path / "meta_dataset.csv", newline="") as f:
+        assert len(list(csv.DictReader(f))) == 0
+    assert _run_assembler_cli(tmp_path, "--legacy-epoch-cap", "10").returncode == 0
+    with open(tmp_path / "meta_dataset.csv", newline="") as f:
+        assert [row["epoch_cap"] for row in csv.DictReader(f)] == ["10"]
+
+
+def test_assemble_cli_rejects_a_non_positive_legacy_epoch_cap(tmp_path):
+    build_synthetic_run(tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo")
+    result = _run_assembler_cli(tmp_path, "--legacy-epoch-cap", "0")
+    assert result.returncode == 2
+    assert "--legacy-epoch-cap must be a positive integer" in result.stderr
