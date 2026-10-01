@@ -98,9 +98,10 @@ def _hp(seed, tmp_path, algo=ALGO):
 
 
 def test_seeds_get_different_hyperparameters(tmp_path):
-    lines = {_hp(seed, tmp_path)[0] for seed in SEEDS}
+    written = [_hp(seed, tmp_path)[1] for seed in SEEDS]
 
-    assert len(lines) == 3
+    assert len({w["learning_rate"] for w in written}) == 3
+    assert len({w["batch_size"] for w in written}) == 3
 
 
 def test_helper_key_is_combo_dataset_algo_seed(tmp_path):
@@ -138,9 +139,20 @@ def _stub_sweep_workdir(tmp_path):
     return work, bin_dir
 
 
-def test_each_repeat_runs_with_its_own_vector_and_records_it(tmp_path):
+def _rep_dir(work, seed):
+    return work / "results/iid" / COMBO / DATA / ALGO / f"rep_{SEEDS.index(seed) + 1}"
+
+
+def _sweep(tmp_path, *, run_rc="0", sampler=None, preseed=()):
     work, bin_dir = _stub_sweep_workdir(tmp_path)
+    if sampler is not None:
+        (work / "scripts" / "sample_hyperparameters.py").write_text(sampler)
+    for seed in preseed:
+        rep = _rep_dir(work, seed)
+        rep.mkdir(parents=True)
+        (rep / "_SUCCESS").touch()
     calls = tmp_path / "calls.txt"
+    calls.touch()
     snippet = f"""
 distributions=(iid); atnog_test1=(2); hobbit=(2); samwise=(2)
 datasets=({DATA}); fl_algos=({ALGO}); REPEATS=3; SEEDS=(42 43 44)
@@ -148,20 +160,53 @@ IDS_FILE=ids.json; IDS_SUBSET=ids_subset.json; IPS_SUBSET=ips_subset.json
 IPS_SUBSET_TXT=ips_subset.txt; RESULTS_ROOT=results; PXM_DIR=.
 FAIL_LOG=results/_failures.log; EXTRA_ARGS=()
 mkdir -p results
-execute_fl_run() {{ echo "$4|$5" >> "{calls}"; run_rc=0; }}
+execute_fl_run() {{ echo "$4|$5" >> "{calls}"; run_rc={run_rc}; }}
 run_sweep
 """
     env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
-
     result = _run(snippet, cwd=work, env=env)
-
     assert result.returncode == 0, result.stderr
-    expected = {seed: sample(ALGO, f"{COMBO}|{DATA}|{ALGO}|{seed}") for seed in SEEDS}
     ran = dict(line.split("|", 1) for line in calls.read_text().splitlines())
+    return work, ran
+
+
+def test_each_repeat_runs_with_its_own_vector_and_records_it(tmp_path):
+    work, ran = _sweep(tmp_path)
+
+    expected = {seed: sample(ALGO, f"{COMBO}|{DATA}|{ALGO}|{seed}") for seed in SEEDS}
     for seed, params in expected.items():
         assert ran[str(seed)] == " ".join(f"--{k} {v}" for k, v in params.items())
-        rep = (
-            work / "results/iid" / COMBO / DATA / ALGO / f"rep_{SEEDS.index(seed) + 1}"
-        )
+        rep = _rep_dir(work, seed)
         assert json.loads((rep / "hyperparameters.json").read_text()) == params
         assert (rep / "_SUCCESS").exists()
+    assert not list((work / "results").rglob(".hp_*"))
+
+
+def test_failed_repeat_records_no_hyperparameters(tmp_path):
+    work, _ = _sweep(tmp_path, run_rc="1")
+
+    for seed in SEEDS:
+        rep = _rep_dir(work, seed)
+        assert (rep / "_FAILED").exists()
+        assert not (rep / "_SUCCESS").exists()
+        assert not (rep / "hyperparameters.json").exists()
+    assert not list((work / "results").rglob(".hp_*"))
+
+
+def test_done_repeat_is_skipped_without_sampling(tmp_path):
+    work, ran = _sweep(tmp_path, preseed=(43,))
+
+    assert set(ran) == {"42", "44"}
+    assert not (_rep_dir(work, 43) / "hyperparameters.json").exists()
+
+
+def test_sampler_failure_does_not_mark_the_repeat_successful(tmp_path):
+    work, ran = _sweep(tmp_path, sampler="import sys\nsys.exit(1)\n")
+
+    assert ran == {}
+    for seed in SEEDS:
+        assert not (_rep_dir(work, seed) / "_SUCCESS").exists()
+    assert (
+        "step=sample_hyperparameters"
+        in (work / "results" / "_failures.log").read_text()
+    )

@@ -163,7 +163,12 @@ EOF
                                 rm -rf "$run_dir"
                                 # Keep the seed in the key: without it every repeat shares one hyperparameter vector.
                                 hp_file="${base}/.hp_${fl_algo}_${seed}.json"
-                                hp_args=$(sample_hp_args "$combo" "$data_name" "$fl_algo" "$seed" "$hp_file")
+                                hp_args=$(sample_hp_args "$combo" "$data_name" "$fl_algo" "$seed" "$hp_file") \
+                                    && [ -s "$hp_file" ] || {
+                                    log_failure "sample_hyperparameters"
+                                    rm -f "$hp_file"
+                                    continue
+                                }
                                 execute_fl_run "$IPS_SUBSET_TXT" "$data_name" "$fl_algo" "$seed" "$hp_args" "$total"
 
                                 # Gather regardless of outcome so a completed run's logs — and
