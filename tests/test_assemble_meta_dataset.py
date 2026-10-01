@@ -1870,6 +1870,31 @@ def test_assemble_drops_a_run_without_a_recorded_rule(tmp_path):
     ]
 
 
+@pytest.mark.parametrize(
+    "args, missing",
+    [
+        (None, "no args.json beside the master log"),
+        (["epochs", 200], "args.json is not a JSON object"),
+    ],
+)
+def test_assemble_drops_a_run_without_a_usable_args_json_for_the_rule(
+    tmp_path, args, missing
+):
+    rep_dir = build_synthetic_run(
+        tmp_path / "results", tmp_path / "metadata", tmp_path / "hpo", epoch_cap=None
+    )
+    if args is not None:
+        write_json(rep_dir / "args.json", args)
+    rows, warnings = assemble(
+        tmp_path / "results",
+        tmp_path / "metadata",
+        tmp_path / "hpo",
+        legacy_epoch_cap=10,
+    )
+    assert rows == []
+    assert warnings == [f"no recorded early-stop rule ({missing}), skipped: {rep_dir}"]
+
+
 @pytest.mark.parametrize("legacy", [False, True])
 @pytest.mark.parametrize(
     "args, shown",
