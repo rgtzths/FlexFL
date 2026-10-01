@@ -43,7 +43,7 @@ def sample(algo: str, key: str) -> dict:
     rng = random.Random(seed_from_key(key))
     learning_rate = round(10 ** rng.uniform(-4, -2), 6)  # log-uniform [1e-4, 1e-2]
     batch_size = rng.choice([256, 512, 1024, 2048])
-    # Removing either discarded draw shifts every later draw for every key.
+    # Removing either discarded draw shifts local_epochs for every Decentralized key.
     rng.randint(3, 10)
     rng.uniform(math.log10(1e-3), math.log10(5e-2))
     params = {

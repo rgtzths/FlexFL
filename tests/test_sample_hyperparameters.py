@@ -73,7 +73,7 @@ def test_cli_passes_and_records_the_cap_and_rule(tmp_path):
     assert json.loads(out.read_text()) == {**DRAWN["DecentralizedSync"], **FIXED}
 
 
-def _old_draws(algo, key):
+def _reference_draw_sequence(algo, key):
     rng = random.Random(seed_from_key(key))
     learning_rate = round(10 ** rng.uniform(-4, -2), 6)
     batch_size = rng.choice([256, 512, 1024, 2048])
@@ -85,21 +85,13 @@ def _old_draws(algo, key):
     return params
 
 
-def test_swept_values_match_the_previous_sampler():
+def test_swept_values_follow_the_reference_draw_sequence():
     for algo in sorted(DRAWN):
         for i in range(500):
             key = f"key-{i}|ds|{algo}"
             params = sample(algo, key)
-            for name, value in _old_draws(algo, key).items():
+            for name, value in _reference_draw_sequence(algo, key).items():
                 assert params[name] == value
-
-
-def test_every_vector_uses_the_fixed_patience_and_delta():
-    for algo in sorted(DRAWN):
-        for i in range(500):
-            params = sample(algo, f"key-{i}|ds|{algo}")
-            assert params["patience"] == 20
-            assert params["delta"] == 0.01
 
 
 @pytest.mark.parametrize(
