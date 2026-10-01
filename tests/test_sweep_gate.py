@@ -145,8 +145,15 @@ def _rep_dir(work, seed):
 
 def _sweep(tmp_path, *, run_rc="0", sampler=None, preseed=()):
     work, bin_dir = _stub_sweep_workdir(tmp_path)
-    if sampler is not None:
-        (work / "scripts" / "sample_hyperparameters.py").write_text(sampler)
+    if sampler is None:
+        sampler = (
+            "import runpy\nimport sys\n"
+            f"open({str(tmp_path / 'sampled.txt')!r}, 'a').write("
+            "sys.argv[sys.argv.index('--key') + 1] + '\\n')\n"
+            f"runpy.run_path({str(SCRIPT.parent / 'sample_hyperparameters.py')!r},"
+            " run_name='__main__')\n"
+        )
+    (work / "scripts" / "sample_hyperparameters.py").write_text(sampler)
     for seed in preseed:
         rep = _rep_dir(work, seed)
         rep.mkdir(parents=True)
@@ -198,15 +205,29 @@ def test_done_repeat_is_skipped_without_sampling(tmp_path):
 
     assert set(ran) == {"42", "44"}
     assert not (_rep_dir(work, 43) / "hyperparameters.json").exists()
+    sampled = (tmp_path / "sampled.txt").read_text().splitlines()
+    assert sampled == [f"{COMBO}|{DATA}|{ALGO}|{seed}" for seed in (42, 44)]
+
+
+def _assert_repeats_stay_retryable(work):
+    assert not list((work / "results").rglob(".hp_*"))
+    for seed in SEEDS:
+        assert not _rep_dir(work, seed).exists()
+    assert (
+        "step=sample_hyperparameters"
+        in (work / "results" / "_failures.log").read_text()
+    )
 
 
 def test_sampler_failure_does_not_mark_the_repeat_successful(tmp_path):
     work, ran = _sweep(tmp_path, sampler="import sys\nsys.exit(1)\n")
 
     assert ran == {}
-    for seed in SEEDS:
-        assert not (_rep_dir(work, seed) / "_SUCCESS").exists()
-    assert (
-        "step=sample_hyperparameters"
-        in (work / "results" / "_failures.log").read_text()
-    )
+    _assert_repeats_stay_retryable(work)
+
+
+def test_sampler_writing_no_file_does_not_mark_the_repeat_successful(tmp_path):
+    work, ran = _sweep(tmp_path, sampler="import sys\nsys.exit(0)\n")
+
+    assert ran == {}
+    _assert_repeats_stay_retryable(work)
