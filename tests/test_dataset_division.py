@@ -1,4 +1,5 @@
 import hashlib
+import random
 
 import numpy as np
 import pytest
@@ -25,18 +26,37 @@ class _MinimalDataset(DatasetABC):
         pass
 
 
-def _build_dataset(monkeypatch, tmp_path, n_train, n_val=2, n_features=3, n_classes=2):
+class _RegressionDataset(_MinimalDataset):
+
+    @property
+    def is_classification(self) -> bool:
+        return False
+
+
+def _build_dataset(
+    monkeypatch,
+    tmp_path,
+    n_train,
+    n_val=2,
+    n_features=3,
+    n_classes=2,
+    dataset_cls=_MinimalDataset,
+):
     metadata_dir = tmp_path / "_metadata"
     metadata_dir.mkdir()
     monkeypatch.setattr(DatasetABC_module, "DATA_FOLDER", str(tmp_path / "data"))
     monkeypatch.setattr(DatasetABC_module, "METADATA_FOLDER", str(metadata_dir))
-    ds = _MinimalDataset()
+    ds = dataset_cls()
     x_train = np.arange(n_train * n_features, dtype=np.float64).reshape(
         n_train, n_features
     )
-    y_train = np.array([i % n_classes for i in range(n_train)])
     x_val = np.arange(n_val * n_features, dtype=np.float64).reshape(n_val, n_features)
-    y_val = np.array([i % n_classes for i in range(n_val)])
+    if dataset_cls is _RegressionDataset:
+        y_train = np.sqrt(np.arange(n_train, dtype=np.float64))
+        y_val = np.sqrt(np.arange(n_val, dtype=np.float64))
+    else:
+        y_train = np.array([i % n_classes for i in range(n_train)])
+        y_val = np.array([i % n_classes for i in range(n_val)])
     ds.data_path = ds.default_folder
     ds.save_data(x_train, y_train, "train")
     ds.save_data(x_val, y_val, "val")
@@ -97,9 +117,36 @@ def test_non_iid_division_is_byte_reproducible(monkeypatch, tmp_path, num_worker
     ds = _build_dataset(monkeypatch, tmp_path, n_train=400, n_classes=4)
     ds.data_division(num_workers=num_workers, distribution="non_iid")
     first = _division_bytes(tmp_path, ds, num_workers)
+    for _ in range(5):
+        ds.data_division(num_workers=num_workers, distribution="non_iid")
+        assert _division_bytes(tmp_path, ds, num_workers) == first
+
+
+@pytest.mark.parametrize("num_workers", (2, 4, 6, 12))
+def test_non_iid_regression_division_is_byte_reproducible(
+    monkeypatch, tmp_path, num_workers
+):
+    ds = _build_dataset(
+        monkeypatch, tmp_path, n_train=400, dataset_cls=_RegressionDataset
+    )
+    assert ds.metadata["type"] == "regression"
     ds.data_division(num_workers=num_workers, distribution="non_iid")
-    second = _division_bytes(tmp_path, ds, num_workers)
-    assert first == second
+    first = _division_bytes(tmp_path, ds, num_workers)
+    for _ in range(5):
+        ds.data_division(num_workers=num_workers, distribution="non_iid")
+        assert _division_bytes(tmp_path, ds, num_workers) == first
+
+
+@pytest.mark.parametrize("num_workers", (2, 4, 6))
+def test_non_iid_ignores_the_module_level_seed(monkeypatch, tmp_path, num_workers):
+    ds = _build_dataset(monkeypatch, tmp_path, n_train=400, n_classes=4)
+    random.seed(1)
+    first = ds.division_non_iid(num_workers, 0.9)
+    random.seed(2)
+    second = ds.division_non_iid(num_workers, 0.9)
+    for first_values, second_values in zip(first, second):
+        for first_worker, second_worker in zip(first_values, second_values):
+            assert np.array_equal(first_worker, second_worker)
 
 
 @pytest.mark.parametrize("num_workers", (2, 4, 6))
