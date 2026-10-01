@@ -127,7 +127,7 @@ run_sweep() {
                         # data into results/ — copies accumulated unbounded over ~60 combos ×
                         # ~59 datasets. The division is fully deterministic given these
                         # parameters (preprocess train_test_split random_state=42; array_split;
-                        # dirichlet seed=42), so the recipe is sufficient to reproduce it.
+                        # non_iid and dirichlet seed=42), so the recipe is sufficient to reproduce it.
                         rm -rf "${base}/data"
                         cat > "${base}/division.json" <<EOF
 {
