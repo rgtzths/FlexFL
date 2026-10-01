@@ -12,10 +12,13 @@ delta for every algorithm, plus local_epochs for the Decentralized algorithms
 that do local training. The Centralized algorithms aggregate gradients per batch
 and ignore local_epochs, so it is not swept for them.
 
-Every vector also carries the fixed global epoch cap, epochs = EPOCH_CAP. It is
-assigned after the draws and consumes none, so the sampled values for a key are the
-same with or without it.
+Every vector also carries the fixed global epoch cap, epochs = EPOCH_CAP, and the
+fixed early-stop rule: early_stop_on = EARLY_STOP_ON (patience and delta apply to the
+validation loss, delta as a relative improvement) and min_epochs = MIN_EPOCHS (no stop
+before that epoch). They are assigned after the draws and consume none, so the sampled
+values for a key are the same with or without them.
 """
+
 import argparse
 import hashlib
 import json
@@ -24,6 +27,8 @@ import random
 
 LOCAL_TRAINING_ALGOS = {"DecentralizedSync", "DecentralizedAsync"}
 EPOCH_CAP = 200
+EARLY_STOP_ON = "loss"
+MIN_EPOCHS = 10
 
 
 def seed_from_key(key: str) -> int:
@@ -34,22 +39,34 @@ def seed_from_key(key: str) -> int:
 def sample(algo: str, key: str) -> dict:
     rng = random.Random(seed_from_key(key))
     params = {
-        "learning_rate": round(10 ** rng.uniform(-4, -2), 6),          # log-uniform [1e-4, 1e-2]
+        "learning_rate": round(
+            10 ** rng.uniform(-4, -2), 6
+        ),  # log-uniform [1e-4, 1e-2]
         "batch_size": rng.choice([256, 512, 1024, 2048]),
         "patience": rng.randint(3, 10),
-        "delta": round(10 ** rng.uniform(math.log10(1e-3), math.log10(5e-2)), 5),  # log-uniform [1e-3, 5e-2]
+        "delta": round(
+            10 ** rng.uniform(math.log10(1e-3), math.log10(5e-2)), 5
+        ),  # log-uniform [1e-3, 5e-2]
     }
     if algo in LOCAL_TRAINING_ALGOS:
         params["local_epochs"] = rng.randint(1, 10)
     params["epochs"] = EPOCH_CAP
+    params["early_stop_on"] = EARLY_STOP_ON
+    params["min_epochs"] = MIN_EPOCHS
     return params
 
 
 def main():
     p = argparse.ArgumentParser(description="Sample FL hyperparameters for one run.")
-    p.add_argument("--algo", required=True, help="FL algorithm name (decides local_epochs)")
-    p.add_argument("--key", required=True, help="Stable run identity, e.g. 'combo|dataset|algo'")
-    p.add_argument("--json-out", help="Optional path to write the sampled values as JSON")
+    p.add_argument(
+        "--algo", required=True, help="FL algorithm name (decides local_epochs)"
+    )
+    p.add_argument(
+        "--key", required=True, help="Stable run identity, e.g. 'combo|dataset|algo'"
+    )
+    p.add_argument(
+        "--json-out", help="Optional path to write the sampled values as JSON"
+    )
     args = p.parse_args()
 
     params = sample(args.algo, args.key)
