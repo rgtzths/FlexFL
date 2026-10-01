@@ -444,11 +444,11 @@ def fl_hyperparameters(rep_dir: Path) -> dict:
     }
 
 
-def recorded_epoch_cap(
+def recorded_args(
     master_log: Path | None,
-) -> tuple[object, str | None, str | None]:
-    """The `epochs` in the args.json beside the master log, why it is missing,
-    and any read error."""
+) -> tuple[dict | None, str | None, str | None]:
+    """The args.json beside the master log, why it is missing, and any read
+    error."""
     if master_log is None or not (master_log.parent / "args.json").is_file():
         return None, "no args.json beside the master log", None
     try:
@@ -457,9 +457,18 @@ def recorded_epoch_cap(
         return None, None, str(e)
     if not isinstance(args, dict):
         return None, "args.json is not a JSON object", None
+    return args, None, None
+
+
+def recorded_epoch_cap(
+    args: dict | None, missing_reason: str | None
+) -> tuple[object, str | None]:
+    """The `epochs` in a run's args.json, or why it is missing."""
+    if args is None:
+        return None, missing_reason
     if "epochs" not in args:
-        return None, "args.json has no epochs", None
-    return args["epochs"], None, None
+        return None, "args.json has no epochs"
+    return args["epochs"], None
 
 
 EARLY_STOP_RULES = ("loss", "metric")
@@ -467,19 +476,16 @@ LEGACY_EARLY_STOP_RULE = ("metric", 0)
 
 
 def recorded_early_stop_rule(
-    master_log: Path | None,
+    args: dict | None, missing_reason: str | None
 ) -> tuple[object, object, str | None]:
-    """The `early_stop_on` and `min_epochs` in the args.json beside the master
-    log, or why both are missing.
+    """The `early_stop_on` and `min_epochs` in a run's args.json, or why both
+    are missing.
 
     A pair with only one key present is returned with None for the other, so it
     fails validation instead of taking the legacy rule.
     """
-    if master_log is None or not (master_log.parent / "args.json").is_file():
-        return None, None, "no args.json beside the master log"
-    args = load_json(master_log.parent / "args.json")
-    if not isinstance(args, dict):
-        return None, None, "args.json is not a JSON object"
+    if args is None:
+        return None, None, missing_reason
     if "early_stop_on" not in args and "min_epochs" not in args:
         return None, None, "args.json has no early_stop_on/min_epochs"
     return args.get("early_stop_on"), args.get("min_epochs"), None
@@ -548,10 +554,12 @@ def assemble(
             )
             continue
 
-        epoch_cap, missing_reason, read_error = recorded_epoch_cap(master_log)
+        args, missing_args, read_error = recorded_args(master_log)
         if read_error is not None:
             warnings.append(f"unreadable args.json ({read_error}), skipped: {rep_dir}")
             continue
+
+        epoch_cap, missing_reason = recorded_epoch_cap(args, missing_args)
         if missing_reason is not None:
             if legacy_epoch_cap is None:
                 warnings.append(
@@ -569,7 +577,9 @@ def assemble(
             )
             continue
 
-        early_stop_on, min_epochs, missing_rule = recorded_early_stop_rule(master_log)
+        early_stop_on, min_epochs, missing_rule = recorded_early_stop_rule(
+            args, missing_args
+        )
         if missing_rule is not None:
             if not legacy_early_stop_rule:
                 warnings.append(

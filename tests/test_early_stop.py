@@ -98,6 +98,11 @@ def test_floor_zero_lets_a_flat_loss_stop_at_patience_plus_one():
     assert _stop_epoch(f, [0.69] * 40) == 5
 
 
+def test_flat_metric_under_the_metric_rule_stops_at_the_floor():
+    f = _federated(patience=4, delta=0.01, early_stop_on="metric")
+    assert _stop_epoch(f, [0.69] * 40, [0.0] * 40) == 10
+
+
 @pytest.mark.parametrize("scale", [1.0, 1e-3, 1e3])
 def test_the_loss_rule_is_scale_free(scale):
     curve = [
