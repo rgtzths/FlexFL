@@ -88,12 +88,14 @@ distributions=(iid non_iid dirichlet)
 fl_algos=(CentralizedSync CentralizedAsync DecentralizedSync DecentralizedAsync)
 
 # Repeats per configuration (T10) — each config runs N times into distinct rep
-# folders to estimate the target-noise floor. Override with FLEXFL_REPEATS.
+# folders. Override with FLEXFL_REPEATS.
 REPEATS="${FLEXFL_REPEATS:-3}"
 
-# Each repeat runs with a different model seed (data partition and HP vector stay
-# fixed), so performance/comm targets — not just wall-clock time — carry per-config
-# variance. Seeds are a fixed set indexed by repeat, so a resumed rep reuses its seed.
+# Each repeat runs with a different model seed and its own HP vector (the sampling key
+# ends in the seed; the data partition stays fixed), so performance/comm targets, not
+# just wall-clock time, carry per-config variance. Repeat spread mixes seed and
+# hyperparameter variance. Seeds are a fixed set indexed by repeat, so a resumed rep
+# reuses its seed.
 SEEDS=(42 43 44 45 46 47 48 49 50 51)
 
 execute_fl_run() {

@@ -47,6 +47,15 @@ check_seeds_or_exit() {
     fi
 }
 
+# Prints the flexfl hyperparameter flags for one run and writes them as JSON to $5.
+# The seed is part of the key, so repeats of one config get different vectors.
+sample_hp_args() {
+    local combo="$1" data_name="$2" fl_algo="$3" seed="$4" json_out="$5"
+    python3 scripts/sample_hyperparameters.py \
+        --algo "$fl_algo" --key "${combo}|${data_name}|${fl_algo}|${seed}" \
+        --json-out "$json_out"
+}
+
 # --- Sweep (fault-tolerant, resumable) ---
 run_sweep() {
     for strategy in "${distributions[@]}"; do
@@ -143,12 +152,6 @@ EOF
                             || echo "  ! entropy computation failed for ${data_name} (continuing)" >&2
 
                         for fl_algo in "${fl_algos[@]}"; do
-                            # Same HP vector across all repeats of this config (key omits the
-                            # repeat index) — a repeat is a noise sample, not a new config.
-                            hp_args=$(python3 scripts/sample_hyperparameters.py \
-                                --algo "$fl_algo" --key "${combo}|${data_name}|${fl_algo}" \
-                                --json-out "${base}/.hp_${fl_algo}.json")
-
                             for r in $(seq 1 "$REPEATS"); do
                                 seed="${SEEDS[$((r - 1))]}"
                                 run_dir="${base}/${fl_algo}/rep_${r}"
@@ -158,6 +161,14 @@ EOF
                                 fi
                                 # Fresh attempt: discard any partial/failed output from a prior try.
                                 rm -rf "$run_dir"
+                                # Keep the seed in the key: without it every repeat shares one hyperparameter vector.
+                                hp_file="${base}/.hp_${fl_algo}_${seed}.json"
+                                hp_args=$(sample_hp_args "$combo" "$data_name" "$fl_algo" "$seed" "$hp_file") \
+                                    && [ -s "$hp_file" ] || {
+                                    log_failure "sample_hyperparameters"
+                                    rm -f "$hp_file"
+                                    continue
+                                }
                                 execute_fl_run "$IPS_SUBSET_TXT" "$data_name" "$fl_algo" "$seed" "$hp_args" "$total"
 
                                 # Gather regardless of outcome so a completed run's logs — and
@@ -166,7 +177,7 @@ EOF
                                 bash scripts/gather_results.sh -f "$IPS_SUBSET_TXT" -o "$run_dir"
 
                                 if [ "$run_rc" -eq 0 ] && run_output_complete "$run_dir" "$total"; then
-                                    cp -f "${base}/.hp_${fl_algo}.json" "$run_dir/hyperparameters.json"
+                                    cp -f "$hp_file" "$run_dir/hyperparameters.json"
                                     touch "$run_dir/_SUCCESS"
                                     echo "    - ${fl_algo} rep ${r}: success"
                                 else
@@ -174,8 +185,8 @@ EOF
                                     log_failure "run_on_vms"
                                     echo "    - ${fl_algo} rep ${r}: FAILED (marked _FAILED, will retry on re-run)"
                                 fi
+                                rm -f "$hp_file"
                             done
-                            rm -f "${base}/.hp_${fl_algo}.json"
                         done
                         fl_algo=""; r=""
 
