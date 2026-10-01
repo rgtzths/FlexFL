@@ -66,7 +66,9 @@ def main():
         "--algo", required=True, help="FL algorithm name (decides local_epochs)"
     )
     p.add_argument(
-        "--key", required=True, help="Stable run identity, e.g. 'combo|dataset|algo'"
+        "--key",
+        required=True,
+        help="Stable run identity, e.g. 'combo|dataset|algo|seed'",
     )
     p.add_argument(
         "--json-out", help="Optional path to write the sampled values as JSON"
