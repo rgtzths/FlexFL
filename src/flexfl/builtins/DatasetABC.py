@@ -204,7 +204,7 @@ class DatasetABC(ABC):
         y = np.array_split(y, num_workers)
         return x, y
     
-    def division_non_iid(self, num_workers, distribution_percentage):
+    def division_non_iid(self, num_workers, distribution_percentage, seed=42):
         self.data_path = self.default_folder
         x, y = self.load_data('train')
         if self.metadata["type"] == "classification":
@@ -238,6 +238,7 @@ class DatasetABC(ABC):
 
             classes = updated_classes
             
+        rng = random.Random(seed)
         workers = list(range(num_workers))
         workers_x = [0]*num_workers
         workers_y = [0]*num_workers
@@ -248,14 +249,14 @@ class DatasetABC(ABC):
                 idx = i % len(counts)
                 counts[idx] += 1
             
-            dist = random.sample(classes, k=num_workers, counts=counts)
+            dist = rng.sample(classes, k=num_workers, counts=counts)
         else:
             counts = [1]*num_workers
             for i in range(len(classes)-num_workers):
                 idx = i % num_workers
                 counts[idx] += 1
             
-            dist = random.sample(workers, k=len(classes), counts=counts)
+            dist = rng.sample(workers, k=len(classes), counts=counts)
             temp_dist = [0]*num_workers
 
             for idx, c in enumerate(classes):
