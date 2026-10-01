@@ -1,4 +1,5 @@
 import json
+from collections import deque
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -78,7 +79,15 @@ class _Quiet:
         pass
 
 
-def _run(cls, monkeypatch, stop_after=None, epochs=CAP, short_rounds=0, epoch_threshold=0.5):
+def _run(
+    cls,
+    monkeypatch,
+    stop_after=None,
+    epochs=CAP,
+    short_rounds=0,
+    epoch_threshold=0.5,
+    setup=None,
+):
     logged = []
     monkeypatch.setattr(Logger, "log", lambda event, **kwargs: logged.append(event))
     validated = []
@@ -96,6 +105,9 @@ def _run(cls, monkeypatch, stop_after=None, epochs=CAP, short_rounds=0, epoch_th
     algo.rr = set()
     algo.validate = validate
     algo.early_stop = lambda: stop_after is not None and len(validated) >= stop_after
+    if setup is not None:
+        del algo.early_stop
+        setup(algo)
     if cls in (CentralizedSync, DecentralizedSync):
         algo.epoch_threshold = epoch_threshold
         algo.master_loop()
@@ -114,6 +126,45 @@ def _run(cls, monkeypatch, stop_after=None, epochs=CAP, short_rounds=0, epoch_th
 
 SYNC = [CentralizedSync, DecentralizedSync]
 ASYNC = [CentralizedAsync, DecentralizedAsync]
+
+
+def _run_with_loss_rule(cls, monkeypatch, loss_at):
+    validated = []
+
+    def setup(algo):
+        algo.is_classification = True
+        algo.target_score = 1.0
+        algo.patience = 4
+        algo.delta = 0.01
+        algo.early_stop_on = "loss"
+        algo.min_epochs = 10
+        algo.buffer = deque(maxlen=4)
+        algo.compare_score = None
+
+        def validate(epoch, split="val", verbose=False):
+            validated.append(epoch)
+            algo.new_score, algo.new_loss, algo.last_epoch = 0.0, loss_at(epoch), epoch
+            return {"mcc": 0.0}, algo.new_loss, 0.0
+
+        algo.validate = validate
+
+    _, _, logged = _run(cls, monkeypatch, setup=setup)
+    return validated, logged
+
+
+@pytest.mark.parametrize("cls", SYNC + ASYNC)
+def test_flat_loss_stops_at_the_min_epochs_floor(cls, monkeypatch):
+    validated, logged = _run_with_loss_rule(cls, monkeypatch, lambda epoch: 0.69)
+    assert validated == list(range(1, 11))
+    assert logged.count(Logger.END) == 1
+
+
+@pytest.mark.parametrize("cls", SYNC + ASYNC)
+def test_falling_loss_with_flat_mcc_trains_to_the_cap(cls, monkeypatch):
+    validated, logged = _run_with_loss_rule(
+        cls, monkeypatch, lambda epoch: 0.69 * 0.98**epoch
+    )
+    assert validated == list(range(1, CAP + 1))
 
 
 @pytest.mark.parametrize("cls", SYNC + ASYNC)
@@ -162,33 +213,56 @@ def test_async_loops_stop_after_the_first_epoch_on_a_non_positive_cap(cls, monke
 
 @pytest.mark.parametrize("cls", SYNC)
 def test_sync_loops_resend_a_round_that_too_few_workers_answered(cls, monkeypatch):
-    algo, validated, logged = _run(cls, monkeypatch, epochs=3, short_rounds=1, epoch_threshold=1.0)
+    algo, validated, logged = _run(
+        cls, monkeypatch, epochs=3, short_rounds=1, epoch_threshold=1.0
+    )
     assert validated == [1, 2, 3]
     assert algo.wm.tasks == len(INFO) * 4
     assert algo.wm.ended
 
 
 @pytest.mark.parametrize("cls", ASYNC)
-@pytest.mark.parametrize("stop_after, completions", [(None, len(INFO) * CAP), (3, len(INFO) * 3)])
-def test_async_loops_send_no_task_after_the_stop(cls, monkeypatch, stop_after, completions):
+@pytest.mark.parametrize(
+    "stop_after, completions", [(None, len(INFO) * CAP), (3, len(INFO) * 3)]
+)
+def test_async_loops_send_no_task_after_the_stop(
+    cls, monkeypatch, stop_after, completions
+):
     algo, validated, logged = _run(cls, monkeypatch, stop_after=stop_after)
     assert algo.iteration == completions
     assert algo.wm.tasks == completions - 1
 
 
-@pytest.mark.parametrize("all_args, epochs", [({"fl": "cs"}, 200), ({"fl": "cs", "epochs": 7}, 7)])
-def test_master_records_the_resolved_cap(tmp_path, monkeypatch, all_args, epochs):
+@pytest.mark.parametrize(
+    "all_args, epochs, rule",
+    [
+        ({"fl": "cs"}, 200, ("loss", 10)),
+        ({"fl": "cs", "epochs": 7}, 7, ("loss", 10)),
+        ({"fl": "cs", "early_stop_on": "metric", "min_epochs": 0}, 200, ("metric", 0)),
+    ],
+)
+def test_master_records_the_resolved_cap_and_rule(
+    tmp_path, monkeypatch, all_args, epochs, rule
+):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(Logger, "setup", lambda file_path: None)
     passed = dict(all_args)
     algo = object.__new__(CentralizedSync)
     algo.wm = SimpleNamespace(c=SimpleNamespace(id=0, start_time=datetime(2026, 1, 1)))
-    algo.ml = SimpleNamespace(dataset=SimpleNamespace(default_folder="a", data_path="b"))
+    algo.ml = SimpleNamespace(
+        dataset=SimpleNamespace(default_folder="a", data_path="b")
+    )
     algo.base_dir = "run"
     algo.results_folder = None
     algo.all_args = passed
     algo.epochs = epochs
+    algo.early_stop_on, algo.min_epochs = rule
     algo.setup_nodes()
     recorded = json.loads((tmp_path / "results" / "run" / "args.json").read_text())
-    assert recorded == {**all_args, "epochs": epochs}
+    assert recorded == {
+        **all_args,
+        "epochs": epochs,
+        "early_stop_on": rule[0],
+        "min_epochs": rule[1],
+    }
     assert passed == all_args

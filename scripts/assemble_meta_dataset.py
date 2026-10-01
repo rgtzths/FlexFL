@@ -12,15 +12,26 @@ Features
                       n_workers_joined, dataset, fl_algo (+ fl_algo_* one-hot), repeat
   FL hyperparameters  learning_rate, batch_size, patience, delta, local_epochs (T07;
                       imputed 0 for Centralized, T46)
-  epoch cap           epoch_cap: the global epoch cap the run trained under, the `epochs`
-                      the master recorded in the args.json beside its log_0.jsonl. A run
-                      whose args.json has no `epochs` key is dropped with a warning, unless
-                      --legacy-epoch-cap N assigns N to such runs (runs made before the
-                      cap was recorded trained under the old default of 10).
-                      A recorded value that is not a positive int, and an unreadable
-                      args.json, always drop the run (T056).
+  epoch cap           epoch_cap: the global epoch cap the run trained under, the
+                      `epochs` the master recorded in the args.json beside its
+                      log_0.jsonl. A run whose args.json has no `epochs` key is
+                      dropped with a warning, unless --legacy-epoch-cap N assigns
+                      N to such runs (runs made before the cap was recorded
+                      trained under the old default of 10).
+                      A recorded value that is not a positive int, and an
+                      unreadable args.json, always drop the run (T056).
+  early-stop rule     early_stop_on, min_epochs: what the patience window watched
+                      ("loss", delta as a relative improvement, or "metric", the
+                      main metric with an absolute delta) and the first epoch at
+                      which a stop could fire, as recorded in the same args.json.
+                      A run that recorded neither is dropped with a warning,
+                      unless --legacy-early-stop-rule assigns "metric" and 0, the
+                      rule every run used before it was recorded. A run that
+                      recorded only one of the two, or a pair that is not a known
+                      rule and a non-negative int, always drops (T059).
   dataset meta        task, is_classification, n_samples, n_features, n_classes,
-                      is_categorical (T08 option B — raw architecture held fixed, not used directly)
+                      is_categorical (T08 option B — raw architecture held
+                      fixed, not used directly)
   model architecture  total_parameters, n_layers, mean_layer_width, max_layer_width,
                       weight_decay — from the dataset's HPO config; size/shape
                       scalars plus weight decay, not the raw per-layer unit list.
@@ -30,11 +41,11 @@ Features
                       machine benchmark, over the participating workers, joined by
                       (node, vmid)
 
-Three columns count workers and mean different things: num_workers is the intended count
-from division.json; n_workers is the number of worker lines in workers.txt; and
-n_workers_joined counts the master's `new_worker` events, i.e. the workers that actually
-registered and were eligible for the aggregation pool. n_workers_joined < num_workers marks
-a short-pool run.
+Three columns count workers and mean different things: num_workers is the intended
+count from division.json; n_workers is the number of worker lines in workers.txt;
+and n_workers_joined counts the master's `new_worker` events, i.e. the workers that
+actually registered and were eligible for the aggregation pool.
+n_workers_joined < num_workers marks a short-pool run.
 
 local_epochs is 0 for every Centralized row by construction (T46) — a sentinel for
 "this algorithm has no local-training concept," not a measured zero. Do not use it as
@@ -44,76 +55,142 @@ structural.
 
 Targets (master log_0.jsonl, single clock; T09)
   performance         best validation main metric (mcc↑ clf / smape↓ reg). NB: the
-                      regression metric is logged under the key `mape` but is actually
-                      SMAPE (FederatedABC.smape); `main_metric` reports that key verbatim.
+                      regression metric is logged under the key `mape` but is
+                      actually SMAPE (FederatedABC.smape); `main_metric` reports
+                      that key verbatim.
   total_time_s        master start→end delta
   comm_bytes_{sent,recv,total}   Σ payload_size of the master's send/recv events
-  n_epochs            last epoch reached: the `epoch` field of the final epoch event. An
-                      OUTCOME, not a feature; exclude it from the predictor set (leakage)
-                      unless modelling it as a target. A run with any epoch event lacking a
-                      positive integer `epoch` is dropped with a warning.
-  n_validations       number of epoch (validation) events. Equals n_epochs, except for
-                      CentralizedSync runs logged before the per-epoch validation fix, which
-                      validated every k > 1 epochs when min_workers did not divide the
-                      pool's total batches.
-  epoch_validation_gap  n_validations != n_epochs: flags those pre-fix CentralizedSync runs,
-                      whose n_epochs can overshoot the epoch cap. Outcome, not a predictor.
-  compute_time_{total,max}_s, comm_time_{total,max}_s, serial_time_total_s, validation_time_s,
-  comm_skew_clamped   time decomposition from log_0.jsonl plus worker_N/log_M.jsonl
-                      (flexfl.builtins.event_metrics, the pairing Results uses): worker work,
-                      message transit and encode/decode seconds, every interval clipped to the
-                      master start-to-end window, _total summed over workers, _max the busiest
-                      worker. comm_time_* pairs a master and a worker clock; comm_skew_clamped
-                      counts pairs whose negative duration was clamped to 0. Empty, with a
-                      warning, when a run has no worker logs or no work inside the window.
+  n_epochs            last epoch reached: the `epoch` field of the final epoch
+                      event. An OUTCOME, not a feature; exclude it from the
+                      predictor set (leakage) unless modelling it as a target. A
+                      run with any epoch event lacking a positive integer `epoch`
+                      is dropped with a warning.
+  n_validations       number of epoch (validation) events. Equals n_epochs, except
+                      for CentralizedSync runs logged before the per-epoch
+                      validation fix, which validated every k > 1 epochs when
+                      min_workers did not divide the pool's total batches.
+  epoch_validation_gap  n_validations != n_epochs: flags those pre-fix
+                      CentralizedSync runs, whose n_epochs can overshoot the
+                      epoch cap. Outcome, not a predictor.
+  compute_time_{total,max}_s, comm_time_{total,max}_s, serial_time_total_s,
+  validation_time_s,
+  comm_skew_clamped   time decomposition from log_0.jsonl plus
+                      worker_N/log_M.jsonl (flexfl.builtins.event_metrics, the
+                      pairing Results uses): worker work, message transit and
+                      encode/decode seconds, every interval clipped to the master
+                      start-to-end window, _total summed over workers, _max the
+                      busiest worker. comm_time_* pairs a master and a worker
+                      clock; comm_skew_clamped counts pairs whose negative
+                      duration was clamped to 0. Empty, with a warning, when a
+                      run has no worker logs or no work inside the window.
                       Outcomes, like n_epochs: not predictors.
 """
+
 import argparse
-from collections import Counter
 import csv
 import json
 import math
 import re
 import statistics
 import sys
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from extract_meta_features import DEFAULT_METADATA_DIR, architecture_features, meta_features  # noqa: E402
+from extract_meta_features import (  # noqa: E402
+    DEFAULT_METADATA_DIR,
+    architecture_features,
+    meta_features,
+)
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from flexfl.builtins.event_metrics import decomposition  # noqa: E402
 
-DEFAULT_HPO_DIR = Path(__file__).resolve().parent.parent / "results/hyperparameter_optimization"
+DEFAULT_HPO_DIR = (
+    Path(__file__).resolve().parent.parent / "results/hyperparameter_optimization"
+)
 
 DECOMPOSITION_COLUMNS = [
-    "compute_time_total_s", "compute_time_max_s", "comm_time_total_s", "comm_time_max_s",
-    "serial_time_total_s", "validation_time_s", "comm_skew_clamped",
+    "compute_time_total_s",
+    "compute_time_max_s",
+    "comm_time_total_s",
+    "comm_time_max_s",
+    "serial_time_total_s",
+    "validation_time_s",
+    "comm_skew_clamped",
 ]
 
 COLUMNS = [
-    "strategy", "strategy_iid", "strategy_non_iid", "strategy_dirichlet",
-    "combo", "n_atnog_test1", "n_hobbit", "n_samwise", "num_workers", "n_workers_joined",
-    "dataset", "fl_algo",
-    "fl_algo_CentralizedSync", "fl_algo_CentralizedAsync", "fl_algo_DecentralizedSync", "fl_algo_DecentralizedAsync",
+    "strategy",
+    "strategy_iid",
+    "strategy_non_iid",
+    "strategy_dirichlet",
+    "combo",
+    "n_atnog_test1",
+    "n_hobbit",
+    "n_samwise",
+    "num_workers",
+    "n_workers_joined",
+    "dataset",
+    "fl_algo",
+    "fl_algo_CentralizedSync",
+    "fl_algo_CentralizedAsync",
+    "fl_algo_DecentralizedSync",
+    "fl_algo_DecentralizedAsync",
     "repeat",
-    "learning_rate", "batch_size", "patience", "delta", "local_epochs", "epoch_cap",
-    "task", "is_classification", "is_categorical", "n_samples", "n_features", "n_classes",
-    "total_parameters", "n_layers", "mean_layer_width", "max_layer_width", "weight_decay",
-    "alpha", "distribution_percentage",
-    "feat_entropy_mean", "feat_entropy_min", "feat_entropy_max", "feat_entropy_std",
-    "n_workers", "n_workers_benchmarked",
-    "worker_rate_mean", "worker_rate_min", "worker_rate_max", "worker_rate_std", "worker_rate_cv",
-    "performance", "main_metric", "total_time_s",
-    "comm_bytes_sent", "comm_bytes_recv", "comm_bytes_total", "n_epochs", "n_validations",
+    "learning_rate",
+    "batch_size",
+    "patience",
+    "delta",
+    "local_epochs",
+    "epoch_cap",
+    "early_stop_on",
+    "min_epochs",
+    "task",
+    "is_classification",
+    "is_categorical",
+    "n_samples",
+    "n_features",
+    "n_classes",
+    "total_parameters",
+    "n_layers",
+    "mean_layer_width",
+    "max_layer_width",
+    "weight_decay",
+    "alpha",
+    "distribution_percentage",
+    "feat_entropy_mean",
+    "feat_entropy_min",
+    "feat_entropy_max",
+    "feat_entropy_std",
+    "n_workers",
+    "n_workers_benchmarked",
+    "worker_rate_mean",
+    "worker_rate_min",
+    "worker_rate_max",
+    "worker_rate_std",
+    "worker_rate_cv",
+    "performance",
+    "main_metric",
+    "total_time_s",
+    "comm_bytes_sent",
+    "comm_bytes_recv",
+    "comm_bytes_total",
+    "n_epochs",
+    "n_validations",
     "epoch_validation_gap",
     *DECOMPOSITION_COLUMNS,
 ]
 
 ALGO_ALIASES = {
-    "centralizedsync": "CentralizedSync", "cs": "CentralizedSync",
-    "centralizedasync": "CentralizedAsync", "ca": "CentralizedAsync",
-    "decentralizedsync": "DecentralizedSync", "ds": "DecentralizedSync",
-    "decentralizedasync": "DecentralizedAsync", "da": "DecentralizedAsync",
+    "centralizedsync": "CentralizedSync",
+    "cs": "CentralizedSync",
+    "centralizedasync": "CentralizedAsync",
+    "ca": "CentralizedAsync",
+    "decentralizedsync": "DecentralizedSync",
+    "ds": "DecentralizedSync",
+    "decentralizedasync": "DecentralizedAsync",
+    "da": "DecentralizedAsync",
 }
 CENTRALIZED_ALGOS = {"CentralizedSync", "CentralizedAsync"}
 
@@ -145,12 +222,17 @@ def read_master_events(rep_dir: Path) -> tuple[Path | None, list[dict], int]:
 
 
 EVENT_FIELDS = {
-    "start": ("timestamp",), "end": ("timestamp",),
+    "start": ("timestamp",),
+    "end": ("timestamp",),
     "send": ("sender", "receiver", "payload_size", "timestamp"),
     "recv": ("sender", "receiver", "payload_size", "timestamp"),
-    "encode": ("time", "timestamp"), "decode": ("time", "timestamp"),
-    "working_start": ("timestamp",), "working_end": ("timestamp",), "failure": ("timestamp",),
-    "validation_start": ("timestamp",), "validation_end": ("timestamp",),
+    "encode": ("time", "timestamp"),
+    "decode": ("time", "timestamp"),
+    "working_start": ("timestamp",),
+    "working_end": ("timestamp",),
+    "failure": ("timestamp",),
+    "validation_start": ("timestamp",),
+    "validation_end": ("timestamp",),
 }
 ANOMALY_WARNINGS = (
     ("n_unmatched_comms", "send/recv events unmatched"),
@@ -186,7 +268,8 @@ def well_formed(event: object) -> bool:
     if not isinstance(event, dict) or not isinstance(event.get("event"), str):
         return False
     return all(
-        isinstance(event.get(field), (int, float)) and not isinstance(event.get(field), bool)
+        isinstance(event.get(field), (int, float))
+        and not isinstance(event.get(field), bool)
         for field in EVENT_FIELDS.get(event["event"], ())
     )
 
@@ -230,7 +313,10 @@ def time_decomposition(
     for key, label in ANOMALY_WARNINGS:
         if split[key]:
             notes.append(f"{split[key]} {label} in {rep_dir}")
-    if split["n_work_intervals_in_window"] == 0 and split["n_work_events_in_window"] == 0:
+    if (
+        split["n_work_intervals_in_window"] == 0
+        and split["n_work_events_in_window"] == 0
+    ):
         return empty, "no work inside the master window", notes
     return {k: split[k] for k in DECOMPOSITION_COLUMNS}, None, notes
 
@@ -242,7 +328,11 @@ def compute_targets(events: list[dict], is_classification: bool) -> dict | None:
     if not starts or not ends or not epochs:
         return None
     main = "mcc" if is_classification else "mape"
-    vals = [v for e in epochs if isinstance((v := e.get(main)), (int, float)) and math.isfinite(v)]
+    vals = [
+        v
+        for e in epochs
+        if isinstance((v := e.get(main)), (int, float)) and math.isfinite(v)
+    ]
     if not vals:
         return None
     perf = max(vals) if is_classification else min(vals)
@@ -269,14 +359,21 @@ def compute_targets(events: list[dict], is_classification: bool) -> dict | None:
 
 def worker_compute(workers_txt: Path, benchmark_dir: Path) -> dict:
     empty = {
-        "n_workers": None, "n_workers_benchmarked": 0,
-        "worker_rate_mean": None, "worker_rate_min": None, "worker_rate_max": None,
-        "worker_rate_std": None, "worker_rate_cv": None,
+        "n_workers": None,
+        "n_workers_benchmarked": 0,
+        "worker_rate_mean": None,
+        "worker_rate_min": None,
+        "worker_rate_max": None,
+        "worker_rate_std": None,
+        "worker_rate_cv": None,
     }
     if not workers_txt.exists():
         return empty
-    lines = [ln.strip() for ln in workers_txt.read_text().splitlines()
-             if ln.strip() and not ln.startswith("#")]
+    lines = [
+        ln.strip()
+        for ln in workers_txt.read_text().splitlines()
+        if ln.strip() and not ln.startswith("#")
+    ]
     entries = [ln.split() for ln in lines]
     worker_entries = entries[1:]  # line 1 is the anchor (frodo)
     rates = []
@@ -290,14 +387,22 @@ def worker_compute(workers_txt: Path, benchmark_dir: Path) -> dict:
         if not bf.exists():
             continue
         results = load_json(bf).get("results", {})
-        model_rates = [r for m in results.values()
-                       if isinstance((r := m.get("avg_epochs_per_second")), (int, float)) and math.isfinite(r)]
+        model_rates = [
+            r
+            for m in results.values()
+            if isinstance((r := m.get("avg_epochs_per_second")), (int, float))
+            and math.isfinite(r)
+        ]
         if model_rates:
             rates.append(statistics.fmean(model_rates))
     legacy_key = {"_legacy_workers_txt": str(workers_txt)} if legacy else {}
     if not rates or len(rates) < len(worker_entries):
-        return {**empty, "n_workers": len(worker_entries),
-                "n_workers_benchmarked": len(rates), **legacy_key}
+        return {
+            **empty,
+            "n_workers": len(worker_entries),
+            "n_workers_benchmarked": len(rates),
+            **legacy_key,
+        }
     mean = statistics.fmean(rates)
     std = statistics.pstdev(rates) if len(rates) > 1 else 0.0
     return {
@@ -319,8 +424,17 @@ def fl_hyperparameters(rep_dir: Path) -> dict:
         args = sorted(rep_dir.rglob("args.json"))
         if args:
             a = load_json(args[0])
-            hp = {k: a.get(k) for k in ("learning_rate", "batch_size", "patience", "delta", "local_epochs")
-                  if a.get(k) is not None}
+            hp = {
+                k: a.get(k)
+                for k in (
+                    "learning_rate",
+                    "batch_size",
+                    "patience",
+                    "delta",
+                    "local_epochs",
+                )
+                if a.get(k) is not None
+            }
     return {
         "learning_rate": hp.get("learning_rate"),
         "batch_size": hp.get("batch_size"),
@@ -330,8 +444,11 @@ def fl_hyperparameters(rep_dir: Path) -> dict:
     }
 
 
-def recorded_epoch_cap(master_log: Path | None) -> tuple[object, str | None, str | None]:
-    """The `epochs` in the args.json beside the master log, why it is missing, and any read error."""
+def recorded_epoch_cap(
+    master_log: Path | None,
+) -> tuple[object, str | None, str | None]:
+    """The `epochs` in the args.json beside the master log, why it is missing,
+    and any read error."""
     if master_log is None or not (master_log.parent / "args.json").is_file():
         return None, "no args.json beside the master log", None
     try:
@@ -345,8 +462,35 @@ def recorded_epoch_cap(master_log: Path | None) -> tuple[object, str | None, str
     return args["epochs"], None, None
 
 
+EARLY_STOP_RULES = ("loss", "metric")
+LEGACY_EARLY_STOP_RULE = ("metric", 0)
+
+
+def recorded_early_stop_rule(
+    master_log: Path | None,
+) -> tuple[object, object, str | None]:
+    """The `early_stop_on` and `min_epochs` in the args.json beside the master
+    log, or why both are missing.
+
+    A pair with only one key present is returned with None for the other, so it
+    fails validation instead of taking the legacy rule.
+    """
+    if master_log is None or not (master_log.parent / "args.json").is_file():
+        return None, None, "no args.json beside the master log"
+    args = load_json(master_log.parent / "args.json")
+    if not isinstance(args, dict):
+        return None, None, "args.json is not a JSON object"
+    if "early_stop_on" not in args and "min_epochs" not in args:
+        return None, None, "args.json has no early_stop_on/min_epochs"
+    return args.get("early_stop_on"), args.get("min_epochs"), None
+
+
 def assemble(
-    results_dir: Path, metadata_dir: Path, hpo_dir: Path, legacy_epoch_cap: int | None = None
+    results_dir: Path,
+    metadata_dir: Path,
+    hpo_dir: Path,
+    legacy_epoch_cap: int | None = None,
+    legacy_early_stop_rule: bool = False,
 ) -> tuple[list[dict], list[str]]:
     benchmark_dir = results_dir / "benchmark"
     rows, warnings = [], []
@@ -356,7 +500,13 @@ def assemble(
         if len(rel) < 5 or not rel[-1].startswith("rep_"):
             warnings.append(f"unexpected path, skipped: {rep_dir}")
             continue
-        strategy, combo, dataset, fl_algo, rep = rel[-5], rel[-4], rel[-3], rel[-2], rel[-1]
+        strategy, combo, dataset, fl_algo, rep = (
+            rel[-5],
+            rel[-4],
+            rel[-3],
+            rel[-2],
+            rel[-1],
+        )
 
         division = {}
         div_file = rep_dir.parent.parent / "division.json"
@@ -370,7 +520,9 @@ def assemble(
             continue
         mf = meta_features(load_json(meta_file))
         if mf["n_features"] is None or mf["n_classes"] is None:
-            warnings.append(f"missing n_features/n_classes for {dataset}, skipped: {rep_dir}")
+            warnings.append(
+                f"missing n_features/n_classes for {dataset}, skipped: {rep_dir}"
+            )
             continue
 
         hpo_file = hpo_dir / f"{dataset}.json"
@@ -378,15 +530,22 @@ def assemble(
             warnings.append(f"no HPO config for {dataset}, skipped: {rep_dir}")
             continue
         try:
-            af = architecture_features(load_json(hpo_file), mf["n_features"], mf["n_classes"])
+            af = architecture_features(
+                load_json(hpo_file), mf["n_features"], mf["n_classes"]
+            )
         except (KeyError, TypeError, ValueError, statistics.StatisticsError) as e:
-            warnings.append(f"malformed HPO config for {dataset} ({e}), skipped: {rep_dir}")
+            warnings.append(
+                f"malformed HPO config for {dataset} ({e}), skipped: {rep_dir}"
+            )
             continue
 
         master_log, events, master_bad = read_master_events(rep_dir)
         targets = compute_targets(events, mf["is_classification"])
         if targets is None:
-            warnings.append(f"targets uncomputable (missing start/end/epoch or epoch number), skipped: {rep_dir}")
+            warnings.append(
+                "targets uncomputable (missing start/end/epoch or epoch number), "
+                f"skipped: {rep_dir}"
+            )
             continue
 
         epoch_cap, missing_reason, read_error = recorded_epoch_cap(master_log)
@@ -395,14 +554,44 @@ def assemble(
             continue
         if missing_reason is not None:
             if legacy_epoch_cap is None:
-                warnings.append(f"no recorded epoch cap ({missing_reason}), skipped: {rep_dir}")
+                warnings.append(
+                    f"no recorded epoch cap ({missing_reason}), skipped: {rep_dir}"
+                )
                 continue
             epoch_cap = legacy_epoch_cap
-        if not isinstance(epoch_cap, int) or isinstance(epoch_cap, bool) or epoch_cap < 1:
-            warnings.append(f"invalid epoch cap {epoch_cap!r} in args.json, skipped: {rep_dir}")
+        if (
+            not isinstance(epoch_cap, int)
+            or isinstance(epoch_cap, bool)
+            or epoch_cap < 1
+        ):
+            warnings.append(
+                f"invalid epoch cap {epoch_cap!r} in args.json, skipped: {rep_dir}"
+            )
             continue
 
-        decomposition_columns, null_cause, decomposition_notes = time_decomposition(rep_dir, master_log, events, master_bad)
+        early_stop_on, min_epochs, missing_rule = recorded_early_stop_rule(master_log)
+        if missing_rule is not None:
+            if not legacy_early_stop_rule:
+                warnings.append(
+                    f"no recorded early-stop rule ({missing_rule}), skipped: {rep_dir}"
+                )
+                continue
+            early_stop_on, min_epochs = LEGACY_EARLY_STOP_RULE
+        if (
+            early_stop_on not in EARLY_STOP_RULES
+            or not isinstance(min_epochs, int)
+            or isinstance(min_epochs, bool)
+            or min_epochs < 0
+        ):
+            warnings.append(
+                f"invalid early-stop rule ({early_stop_on!r}, {min_epochs!r}) "
+                f"in args.json, skipped: {rep_dir}"
+            )
+            continue
+
+        decomposition_columns, null_cause, decomposition_notes = time_decomposition(
+            rep_dir, master_log, events, master_bad
+        )
         warnings.extend(decomposition_notes)
         if null_cause is not None:
             warnings.append(f"time decomposition unavailable ({null_cause}): {rep_dir}")
@@ -412,12 +601,16 @@ def assemble(
             "combo": combo,
             **parse_combo(combo),
             "num_workers": division.get("num_workers"),
-            "n_workers_joined": sum(1 for e in events if e.get("event") == "new_worker"),
+            "n_workers_joined": sum(
+                1 for e in events if e.get("event") == "new_worker"
+            ),
             "dataset": dataset,
             "fl_algo": fl_algo,
             "repeat": int(rep.split("_")[1]),
             **fl_hyperparameters(rep_dir),
             "epoch_cap": epoch_cap,
+            "early_stop_on": early_stop_on,
+            "min_epochs": min_epochs,
             "task": mf["task"],
             "is_classification": mf["is_classification"],
             "is_categorical": "_cat_" in dataset,
@@ -435,35 +628,57 @@ def assemble(
             "feat_entropy_min": entropy.get("min"),
             "feat_entropy_max": entropy.get("max"),
             "feat_entropy_std": entropy.get("std"),
-            **worker_compute(rep_dir.parent.parent.parent / "workers.txt", benchmark_dir),
+            **worker_compute(
+                rep_dir.parent.parent.parent / "workers.txt", benchmark_dir
+            ),
             **targets,
             **decomposition_columns,
             "_decomposition_null_cause": null_cause,
         }
         canonical_fl_algo = ALGO_ALIASES.get(row["fl_algo"].lower())
         if canonical_fl_algo is None:
-            warnings.append(f"unrecognized fl_algo {row['fl_algo']!r}, skipped: {rep_dir}")
+            warnings.append(
+                f"unrecognized fl_algo {row['fl_algo']!r}, skipped: {rep_dir}"
+            )
             continue
         if canonical_fl_algo in CENTRALIZED_ALGOS and row["local_epochs"] is None:
             row["local_epochs"] = 0
         elif row["local_epochs"] is None:
-            warnings.append(f"local_epochs unrecorded for {rep_dir} (fl_algo={row['fl_algo']})")
-        if all(row[k] is None for k in ("learning_rate", "batch_size", "patience", "delta")):
+            warnings.append(
+                f"local_epochs unrecorded for {rep_dir} (fl_algo={row['fl_algo']})"
+            )
+        if all(
+            row[k] is None for k in ("learning_rate", "batch_size", "patience", "delta")
+        ):
             warnings.append(f"no FL hyperparameters recorded for {rep_dir}")
-        for algo in ("CentralizedSync", "CentralizedAsync", "DecentralizedSync", "DecentralizedAsync"):
+        for algo in (
+            "CentralizedSync",
+            "CentralizedAsync",
+            "DecentralizedSync",
+            "DecentralizedAsync",
+        ):
             row[f"fl_algo_{algo}"] = int(canonical_fl_algo == algo)
         for strat in ("iid", "non_iid", "dirichlet"):
             row[f"strategy_{strat}"] = int(row["strategy"] == strat)
         if sum(row[f"strategy_{s}"] for s in ("iid", "non_iid", "dirichlet")) != 1:
-            warnings.append(f"unrecognized strategy {row['strategy']!r}, skipped: {rep_dir}")
+            warnings.append(
+                f"unrecognized strategy {row['strategy']!r}, skipped: {rep_dir}"
+            )
             continue
         legacy_workers_txt = row.get("_legacy_workers_txt")
         if legacy_workers_txt is not None:
-            warnings.append(f"legacy IP-only workers.txt, worker compute skipped: {legacy_workers_txt}")
-        if row.get("n_workers") and row.get("n_workers_benchmarked", 0) < row["n_workers"]:
+            warnings.append(
+                "legacy IP-only workers.txt, worker compute skipped: "
+                f"{legacy_workers_txt}"
+            )
+        if (
+            row.get("n_workers")
+            and row.get("n_workers_benchmarked", 0) < row["n_workers"]
+        ):
             warnings.append(
                 f"worker compute features incomplete for {rep_dir}: "
-                f"{row['n_workers_benchmarked']}/{row['n_workers']} workers benchmarked "
+                f"{row['n_workers_benchmarked']}/{row['n_workers']} "
+                "workers benchmarked "
                 f"(missing machine_benchmark_<node>_<vmid>.json for some workers)"
             )
         rows.append(row)
@@ -471,18 +686,36 @@ def assemble(
 
 
 def main():
-    p = argparse.ArgumentParser(description="Assemble the per-run meta-learning table (T11).")
+    p = argparse.ArgumentParser(
+        description="Assemble the per-run meta-learning table (T11)."
+    )
     p.add_argument("--results-dir", type=Path, default=Path("results"))
     p.add_argument("--metadata-dir", type=Path, default=DEFAULT_METADATA_DIR)
     p.add_argument("--hpo-dir", type=Path, default=DEFAULT_HPO_DIR)
     p.add_argument("--out", type=Path, default=Path("results/meta_dataset.csv"))
-    p.add_argument("--legacy-epoch-cap", type=int, default=None,
-                   help="epoch cap to assign to runs that recorded none (default: drop them)")
+    p.add_argument(
+        "--legacy-epoch-cap",
+        type=int,
+        default=None,
+        help="epoch cap to assign to runs that recorded none (default: drop them)",
+    )
+    p.add_argument(
+        "--legacy-early-stop-rule",
+        action="store_true",
+        help="assign early_stop_on=metric, min_epochs=0 to runs that recorded no "
+        "early-stop rule (default: drop them)",
+    )
     args = p.parse_args()
     if args.legacy_epoch_cap is not None and args.legacy_epoch_cap < 1:
         p.error("--legacy-epoch-cap must be a positive integer")
 
-    rows, warnings = assemble(args.results_dir, args.metadata_dir, args.hpo_dir, args.legacy_epoch_cap)
+    rows, warnings = assemble(
+        args.results_dir,
+        args.metadata_dir,
+        args.hpo_dir,
+        args.legacy_epoch_cap,
+        args.legacy_early_stop_rule,
+    )
     for w in warnings:
         print(f"  ! {w}", file=sys.stderr)
 
@@ -492,10 +725,17 @@ def main():
         writer.writeheader()
         writer.writerows(rows)
     print(f"Wrote {len(rows)} rows to {args.out} ({len(warnings)} skipped).")
-    null_causes = Counter(r["_decomposition_null_cause"] for r in rows if r["_decomposition_null_cause"])
+    null_causes = Counter(
+        r["_decomposition_null_cause"] for r in rows if r["_decomposition_null_cause"]
+    )
     if null_causes:
-        detail = ", ".join(f"{cause}: {count}" for cause, count in sorted(null_causes.items()))
-        print(f"Time decomposition unavailable for {sum(null_causes.values())} of {len(rows)} rows ({detail}).")
+        detail = ", ".join(
+            f"{cause}: {count}" for cause, count in sorted(null_causes.items())
+        )
+        print(
+            "Time decomposition unavailable for "
+            f"{sum(null_causes.values())} of {len(rows)} rows ({detail})."
+        )
 
 
 if __name__ == "__main__":
