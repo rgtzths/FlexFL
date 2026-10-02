@@ -112,6 +112,13 @@ def test_helper_key_is_combo_dataset_algo_seed(tmp_path):
     assert line.startswith("--learning_rate 0.000155 --batch_size 1024 ")
 
 
+def test_helper_key_gives_centralized_async_its_scaled_rate(tmp_path):
+    line, written = _hp(42, tmp_path, algo="CentralizedAsync")
+
+    assert written == sample("CentralizedAsync", f"{COMBO}|{DATA}|CentralizedAsync|42")
+    assert 3e-5 * 8 / 6 * 0.99 <= written["learning_rate"] <= 1e-4 * 8 / 6 * 1.01
+
+
 def test_same_seed_reproduces_the_vector(tmp_path):
     assert _hp(43, tmp_path) == _hp(43, tmp_path)
 

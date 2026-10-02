@@ -15,7 +15,7 @@ DRAWN = {
         "batch_size": 2048,
     },
     "CentralizedAsync": {
-        "learning_rate": 0.002524,
+        "learning_rate": 9.3e-05,
         "batch_size": 256,
     },
     "DecentralizedSync": {
@@ -151,3 +151,71 @@ def test_swept_values_follow_the_reference_draw_sequence():
 )
 def test_key_order_is_unchanged(algo, expected):
     assert list(sample(algo, KEY.format(algo))) == expected
+
+
+@pytest.mark.parametrize(
+    ("combo", "n_workers"),
+    [
+        ("atnog-test1_2_hobbit_2_samwise_2", 6),
+        ("atnog-test1_2_hobbit_2_samwise_32", 36),
+        ("atnog-test1_8_hobbit_16_samwise_32", 56),
+    ],
+)
+def test_centralized_async_classification_rate_scales_with_workers(combo, n_workers):
+    low, high = math.log10(3e-5), math.log10(1e-4)
+    rates = []
+    for seed in range(500):
+        key = f"{combo}|clf_num_Bioresponse|CentralizedAsync|{seed}"
+        params = sample("CentralizedAsync", key)
+        reference = _reference_draw_sequence("CentralizedAsync", key)
+        position = (math.log10(reference["learning_rate"]) + 4) / 2
+        expected = 10 ** (low + position * (high - low)) * 8 / n_workers
+        assert params["learning_rate"] == pytest.approx(expected, rel=0.01)
+        assert params["batch_size"] == reference["batch_size"]
+        rates.append(params["learning_rate"])
+    assert min(rates) == pytest.approx(3e-5 * 8 / n_workers, rel=0.05)
+    assert max(rates) == pytest.approx(1e-4 * 8 / n_workers, rel=0.05)
+
+
+def test_regression_and_other_algorithms_keep_the_shared_rate():
+    combo = "atnog-test1_8_hobbit_16_samwise_32"
+    cases = [("CentralizedAsync", "reg_num_abalone")] + [
+        (algo, "clf_num_Bioresponse")
+        for algo in ("CentralizedSync", "DecentralizedSync", "DecentralizedAsync")
+    ]
+    for seed in range(200):
+        for algo, data_name in cases:
+            key = f"{combo}|{data_name}|{algo}|{seed}"
+            assert sample(algo, key) == {
+                **_reference_draw_sequence(algo, key),
+                **FIXED,
+            }
+
+
+def test_centralized_async_classification_needs_a_readable_combo():
+    with pytest.raises(ValueError, match="worker count"):
+        sample("CentralizedAsync", "key-1|clf_num_Bioresponse|CentralizedAsync")
+
+
+@pytest.mark.parametrize(
+    "combo",
+    [
+        "atnog-test1_0_hobbit_0_samwise_0",
+        "atnog-test1_２_hobbit_2_samwise_2",
+        "atnog-test1_²_hobbit_2_samwise_2",
+    ],
+)
+def test_centralized_async_classification_rejects_an_unusable_worker_count(combo):
+    with pytest.raises(ValueError, match="worker count"):
+        sample("CentralizedAsync", f"{combo}|clf_num_Bioresponse|CentralizedAsync|42")
+
+
+@pytest.mark.parametrize(
+    "data_name", ["reg_num_abalone", "reg_clf_lookalike", "clfx_lookalike"]
+)
+def test_centralized_async_regression_ignores_the_combo(data_name):
+    key = f"key-1|{data_name}|CentralizedAsync"
+    assert sample("CentralizedAsync", key) == {
+        **_reference_draw_sequence("CentralizedAsync", key),
+        **FIXED,
+    }
