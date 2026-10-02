@@ -1,3 +1,4 @@
+import contextlib
 import socket
 import time
 from unittest.mock import patch
@@ -34,10 +35,13 @@ def test_send_blocks_instead_of_dropping():
 def test_burst_to_worker_loses_no_message():
     # Without the one-slot queues and the slow receiver the burst never fills
     # the transmit queue on loopback, and this test passes on dropping code.
+    # With multicast scouting on, another zenoh process on the host can answer
+    # discovery and the worker joins the wrong anchor.
     real_open = zenoh.open
 
-    def open_with_tiny_queues(conf):
+    def open_isolated(conf):
         conf.insert_json5("transport/link/tx/queue/size", TINY_QUEUES)
+        conf.insert_json5("scouting/multicast/enabled", "false")
         return real_open(conf)
 
     real_handle_recv = Zenoh.handle_recv
@@ -47,24 +51,23 @@ def test_burst_to_worker_loses_no_message():
         real_handle_recv(self, sample)
 
     port = _free_port()
-    with patch.object(zenoh_module.zenoh, "open", side_effect=open_with_tiny_queues):
-        anchor = Zenoh(ip="127.0.0.1", zenoh_port=port, is_anchor=True)
-        with patch.object(Zenoh, "handle_recv", slow_handle_recv):
-            worker = Zenoh(ip="127.0.0.1", zenoh_port=port)
-    try:
+    with contextlib.ExitStack() as stack:
+        with patch.object(zenoh_module.zenoh, "open", side_effect=open_isolated):
+            anchor = Zenoh(ip="127.0.0.1", zenoh_port=port, is_anchor=True)
+            stack.callback(anchor.close)
+            with patch.object(Zenoh, "handle_recv", slow_handle_recv):
+                worker = Zenoh(ip="127.0.0.1", zenoh_port=port)
+            stack.callback(worker.close)
         time.sleep(1.0)
-        n, payload = 300, b"x" * 400_000
+        n, payload = 1000, b"x" * 400_000
         for _ in range(n):
             anchor.send(worker.id, payload)
         received = 0
-        deadline = time.time() + 15
+        deadline = time.time() + 30
         while received < n and time.time() < deadline:
             if not worker.q.empty():
                 worker.q.get()
                 received += 1
             else:
                 time.sleep(0.01)
-        assert received == n
-    finally:
-        worker.close()
-        anchor.close()
+        assert received == n, f"worker received {received} of {n}"
