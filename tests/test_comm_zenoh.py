@@ -1,5 +1,7 @@
 import contextlib
+import queue
 import socket
+import threading
 import time
 from unittest.mock import patch
 
@@ -38,12 +40,6 @@ def test_burst_to_worker_loses_no_message():
     # With multicast scouting on, another zenoh process on the host can answer
     # discovery and the worker joins the wrong anchor.
     real_open = zenoh.open
-
-    def open_isolated(conf):
-        conf.insert_json5("transport/link/tx/queue/size", TINY_QUEUES)
-        conf.insert_json5("scouting/multicast/enabled", "false")
-        return real_open(conf)
-
     real_handle_recv = Zenoh.handle_recv
 
     def slow_handle_recv(self, sample):
@@ -52,22 +48,38 @@ def test_burst_to_worker_loses_no_message():
 
     port = _free_port()
     with contextlib.ExitStack() as stack:
+
+        def open_isolated(conf):
+            conf.insert_json5("transport/link/tx/queue/size", TINY_QUEUES)
+            conf.insert_json5("scouting/multicast/enabled", "false")
+            session = real_open(conf)
+            stack.callback(session.close)
+            return session
+
         with patch.object(zenoh_module.zenoh, "open", side_effect=open_isolated):
             anchor = Zenoh(ip="127.0.0.1", zenoh_port=port, is_anchor=True)
-            stack.callback(anchor.close)
             with patch.object(Zenoh, "handle_recv", slow_handle_recv):
                 worker = Zenoh(ip="127.0.0.1", zenoh_port=port)
-            stack.callback(worker.close)
         time.sleep(1.0)
         n, payload = 1000, b"x" * 400_000
+        counts = {"intact": 0, "corrupt": 0}
+
+        def drain():
+            deadline = time.time() + 30
+            last = time.time()
+            while sum(counts.values()) < n and time.time() < deadline:
+                try:
+                    item = worker.q.get(timeout=0.1)
+                except queue.Empty:
+                    if time.time() - last > 5:
+                        return
+                    continue
+                last = time.time()
+                counts["intact" if item == (anchor.id, payload) else "corrupt"] += 1
+
+        drainer = threading.Thread(target=drain, daemon=True)
+        drainer.start()
         for _ in range(n):
             anchor.send(worker.id, payload)
-        received = 0
-        deadline = time.time() + 30
-        while received < n and time.time() < deadline:
-            if not worker.q.empty():
-                worker.q.get()
-                received += 1
-            else:
-                time.sleep(0.01)
-        assert received == n, f"worker received {received} of {n}"
+        drainer.join(timeout=35)
+        assert counts == {"intact": n, "corrupt": 0}, f"worker received {counts}"
