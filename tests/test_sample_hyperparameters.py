@@ -197,7 +197,22 @@ def test_centralized_async_classification_needs_a_readable_combo():
         sample("CentralizedAsync", "key-1|clf_num_Bioresponse|CentralizedAsync")
 
 
-@pytest.mark.parametrize("data_name", ["reg_num_abalone", "reg_clf_lookalike"])
+@pytest.mark.parametrize(
+    "combo",
+    [
+        "atnog-test1_0_hobbit_0_samwise_0",
+        "atnog-test1_２_hobbit_2_samwise_2",
+        "atnog-test1_²_hobbit_2_samwise_2",
+    ],
+)
+def test_centralized_async_classification_rejects_an_unusable_worker_count(combo):
+    with pytest.raises(ValueError, match="worker count"):
+        sample("CentralizedAsync", f"{combo}|clf_num_Bioresponse|CentralizedAsync|42")
+
+
+@pytest.mark.parametrize(
+    "data_name", ["reg_num_abalone", "reg_clf_lookalike", "clfx_lookalike"]
+)
 def test_centralized_async_regression_ignores_the_combo(data_name):
     key = f"key-1|{data_name}|CentralizedAsync"
     assert sample("CentralizedAsync", key) == {

@@ -50,9 +50,12 @@ def seed_from_key(key: str) -> int:
 def n_workers_from_combo(combo: str) -> int:
     """Total worker count of a combo named atnog-test1_<n1>_hobbit_<n2>_samwise_<n3>."""
     counts = combo.split("_")[1::2]
-    if not counts or not all(c.isdigit() for c in counts):
+    if not counts or not all(c.isascii() and c.isdigit() for c in counts):
         raise ValueError(f"cannot read the worker count from combo {combo!r}")
-    return sum(int(c) for c in counts)
+    total = sum(int(c) for c in counts)
+    if total <= 0:
+        raise ValueError(f"cannot read the worker count from combo {combo!r}")
+    return total
 
 
 def centralized_async_classification_lr(exponent: float, combo: str) -> float:
