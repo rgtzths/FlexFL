@@ -22,6 +22,7 @@ from flexfl.builtins.MLFrameworkABC import MLFrameworkABC
 from flexfl.builtins.WorkerManager import WorkerManager
 
 RESULTS_FOLDER = "results"
+MODEL_TARGET_FILE = "model_target_scaling.json"
 
 METRICS = {"classification": ["mcc", "acc", "f1"], "regression": ["mape", "mse", "mae"]}
 
@@ -52,6 +53,7 @@ class FederatedABC(ABC):
     # gradients set it True so cli/fl.py can reject incompatible ML backends
     # before any worker connects.
     REQUIRES_GRADIENTS: bool = False
+    target_stats = None
 
     def __init__(
         self,
@@ -105,6 +107,21 @@ class FederatedABC(ABC):
         self.check_early_stop_args()
         self.setup_metrics()
         self.setup_nodes()
+        if self.is_master is not None and not self.is_classification:
+            target = self.ml.dataset.target_stats()
+            if self.is_master:
+                if target.get("standardized"):
+                    raise ValueError(
+                        f"{self.ml.dataset.name}: the master's folder holds "
+                        f"standardized targets; it must validate on node_0, whose "
+                        f"targets are raw."
+                    )
+                self.target_stats = target
+            elif target.get("standardized") is not True:
+                raise ValueError(
+                    f"{self.ml.dataset.name}: worker {self.id}'s folder holds raw "
+                    f"targets. Re-run flexfl-division and resend the dataset."
+                )
         self.setup_failure()
 
     @abstractmethod
@@ -206,6 +223,9 @@ class FederatedABC(ABC):
         if self.is_master and self.best_weights is not None and self.save_model:
             self.ml.set_weights(self.best_weights)
             self.ml.save_model(f"{self.base_path}/model")
+            if self.target_stats is not None:
+                with open(f"{self.base_path}/{MODEL_TARGET_FILE}", "w") as f:
+                    json.dump(self.target_stats, f, indent=4)
         self.wm.c.close()
         Logger.end()
 
@@ -221,6 +241,8 @@ class FederatedABC(ABC):
         x = getattr(self.ml, f"x_{split}")
         y = getattr(self.ml, f"y_{split}")
         preds = self.ml.predict(x)
+        if self.target_stats is not None:
+            preds = self.ml.dataset.unscale_target(preds, self.target_stats)
         loss = self.ml.calculate_loss(y, preds)
         if self.is_classification:
             preds = np.argmax(preds, axis=1)

@@ -5,19 +5,19 @@ import pytest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "send_dataset.sh"
 
-COPY_TO_VM_DOUBLE = '''
+COPY_TO_VM_DOUBLE = """
 copy_to_vm() {
     local dest="$VMHOME/${3#\\~/}"
     mkdir -p "$(dirname "$dest")"
     cp "$2" "$dest"
 }
-'''
+"""
 
-COPY_TO_VM_FAILING_DOUBLE = '''
+COPY_TO_VM_FAILING_DOUBLE = """
 copy_to_vm() {
     return 1
 }
-'''
+"""
 
 
 def _run(snippet, vmhome):
@@ -80,7 +80,7 @@ echo "RC=$?"
     assert "Failed to send HPO config" in result.stderr
 
 
-VM_DOUBLES = '''
+VM_DOUBLES = """
 copy_to_vm() {
     local dest="$VMHOME/${1#*@}/${3#\\~/}"
     mkdir -p "$(dirname "$dest")"
@@ -93,13 +93,13 @@ run_on_vm() {
     mkdir -p "$VMHOME/${1#*@}"
     HOME="$VMHOME/${1#*@}" bash -c "$2"
 }
-'''
+"""
 
-GLOBALS = '''
+GLOBALS = """
 USERNAME=user
 DATASET=ds
 CONFIG_SRC=config.json
-'''
+"""
 
 TRAIN = {"x_train.npy": b"fresh-x", "y_train.npy": b"fresh-y"}
 VAL = {"x_val.npy": b"val-x", "y_val.npy": b"val-y"}
@@ -107,7 +107,9 @@ VAL = {"x_val.npy": b"val-x", "y_val.npy": b"val-y"}
 
 def _run_in(snippet, vmhome, cwd):
     script = f"VMHOME='{vmhome}'\nsource '{SCRIPT}'\n{VM_DOUBLES}\n{GLOBALS}\n{snippet}"
-    return subprocess.run(["bash", "-c", script], capture_output=True, text=True, cwd=cwd)
+    return subprocess.run(
+        ["bash", "-c", script], capture_output=True, text=True, cwd=cwd
+    )
 
 
 def _local_partition(cwd, node_id, files):
@@ -157,40 +159,52 @@ def test_send_dataset_ships_validation_pair_to_node_0(tmp_path):
     assert (my_data / "y_val.npy").read_bytes() == b"val-y"
 
 
-@pytest.mark.parametrize("tamper", [
-    "printf stale > \"$landed/x_train.npy\"",
-    "printf stale > \"$landed/y_train.npy\"",
-    "rm \"$landed/y_train.npy\"",
-    "printf extra > \"$landed/z_extra.npy\"",
-])
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        'printf stale > "$landed/x_train.npy"',
+        'printf stale > "$landed/y_train.npy"',
+        'rm "$landed/y_train.npy"',
+        'printf extra > "$landed/z_extra.npy"',
+    ],
+)
 def test_send_dataset_rejects_partition_that_differs_on_the_vm(tmp_path, tamper):
     vmhome = tmp_path / "vmhome"
     _local_partition(tmp_path, 1, TRAIN)
-    tampering_copy = f'''
+    tampering_copy = f"""
 copy_dir_to_vm() {{
     local dest="$VMHOME/${{1#*@}}/${{3#\\~/}}"
     cp -R "$2" "$dest/"
     local landed="$dest/$(basename "$2")"
     {tamper}
 }}
-'''
+"""
 
-    result = _run_in(tampering_copy + 'send_dataset host 1; echo "RC=$?"', vmhome, tmp_path)
+    result = _run_in(
+        tampering_copy + 'send_dataset host 1; echo "RC=$?"', vmhome, tmp_path
+    )
 
     assert "RC=1" in result.stdout
     assert "checksum mismatch" in result.stderr
     assert "successfully" not in result.stdout
 
 
-@pytest.mark.parametrize("node_id,files,missing", [
-    (1, TRAIN, "x_train.npy"),
-    (1, TRAIN, "y_train.npy"),
-    (0, VAL, "x_val.npy"),
-    (0, VAL, "y_val.npy"),
-])
-def test_send_dataset_missing_local_file_leaves_vm_untouched(tmp_path, node_id, files, missing):
+@pytest.mark.parametrize(
+    "node_id,files,missing",
+    [
+        (1, TRAIN, "x_train.npy"),
+        (1, TRAIN, "y_train.npy"),
+        (0, VAL, "x_val.npy"),
+        (0, VAL, "y_val.npy"),
+    ],
+)
+def test_send_dataset_missing_local_file_leaves_vm_untouched(
+    tmp_path, node_id, files, missing
+):
     vmhome = tmp_path / "vmhome"
-    _local_partition(tmp_path, node_id, {k: v for k, v in files.items() if k != missing})
+    _local_partition(
+        tmp_path, node_id, {k: v for k, v in files.items() if k != missing}
+    )
     existing = _vm_data(vmhome) / "my_data"
     existing.mkdir(parents=True)
     (existing / "old.npy").write_bytes(b"old")
@@ -202,15 +216,54 @@ def test_send_dataset_missing_local_file_leaves_vm_untouched(tmp_path, node_id, 
     assert (existing / "old.npy").read_bytes() == b"old"
 
 
+def _regression_cache(cwd):
+    cache = cwd / "data" / "ds" / "_data"
+    cache.mkdir(parents=True, exist_ok=True)
+    (cache / "scaling.json").write_text(
+        '{\n    "target": {\n        "mean": 1.0\n    }\n}'
+    )
+
+
+@pytest.mark.parametrize("node_id,files", [(1, TRAIN), (0, VAL)])
+def test_send_dataset_requires_target_file_for_regression(tmp_path, node_id, files):
+    vmhome = tmp_path / "vmhome"
+    _local_partition(tmp_path, node_id, files)
+    _regression_cache(tmp_path)
+
+    result = _run_in(f'send_dataset host {node_id}; echo "RC=$?"', vmhome, tmp_path)
+
+    assert "RC=1" in result.stdout
+    missing = f"missing local data/ds/node_{node_id}/target_scaling.json"
+    assert missing in result.stderr
+    assert not vmhome.exists()
+
+
+def test_send_dataset_ships_target_file_for_regression(tmp_path):
+    vmhome = tmp_path / "vmhome"
+    _local_partition(tmp_path, 1, {**TRAIN, "target_scaling.json": b"{}"})
+    _regression_cache(tmp_path)
+
+    result = _run_in('send_dataset host 1; echo "RC=$?"', vmhome, tmp_path)
+
+    assert "RC=0" in result.stdout, result.stderr
+    assert (_vm_data(vmhome) / "my_data" / "target_scaling.json").read_bytes() == b"{}"
+
+
 STAGE_FAILURES = {
     "local hash": ("local_npy_manifest() { return 1; }", "cannot hash local"),
-    "cleanup": ('run_on_vm() { case "$2" in rm*) return 1 ;; esac; _real_run_on_vm "$@"; }',
-                "remote cleanup failed"),
+    "cleanup": (
+        'run_on_vm() { case "$2" in rm*) return 1 ;; esac; _real_run_on_vm "$@"; }',
+        "remote cleanup failed",
+    ),
     "copy": ("copy_dir_to_vm() { return 1; }", "copy failed"),
-    "rename": ('run_on_vm() { case "$2" in mv*) return 1 ;; esac; _real_run_on_vm "$@"; }',
-               "rename to my_data failed"),
-    "remote hash": ('run_on_vm() { case "$2" in cd*) return 1 ;; esac; _real_run_on_vm "$@"; }',
-                    "cannot hash remote my_data"),
+    "rename": (
+        'run_on_vm() { case "$2" in mv*) return 1 ;; esac; _real_run_on_vm "$@"; }',
+        "rename to my_data failed",
+    ),
+    "remote hash": (
+        'run_on_vm() { case "$2" in cd*) return 1 ;; esac; _real_run_on_vm "$@"; }',
+        "cannot hash remote my_data",
+    ),
     "config": ("copy_to_vm() { return 1; }", "HPO config transfer FAILED"),
 }
 
@@ -223,7 +276,9 @@ def test_send_dataset_fails_at_each_stage(tmp_path, stage):
     override, message = STAGE_FAILURES[stage]
     keep_real = 'eval "_real_run_on_vm() $(declare -f run_on_vm | tail -n +2)"'
 
-    result = _run_in(f'{keep_real}\n{override}\nsend_dataset host 1; echo "RC=$?"', vmhome, tmp_path)
+    result = _run_in(
+        f'{keep_real}\n{override}\nsend_dataset host 1; echo "RC=$?"', vmhome, tmp_path
+    )
 
     assert "RC=1" in result.stdout
     assert message in result.stderr
@@ -232,7 +287,7 @@ def test_send_dataset_fails_at_each_stage(tmp_path, stage):
 
 def test_transport_wrappers_pass_recursive_copy_and_detached_ssh(tmp_path):
     arglog = tmp_path / "args.log"
-    snippet = f'''
+    snippet = f"""
 PASSWORD=pw
 ARGS="-o X=1 -q"
 sshpass() {{ printf '%s|' "$@" >> '{arglog}'; printf '\\n' >> '{arglog}'; echo remote-out; }}
@@ -240,13 +295,17 @@ copy_dir_to_vm user@host data/ds/node_1 "~/flexfl/data/ds"
 echo "COPY=$?"
 out="$(run_on_vm user@host "cd ~/x && ls")"
 echo "RUN=$? OUT=$out"
-'''
-    result = subprocess.run(["bash", "-c", f"source '{SCRIPT}'\n{snippet}"], capture_output=True, text=True)
+"""
+    result = subprocess.run(
+        ["bash", "-c", f"source '{SCRIPT}'\n{snippet}"], capture_output=True, text=True
+    )
 
     assert "COPY=0" in result.stdout
     assert "RUN=0 OUT=remote-out" in result.stdout
     scp_call, ssh_call = arglog.read_text().splitlines()
-    assert scp_call == "-p|pw|scp|-o|X=1|-q|-r|data/ds/node_1|user@host:~/flexfl/data/ds|"
+    assert (
+        scp_call == "-p|pw|scp|-o|X=1|-q|-r|data/ds/node_1|user@host:~/flexfl/data/ds|"
+    )
     assert ssh_call == "-p|pw|ssh|-n|-o|X=1|-q|user@host|cd ~/x && ls|"
 
 
@@ -257,20 +316,23 @@ def _main_setup(tmp_path, ips_text):
     _local_partition(tmp_path, 1, TRAIN)
 
 
-@pytest.mark.parametrize("failing,count", [
-    ("10.0.0.1", 1),
-    ("10.0.0.2", 1),
-    ("10.0.0.*", 2),
-])
+@pytest.mark.parametrize(
+    "failing,count",
+    [
+        ("10.0.0.1", 1),
+        ("10.0.0.2", 1),
+        ("10.0.0.*", 2),
+    ],
+)
 def test_main_exits_nonzero_when_any_vm_fails(tmp_path, failing, count):
     vmhome = tmp_path / "vmhome"
     _main_setup(tmp_path, "10.0.0.1\n10.0.0.2\n")
-    failing_copy = f'''
+    failing_copy = f"""
 copy_dir_to_vm() {{
     case "$1" in *@{failing}) return 1 ;; esac
     cp -R "$2" "$VMHOME/${{1#*@}}/${{3#\\~/}}/"
 }}
-'''
+"""
 
     result = _run_in(failing_copy + "main -d ds -f ips.txt", vmhome, tmp_path)
 
@@ -287,8 +349,12 @@ def test_main_sends_each_partition_to_its_vm(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert "Dataset setup completed!" in result.stdout
-    assert (_vm_data(vmhome, "10.0.0.1") / "my_data" / "x_val.npy").read_bytes() == b"val-x"
-    assert (_vm_data(vmhome, "10.0.0.2") / "my_data" / "x_train.npy").read_bytes() == b"fresh-x"
+    assert (
+        _vm_data(vmhome, "10.0.0.1") / "my_data" / "x_val.npy"
+    ).read_bytes() == b"val-x"
+    assert (
+        _vm_data(vmhome, "10.0.0.2") / "my_data" / "x_train.npy"
+    ).read_bytes() == b"fresh-x"
 
 
 @pytest.mark.parametrize("ips_text", ["", "# only a comment\n\n"])
@@ -317,6 +383,6 @@ def test_main_rejects_unsafe_dataset_name_before_touching_vms(tmp_path):
 
 def test_run_on_vm_double_expands_only_unquoted_tilde(tmp_path):
     vmhome = tmp_path / "vmhome"
-    result = _run_in('run_on_vm user@host \'echo ~/a "~/b"\'', vmhome, tmp_path)
+    result = _run_in("run_on_vm user@host 'echo ~/a \"~/b\"'", vmhome, tmp_path)
 
     assert result.stdout.strip() == f"{vmhome}/host/a ~/b"

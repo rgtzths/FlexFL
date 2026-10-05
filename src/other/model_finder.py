@@ -1,13 +1,16 @@
-import optuna
-import tensorflow as tf
-import numpy as np
 import json
 from pathlib import Path
+
+import numpy as np
+import optuna
+import tensorflow as tf
+
+from flexfl.builtins.DatasetABC import DatasetABC
+from flexfl.builtins.FederatedABC import smape
 from flexfl.datasets.Benchmark import Benchmark
 
-import os
-
 BATCHSIZE = 2560
+
 
 def create_model(trial, n_classes):
     # We optimize the numbers of layers, their units and weight decay parameter.
@@ -26,7 +29,11 @@ def create_model(trial, n_classes):
         )
     activation = "linear" if n_classes == 1 else "softmax"
     model.add(
-        tf.keras.layers.Dense(n_classes, kernel_regularizer=tf.keras.regularizers.l2(weight_decay), activation=activation)
+        tf.keras.layers.Dense(
+            n_classes,
+            kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+            activation=activation,
+        )
     )
     return model
 
@@ -38,12 +45,16 @@ def create_optimizer(trial):
     optimizer_selected = trial.suggest_categorical("optimizer", optimizer_options)
 
     kwargs["learning_rate"] = trial.suggest_float(
-            f"{optimizer_selected}_learning_rate", 1e-5, 1e-1, log=True
-        )
-    kwargs["weight_decay"] = trial.suggest_float(f"{optimizer_selected}_weight_decay", 0.85, 0.99)
+        f"{optimizer_selected}_learning_rate", 1e-5, 1e-1, log=True
+    )
+    kwargs["weight_decay"] = trial.suggest_float(
+        f"{optimizer_selected}_weight_decay", 0.85, 0.99
+    )
 
     if optimizer_selected == "RMSprop":
-        kwargs["momentum"] = trial.suggest_float("rmsprop_momentum", 1e-5, 1e-1, log=True)
+        kwargs["momentum"] = trial.suggest_float(
+            "rmsprop_momentum", 1e-5, 1e-1, log=True
+        )
 
     optimizer = getattr(tf.optimizers, optimizer_selected)(**kwargs)
     return optimizer
@@ -56,9 +67,7 @@ def learn(model, optimizer, loss_fn, eval_fn, dataset, mode="eval"):
 
             loss_value = loss_fn(labels, logits)
             if mode == "eval":
-                eval_fn(
-                    labels, logits
-                )
+                eval_fn(labels, logits)
             else:
                 grads = tape.gradient(loss_value, model.variables)
                 optimizer.apply_gradients(zip(grads, model.variables))
@@ -66,18 +75,27 @@ def learn(model, optimizer, loss_fn, eval_fn, dataset, mode="eval"):
 
 def get_dataset(name):
 
-    ds = Benchmark(data_name=name)
+    ds = Benchmark(data_name=name, data_folder="_data")
     try:
+        ds.check_scaled_cache()
         x_train, y_train = ds.load_data("train")
         x_val, y_val = ds.load_data("val")
-    except Exception:
+    except FileNotFoundError:
         ds.preprocess(0.15, 0.15)
         x_train, y_train = ds.load_data("train")
         x_val, y_val = ds.load_data("val")
 
+    target = None
     if "clf" in name:
-        y_train = tf.keras.utils.to_categorical(y_train, num_classes=ds.metadata["output_size"])
-        y_val = tf.keras.utils.to_categorical(y_val, num_classes=ds.metadata["output_size"])
+        y_train = tf.keras.utils.to_categorical(
+            y_train, num_classes=ds.metadata["output_size"]
+        )
+        y_val = tf.keras.utils.to_categorical(
+            y_val, num_classes=ds.metadata["output_size"]
+        )
+    else:
+        target = ds.target_stats()
+        y_train = ((y_train - target["mean"]) / target["scale"]).astype(np.float32)
 
     train_ds = tf.data.Dataset.from_tensor_slices((x_train, y_train))
     train_ds = train_ds.shuffle(x_train.shape[0]).batch(BATCHSIZE)
@@ -85,17 +103,30 @@ def get_dataset(name):
     val_ds = tf.data.Dataset.from_tensor_slices((x_val, y_val))
     val_ds = val_ds.shuffle(x_val.shape[0]).batch(BATCHSIZE)
 
-    return train_ds, val_ds, ds.metadata["output_size"]
+    return train_ds, val_ds, ds.metadata["output_size"], target
+
 
 def objective(trial, dataset_name, epochs):
 
-    train_ds, valid_ds, n_classes = get_dataset(dataset_name)
+    train_ds, valid_ds, n_classes, target = get_dataset(dataset_name)
 
     # Build model and optimizer.
     model = create_model(trial, n_classes)
     optimizer = create_optimizer(trial)
-    loss_fn = tf.keras.losses.MeanSquaredError() if n_classes == 1 else tf.keras.losses.CategoricalCrossentropy()
-    eval_fn = tf.keras.metrics.MeanAbsolutePercentageError() if n_classes == 1 else tf.keras.metrics.F1Score(average = "weighted")
+    loss_fn = (
+        tf.keras.losses.MeanSquaredError()
+        if n_classes == 1
+        else tf.keras.losses.CategoricalCrossentropy()
+    )
+    if target is not None:
+        labels, logits = [], []
+
+        def eval_fn(batch_labels, batch_logits):
+            labels.append(batch_labels)
+            logits.append(batch_logits)
+
+    else:
+        eval_fn = tf.keras.metrics.F1Score(average="weighted")
 
     # Training and validating cycle.
     with tf.device("/gpu:0"):
@@ -105,6 +136,11 @@ def objective(trial, dataset_name, epochs):
         learn(model, optimizer, loss_fn, eval_fn, valid_ds, "eval")
 
     # Return last validation accuracy.
+    if target is not None:
+        return smape(
+            np.concatenate(labels),
+            DatasetABC.unscale_target(np.concatenate(logits), target),
+        )
     return eval_fn.result()
 
 
@@ -117,13 +153,18 @@ if __name__ == "__main__":
     result_folder = Path(result_folder)
     result_folder.mkdir(parents=True, exist_ok=True)
 
-
     for dataset in datasets_info["splits"]:
-        print(dataset['config'])
+        print(dataset["config"])
         result_file = result_folder / f"{dataset['config']}.json"
 
-        study = optuna.create_study(direction="maximize") if "clf" in dataset["config"] else optuna.create_study(direction="minimize")
-        study.optimize(lambda trial: objective(trial, dataset["config"], epochs), n_trials=trials)
+        study = (
+            optuna.create_study(direction="maximize")
+            if "clf" in dataset["config"]
+            else optuna.create_study(direction="minimize")
+        )
+        study.optimize(
+            lambda trial: objective(trial, dataset["config"], epochs), n_trials=trials
+        )
 
         print("Number of finished trials: ", len(study.trials))
 

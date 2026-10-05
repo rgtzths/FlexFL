@@ -35,6 +35,35 @@ class _Dataset(DatasetABC):
         pass
 
 
+class _Regression(_Dataset):
+
+    @property
+    def is_classification(self) -> bool:
+        return False
+
+
+def _regression_raw(n=403):
+    x, _ = _raw(n)
+    y = np.random.default_rng(42).normal(100.0, 12.0, n)
+    return x, y
+
+
+def _regression_cache(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    ds = _Regression()
+    x, y = _regression_raw()
+    ds.split_save(x, y, 0.2, 0.2)
+    return ds
+
+
+def _raw_partitions(ds, distribution, workers=4):
+    if distribution == "iid":
+        return ds.division_iid(workers)
+    if distribution == "non_iid":
+        return ds.division_non_iid(workers, 0.9)
+    return ds.division_non_iid_dirichlet(workers, 0.5)
+
+
 def _isolate(monkeypatch, tmp_path):
     metadata_dir = tmp_path / "_metadata"
     metadata_dir.mkdir()
@@ -290,3 +319,164 @@ def test_benchmark_preprocess_saves_standardized_splits(monkeypatch, tmp_path):
     assert np.abs(train).max() < 10
     np.testing.assert_allclose(train[:, :2].std(axis=0), 1.0)
     assert (cache / SCALING).is_file()
+
+
+def test_regression_split_save_records_train_target_statistics(monkeypatch, tmp_path):
+    ds = _regression_cache(monkeypatch, tmp_path)
+    x, y = _regression_raw()
+    raw = ds.split_data(x, y, 0.2, 0.2)
+    cache = _cache(tmp_path, ds)
+    stats = json.loads((cache / SCALING).read_text())
+    assert "target" in stats
+    assert stats["target"] == {
+        "fitted_on": "train",
+        "n_samples": len(raw[1]),
+        "mean": pytest.approx(raw[1].mean()),
+        "scale": pytest.approx(raw[1].std()),
+    }
+    for index, split in enumerate(("train", "val", "test")):
+        np.testing.assert_array_equal(
+            np.load(cache / f"y_{split}.npy"), raw[2 * index + 1]
+        )
+
+
+def test_classification_split_save_records_no_target(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    ds = _Dataset()
+    ds.split_save(*_raw(), 0.2, 0.2)
+    stats = json.loads((_cache(tmp_path, ds) / SCALING).read_text())
+    assert "target" in stats
+    assert stats["target"] is None
+
+
+@pytest.mark.parametrize("distribution", ("iid", "non_iid", "dirichlet"))
+def test_regression_division_standardizes_worker_targets(
+    monkeypatch, tmp_path, distribution
+):
+    ds = _regression_cache(monkeypatch, tmp_path)
+    cache = _cache(tmp_path, ds)
+    train_y = np.load(cache / "y_train.npy")
+    raw_x, raw_y = _raw_partitions(ds, distribution)
+    ds.data_division(num_workers=4, distribution=distribution)
+    for worker in range(4):
+        node = cache.parent / f"node_{worker + 1}"
+        np.testing.assert_array_equal(np.load(node / "x_train.npy"), raw_x[worker])
+        np.testing.assert_allclose(
+            np.load(node / "y_train.npy"),
+            (raw_y[worker] - train_y.mean()) / train_y.std(),
+        )
+    if distribution != "non_iid":
+        assert {tuple(row) for row in np.concatenate(raw_x)} == {
+            tuple(row) for row in np.load(cache / "x_train.npy")
+        }
+    else:
+        assert sum(map(len, raw_y)) < len(train_y)
+    np.testing.assert_array_equal(
+        np.load(cache.parent / "node_0" / "y_val.npy"), np.load(cache / "y_val.npy")
+    )
+
+
+def test_unscale_target_inverts_worker_standardization(monkeypatch, tmp_path):
+    ds = _regression_cache(monkeypatch, tmp_path)
+    cache = _cache(tmp_path, ds)
+    _, raw_y = _raw_partitions(ds, "iid")
+    ds.data_division(num_workers=4, distribution="iid")
+    node = cache.parent / "node_1"
+    target = json.loads((node / "target_scaling.json").read_text())
+    np.testing.assert_allclose(
+        DatasetABC.unscale_target(np.load(node / "y_train.npy"), target), raw_y[0]
+    )
+
+
+@pytest.mark.parametrize("distribution", ("iid", "non_iid", "dirichlet"))
+def test_regression_partitions_match_raw_division(monkeypatch, tmp_path, distribution):
+    ds = _regression_cache(monkeypatch, tmp_path)
+    raw_x, _ = _raw_partitions(ds, distribution)
+    ds.data_division(num_workers=4, distribution=distribution)
+    for worker in range(4):
+        np.testing.assert_array_equal(
+            np.load(_cache(tmp_path, ds).parent / f"node_{worker + 1}" / "x_train.npy"),
+            raw_x[worker],
+        )
+
+
+def test_regression_worker_holdouts_are_standardized(monkeypatch, tmp_path):
+    ds = _regression_cache(monkeypatch, tmp_path)
+    cache = _cache(tmp_path, ds)
+    train_y = np.load(cache / "y_train.npy")
+    raw_x, raw_y = ds.division_iid(2)
+    ds.data_division(num_workers=2, val_size=0.2, test_size=0.2, distribution="iid")
+    for worker in range(2):
+        expected = ds.split_data(raw_x[worker], raw_y[worker], 0.2, 0.2)
+        for index, split in enumerate(("train", "val", "test")):
+            node = cache.parent / f"node_{worker + 1}"
+            np.testing.assert_array_equal(
+                np.load(node / f"x_{split}.npy"), expected[2 * index]
+            )
+            np.testing.assert_allclose(
+                np.load(node / f"y_{split}.npy"),
+                (expected[2 * index + 1] - train_y.mean()) / train_y.std(),
+            )
+
+
+@pytest.mark.parametrize("target", ({}, {"mean": 1.0, "scale": 0.0}, None))
+def test_division_refuses_invalid_target_statistics(monkeypatch, tmp_path, target):
+    ds = _regression_cache(monkeypatch, tmp_path)
+    cache = _cache(tmp_path, ds)
+    node = cache.parent / "node_1"
+    node.mkdir()
+    sentinel = node / "previous.txt"
+    sentinel.write_text("previous partition")
+    (cache / SCALING).write_text(json.dumps({"target": target}))
+    with pytest.raises(FileNotFoundError, match="flexfl-preprocess"):
+        ds.data_division(num_workers=2)
+    assert sentinel.read_text() == "previous partition"
+
+
+def test_node_folders_carry_target_statistics(monkeypatch, tmp_path):
+    ds = _regression_cache(monkeypatch, tmp_path)
+    cache = _cache(tmp_path, ds)
+    train_y = np.load(cache / "y_train.npy")
+    ds.data_division(num_workers=2)
+    for worker in range(3):
+        path = cache.parent / f"node_{worker}" / "target_scaling.json"
+        assert path.is_file()
+        target = json.loads(path.read_text())
+        assert target["standardized"] is (worker != 0)
+        assert target["mean"] == pytest.approx(train_y.mean())
+        assert target["scale"] == pytest.approx(train_y.std())
+        ds.data_path = str(path.parent)
+        assert ds.target_stats() == target
+
+
+def test_division_refuses_regression_cache_without_target(monkeypatch, tmp_path):
+    ds = _regression_cache(monkeypatch, tmp_path)
+    cache = _cache(tmp_path, ds)
+    (cache / SCALING).write_text('{"scaler": "StandardScaler"}')
+    node = cache.parent / "node_1"
+    node.mkdir()
+    sentinel = node / "previous.txt"
+    sentinel.write_text("previous partition")
+    with pytest.raises(FileNotFoundError, match="flexfl-preprocess"):
+        ds.data_division(num_workers=2)
+    assert sentinel.read_text() == "previous partition"
+
+
+def test_target_stats_requires_node_file_off_cache(monkeypatch, tmp_path):
+    ds = _regression_cache(monkeypatch, tmp_path)
+    ds.data_path = str(_cache(tmp_path, ds).parent / "node_0")
+    with pytest.raises(FileNotFoundError, match="flexfl-division"):
+        ds.target_stats()
+
+
+def test_constant_target_uses_unit_scale(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    ds = _Regression()
+    assert ds.fit_target(np.full(7, 123.0)) == {
+        "fitted_on": "train",
+        "n_samples": 7,
+        "mean": 123.0,
+        "scale": 1.0,
+    }
+    with pytest.raises(ValueError, match="not finite"):
+        ds.fit_target(np.array([1.0, np.nan]))
