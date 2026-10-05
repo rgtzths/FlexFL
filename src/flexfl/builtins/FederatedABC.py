@@ -22,6 +22,7 @@ from flexfl.builtins.MLFrameworkABC import MLFrameworkABC
 from flexfl.builtins.WorkerManager import WorkerManager
 
 RESULTS_FOLDER = "results"
+MODEL_TARGET_FILE = "model_target_scaling.json"
 
 METRICS = {"classification": ["mcc", "acc", "f1"], "regression": ["mape", "mse", "mae"]}
 
@@ -106,12 +107,20 @@ class FederatedABC(ABC):
         self.check_early_stop_args()
         self.setup_metrics()
         self.setup_nodes()
-        if self.is_master and not self.is_classification:
-            self.target_stats = self.ml.dataset.target_stats()
-            if self.target_stats.get("standardized"):
+        if self.is_master is not None and not self.is_classification:
+            target = self.ml.dataset.target_stats()
+            if self.is_master:
+                if target.get("standardized"):
+                    raise ValueError(
+                        f"{self.ml.dataset.name}: the master's folder holds "
+                        f"standardized targets; it must validate on node_0, whose "
+                        f"targets are raw."
+                    )
+                self.target_stats = target
+            elif target.get("standardized") is not True:
                 raise ValueError(
-                    f"{self.ml.dataset.name}: the master's folder holds standardized "
-                    f"targets; it must validate on node_0, whose targets are raw."
+                    f"{self.ml.dataset.name}: worker {self.id}'s folder holds raw "
+                    f"targets. Re-run flexfl-division and resend the dataset."
                 )
         self.setup_failure()
 
@@ -215,7 +224,7 @@ class FederatedABC(ABC):
             self.ml.set_weights(self.best_weights)
             self.ml.save_model(f"{self.base_path}/model")
             if self.target_stats is not None:
-                with open(f"{self.base_path}/model_target_scaling.json", "w") as f:
+                with open(f"{self.base_path}/{MODEL_TARGET_FILE}", "w") as f:
                     json.dump(self.target_stats, f, indent=4)
         self.wm.c.close()
         Logger.end()

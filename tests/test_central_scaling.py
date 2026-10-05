@@ -376,6 +376,18 @@ def test_regression_division_standardizes_worker_targets(
     )
 
 
+def test_unscale_target_inverts_worker_standardization(monkeypatch, tmp_path):
+    ds = _regression_cache(monkeypatch, tmp_path)
+    cache = _cache(tmp_path, ds)
+    _, raw_y = _raw_partitions(ds, "iid")
+    ds.data_division(num_workers=4, distribution="iid")
+    node = cache.parent / "node_1"
+    target = json.loads((node / "target_scaling.json").read_text())
+    np.testing.assert_allclose(
+        DatasetABC.unscale_target(np.load(node / "y_train.npy"), target), raw_y[0]
+    )
+
+
 @pytest.mark.parametrize("distribution", ("iid", "non_iid", "dirichlet"))
 def test_regression_partitions_match_raw_division(monkeypatch, tmp_path, distribution):
     ds = _regression_cache(monkeypatch, tmp_path)

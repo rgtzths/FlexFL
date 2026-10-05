@@ -57,6 +57,8 @@ function send_dataset {
     local required="x_train.npy y_train.npy"
     local f expected actual
     [ "$NODE_ID" -eq 0 ] && required="x_val.npy y_val.npy"
+    grep -q '"target": {' "data/$DATASET/_data/scaling.json" 2>/dev/null &&
+        required="$required target_scaling.json"
     echo "Sending dataset $DATASET/node_$NODE_ID to $IP..."
     for f in $required; do
         if [ ! -f "$src/$f" ]; then

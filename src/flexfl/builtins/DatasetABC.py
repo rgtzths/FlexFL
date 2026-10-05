@@ -218,16 +218,22 @@ class DatasetABC(ABC):
             and scale > 0
         )
 
+    def load_target(self, path, key=None):
+        target = None
+        if path.is_file():
+            with open(path) as file:
+                target = json.load(file)
+            if key is not None:
+                target = target.get(key)
+        return target if self.valid_target(target) else None
+
     def target_stats(self):
         if self.is_classification:
             return None
         if Path(self.data_path) != Path(self.default_folder):
             path = Path(self.data_path) / TARGET_FILE
-            target = None
-            if path.is_file():
-                with open(path) as file:
-                    target = json.load(file)
-            if not self.valid_target(target):
+            target = self.load_target(path)
+            if target is None:
                 raise FileNotFoundError(
                     f"{self.name}: {path} is missing or invalid, so regression "
                     f"predictions cannot be de-standardized. Re-run flexfl-division "
@@ -235,11 +241,8 @@ class DatasetABC(ABC):
                 )
             return target
         path = Path(self.default_folder) / SCALING_FILE
-        target = None
-        if path.is_file():
-            with open(path) as file:
-                target = json.load(file).get("target")
-        if not self.valid_target(target):
+        target = self.load_target(path, "target")
+        if target is None:
             raise FileNotFoundError(
                 f"{self.name}: {path} has no valid target statistics. Re-run "
                 f"flexfl-preprocess for this dataset."
@@ -260,9 +263,7 @@ class DatasetABC(ABC):
             )
         if self.is_classification:
             return
-        with open(path) as file:
-            target = json.load(file).get("target")
-        if not self.valid_target(target):
+        if self.load_target(path, "target") is None:
             raise FileNotFoundError(
                 f"{self.name}: {path} has no valid target statistics, so its "
                 f"regression targets cannot be standardized. Re-run "

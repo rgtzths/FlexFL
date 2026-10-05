@@ -66,10 +66,21 @@ def test_regression_master_loads_node_target_statistics(build_master):
     assert f.ml.dataset.data_path == f"{f.ml.dataset.base_path}/node_0"
 
 
-def test_worker_does_not_load_target_statistics(build_master):
-    f, _ = build_master(node_id=1)
-    f.ml.dataset.target_stats.assert_not_called()
+def test_regression_worker_accepts_standardized_targets(build_master):
+    f, _ = build_master(node_id=1, standardized=True)
+    f.ml.dataset.target_stats.assert_called_once_with()
     assert f.is_master is False
+    assert f.target_stats is None
+
+
+def test_regression_worker_refuses_raw_targets(build_master):
+    with pytest.raises(ValueError, match="worker 1's folder holds raw targets"):
+        build_master(node_id=1, standardized=False)
+
+
+def test_classification_worker_skips_target_statistics(build_master):
+    f, _ = build_master(node_id=1, classification=True)
+    f.ml.dataset.target_stats.assert_not_called()
 
 
 def test_master_refuses_standardized_validation_targets(build_master):
