@@ -13,6 +13,7 @@ from sklearn.model_selection import train_test_split
 METADATA_FOLDER = Path(__file__).parent.parent / "datasets/_metadata"
 DATA_FOLDER = "data"
 SCALING_FILE = "scaling.json"
+TARGET_FILE = "target_scaling.json"
 
 
 class DatasetABC(ABC):
@@ -149,6 +150,7 @@ class DatasetABC(ABC):
                 f"{self.name}: scaler {type(scaler).__name__} exposes no mean_/scale_, "
                 f"so {SCALING_FILE} cannot record the fitted statistics."
             )
+        target = None if self.is_classification else self.fit_target(y_train)
         (Path(self.data_path) / SCALING_FILE).unlink(missing_ok=True)
         self.save_data(x_train, y_train, "train")
         self.save_data(x_val, y_val, "val")
@@ -159,9 +161,9 @@ class DatasetABC(ABC):
             "test": f"{test_size*100:.2f}%: {x_test.shape[0]}",
         }
         self.save_metadata()
-        self.save_scaling(scaler, x_train.shape[0])
+        self.save_scaling(scaler, x_train.shape[0], target)
 
-    def save_scaling(self, scaler, n_samples):
+    def save_scaling(self, scaler, n_samples, target=None):
         # Keep this write last and atomic: the sweep and check_scaled_cache treat the
         # file as proof that the whole cache was rebuilt and scaled.
         stats = {
@@ -170,6 +172,7 @@ class DatasetABC(ABC):
             "n_samples": int(n_samples),
             "mean": scaler.mean_.tolist(),
             "scale": scaler.scale_.tolist(),
+            "target": target,
         }
         path = Path(self.data_path) / SCALING_FILE
         tmp = path.with_name(path.name + ".tmp")
@@ -180,12 +183,90 @@ class DatasetABC(ABC):
         finally:
             tmp.unlink(missing_ok=True)
 
+    def fit_target(self, y_train):
+        y = np.asarray(y_train, dtype=np.float64)
+        mean = float(y.mean())
+        scale = float(y.std())
+        if not (np.isfinite(mean) and np.isfinite(scale)):
+            raise ValueError(
+                f"{self.name}: the training targets are not finite, so they cannot "
+                f"be standardized."
+            )
+        if scale == 0.0:
+            scale = 1.0
+        return {
+            "fitted_on": "train",
+            "n_samples": int(y.shape[0]),
+            "mean": mean,
+            "scale": scale,
+        }
+
+    @staticmethod
+    def unscale_target(values, target):
+        return np.asarray(values, dtype=np.float64) * target["scale"] + target["mean"]
+
+    @staticmethod
+    def valid_target(target):
+        if not isinstance(target, dict):
+            return False
+        mean, scale = target.get("mean"), target.get("scale")
+        return (
+            isinstance(mean, (int, float))
+            and isinstance(scale, (int, float))
+            and np.isfinite(mean)
+            and np.isfinite(scale)
+            and scale > 0
+        )
+
+    def target_stats(self):
+        if self.is_classification:
+            return None
+        if Path(self.data_path) != Path(self.default_folder):
+            path = Path(self.data_path) / TARGET_FILE
+            target = None
+            if path.is_file():
+                with open(path) as file:
+                    target = json.load(file)
+            if not self.valid_target(target):
+                raise FileNotFoundError(
+                    f"{self.name}: {path} is missing or invalid, so regression "
+                    f"predictions cannot be de-standardized. Re-run flexfl-division "
+                    f"for this dataset."
+                )
+            return target
+        path = Path(self.default_folder) / SCALING_FILE
+        target = None
+        if path.is_file():
+            with open(path) as file:
+                target = json.load(file).get("target")
+        if not self.valid_target(target):
+            raise FileNotFoundError(
+                f"{self.name}: {path} has no valid target statistics. Re-run "
+                f"flexfl-preprocess for this dataset."
+            )
+        return target
+
+    def save_target(self, target, standardized):
+        with open(Path(self.data_path) / TARGET_FILE, "w") as file:
+            json.dump({**target, "standardized": standardized}, file, indent=4)
+
     def check_scaled_cache(self):
-        if not (Path(self.default_folder) / SCALING_FILE).is_file():
+        path = Path(self.default_folder) / SCALING_FILE
+        if not path.is_file():
             raise FileNotFoundError(
                 f"{self.name}: {self.default_folder} has no {SCALING_FILE}, so its "
                 f"splits were not centrally scaled. Re-run flexfl-preprocess for "
                 f"this dataset before dividing it."
+            )
+        if self.is_classification:
+            return
+        with open(path) as file:
+            target = json.load(file).get("target")
+        if not self.valid_target(target):
+            raise FileNotFoundError(
+                f"{self.name}: {path} has no valid target statistics, so its "
+                f"regression targets cannot be standardized. Re-run "
+                f"flexfl-preprocess for this dataset before dividing it."
             )
 
     def save_features(self, features):
@@ -206,7 +287,9 @@ class DatasetABC(ABC):
             for file in folder.glob("*"):
                 file.unlink()
             folder.rmdir()
-        self.division_master()
+        self.data_path = self.default_folder
+        target = self.target_stats()
+        self.division_master(target)
 
         if distribution == "iid":
             x, y = self.division_iid(num_workers)
@@ -223,13 +306,15 @@ class DatasetABC(ABC):
                     f"reduce num_workers or adjust distribution_percentage/alpha for "
                     f"this dataset."
                 )
-            self.division_worker(x[i], y[i], i + 1, val_size, test_size)
+            self.division_worker(x[i], y[i], i + 1, val_size, test_size, target)
 
-    def division_master(self):
+    def division_master(self, target=None):
         self.data_path = self.default_folder
         x, y = self.load_data("val")
         self.data_path = f"{self.base_path}/node_0"
         self.save_data(x, y, "val")
+        if target is not None:
+            self.save_target(target, standardized=False)
 
     def division_iid(self, num_workers):
         self.data_path = self.default_folder
@@ -478,7 +563,9 @@ class DatasetABC(ABC):
 
         return workers_x, workers_y
 
-    def division_worker(self, x, y, worker_id, val_size, test_size):
+    def division_worker(self, x, y, worker_id, val_size, test_size, target=None):
+        if target is not None:
+            y = (np.asarray(y, dtype=np.float64) - target["mean"]) / target["scale"]
         x_train, y_train, x_val, y_val, x_test, y_test = self.split_data(
             x, y, val_size, test_size
         )
@@ -488,6 +575,8 @@ class DatasetABC(ABC):
             self.save_data(x_val, y_val, "val")
         if test_size > 0:
             self.save_data(x_test, y_test, "test")
+        if target is not None:
+            self.save_target(target, standardized=True)
 
     def download_file(self, url):
         destination = Path(f"{self.default_folder}/temp.zip")

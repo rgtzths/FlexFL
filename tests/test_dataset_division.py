@@ -1,4 +1,5 @@
 import hashlib
+import json
 import random
 
 import numpy as np
@@ -60,7 +61,17 @@ def _build_dataset(
     ds.data_path = ds.default_folder
     ds.save_data(x_train, y_train, "train")
     ds.save_data(x_val, y_val, "val")
-    (tmp_path / "data" / ds.name / "_data" / "scaling.json").write_text("{}")
+    stats = {}
+    if dataset_cls is _RegressionDataset:
+        stats["target"] = {
+            "fitted_on": "train",
+            "n_samples": len(y_train),
+            "mean": float(y_train.mean()),
+            "scale": float(y_train.std()),
+        }
+    (tmp_path / "data" / ds.name / "_data" / "scaling.json").write_text(
+        json.dumps(stats)
+    )
     ds.data_path = ds.default_folder
     return ds
 

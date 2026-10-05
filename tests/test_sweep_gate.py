@@ -252,8 +252,8 @@ def _preprocess_flag(tmp_path, cached_files):
         (work / "scripts" / "dataset_division.sh").write_text(f'echo "$@" >> "{log}"\n')
         cache = work / "data" / DATA / "_data"
         cache.mkdir(parents=True)
-        for name in cached_files:
-            (cache / name).touch()
+        for name, content in cached_files.items():
+            (cache / name).write_text(content)
 
     _sweep(tmp_path, setup=setup)
     args = log.read_text().split()
@@ -263,10 +263,11 @@ def _preprocess_flag(tmp_path, cached_files):
 @pytest.mark.parametrize(
     "cached_files, expected",
     (
-        ((), "1"),
-        (("x_train.npy",), "1"),
-        ((SCALING_FILE,), "1"),
-        (("x_train.npy", SCALING_FILE), "0"),
+        ({}, "1"),
+        ({"x_train.npy": ""}, "1"),
+        ({SCALING_FILE: '{"target": null}'}, "1"),
+        ({"x_train.npy": "", SCALING_FILE: '{"scaler": "StandardScaler"}'}, "1"),
+        ({"x_train.npy": "", SCALING_FILE: '{"target": null}'}, "0"),
     ),
 )
 def test_sweep_rebuilds_a_cache_without_scaling_statistics(

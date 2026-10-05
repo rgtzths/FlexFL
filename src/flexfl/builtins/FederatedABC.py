@@ -52,6 +52,7 @@ class FederatedABC(ABC):
     # gradients set it True so cli/fl.py can reject incompatible ML backends
     # before any worker connects.
     REQUIRES_GRADIENTS: bool = False
+    target_stats = None
 
     def __init__(
         self,
@@ -105,6 +106,13 @@ class FederatedABC(ABC):
         self.check_early_stop_args()
         self.setup_metrics()
         self.setup_nodes()
+        if self.is_master and not self.is_classification:
+            self.target_stats = self.ml.dataset.target_stats()
+            if self.target_stats.get("standardized"):
+                raise ValueError(
+                    f"{self.ml.dataset.name}: the master's folder holds standardized "
+                    f"targets; it must validate on node_0, whose targets are raw."
+                )
         self.setup_failure()
 
     @abstractmethod
@@ -206,6 +214,9 @@ class FederatedABC(ABC):
         if self.is_master and self.best_weights is not None and self.save_model:
             self.ml.set_weights(self.best_weights)
             self.ml.save_model(f"{self.base_path}/model")
+            if self.target_stats is not None:
+                with open(f"{self.base_path}/model_target_scaling.json", "w") as f:
+                    json.dump(self.target_stats, f, indent=4)
         self.wm.c.close()
         Logger.end()
 
@@ -221,6 +232,8 @@ class FederatedABC(ABC):
         x = getattr(self.ml, f"x_{split}")
         y = getattr(self.ml, f"y_{split}")
         preds = self.ml.predict(x)
+        if self.target_stats is not None:
+            preds = self.ml.dataset.unscale_target(preds, self.target_stats)
         loss = self.ml.calculate_loss(y, preds)
         if self.is_classification:
             preds = np.argmax(preds, axis=1)
