@@ -63,6 +63,8 @@ uv run flexfl-preprocess -d Benchmark --data_name clf_num_bank-marketing -v 0.2 
 uv run flexfl-division   -d Benchmark --data_name clf_num_bank-marketing -n 8 -s iid
 ```
 
+Preprocessing fits the dataset's scaler on the training split only, applies it to train, val and test, and writes the fitted statistics to `data/<name>/_data/scaling.json` last. Division refuses a `_data` cache without `scaling.json`; re-run `flexfl-preprocess` for that dataset.
+
 Division strategies (`-s`):
 
 | Strategy | Description |
@@ -123,7 +125,7 @@ All scripts accept a `-f <ips_file>` flag to target a custom set of VMs. Run fro
 | Script | Usage |
 |---|---|
 | `scripts/setup_vms.sh` | `setup_vms.sh [-f <ips>]` — rsyncs FlexFL folder (excluding `data/`/`results/`), installs dependencies |
-| `scripts/dataset_division.sh` | `dataset_division.sh -d <dataset> -n <workers> -s <strategy> [-p <0\|1>]` — `-p 0` skips preprocessing |
+| `scripts/dataset_division.sh` | `dataset_division.sh -d <dataset> -n <workers> -s <strategy> [-p <0\|1>]` — `-p 0` skips preprocessing; division then fails if `data/<dataset>/_data` has no `scaling.json` |
 | `scripts/send_dataset.sh` | `send_dataset.sh -d <dataset> -f <ips>` |
 | `scripts/run_on_vms.sh` | `run_on_vms.sh [-f <ips>] <interval> <chance> [args]` — exits non-zero if the master-wait watchdog detects a stall (see `FLEXFL_STALL_TIMEOUT`/`FLEXFL_STALL_BACKSTOP`) |
 | `scripts/gather_results.sh` | `gather_results.sh [-f <ips>] [-o <output_dir>]` |

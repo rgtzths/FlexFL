@@ -186,7 +186,9 @@ def test_non_iid_default_seed_is_42(monkeypatch, tmp_path, num_workers):
             assert np.array_equal(default_worker, seeded_worker)
 
 
-def test_iid_and_dirichlet_partitions_are_unchanged(monkeypatch, tmp_path):
+def test_iid_and_dirichlet_partitions_match_the_scaled_cache_digests(
+    monkeypatch, tmp_path
+):
     ds = _build_dataset(monkeypatch, tmp_path, n_train=400, n_classes=4)
     ds.data_division(num_workers=3, distribution="iid")
     assert _partition_digest(tmp_path, ds, 3) == [

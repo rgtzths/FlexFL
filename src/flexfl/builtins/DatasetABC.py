@@ -144,17 +144,22 @@ class DatasetABC(ABC):
         x_train = scaler.fit_transform(x_train)
         x_val = scaler.transform(x_val)
         x_test = scaler.transform(x_test)
+        if not (hasattr(scaler, "mean_") and hasattr(scaler, "scale_")):
+            raise TypeError(
+                f"{self.name}: scaler {type(scaler).__name__} exposes no mean_/scale_, "
+                f"so {SCALING_FILE} cannot record the fitted statistics."
+            )
         (Path(self.data_path) / SCALING_FILE).unlink(missing_ok=True)
         self.save_data(x_train, y_train, "train")
         self.save_data(x_val, y_val, "val")
         self.save_data(x_test, y_test, "test")
-        self.save_scaling(scaler, x_train.shape[0])
         self.metadata["split"] = {
             "train": f"{(1-val_size-test_size)*100:.2f}%: {x_train.shape[0]}",
             "val": f"{val_size*100:.2f}%: {x_val.shape[0]}",
             "test": f"{test_size*100:.2f}%: {x_test.shape[0]}",
         }
         self.save_metadata()
+        self.save_scaling(scaler, x_train.shape[0])
 
     def save_scaling(self, scaler, n_samples):
         # Keep this write last and atomic: the sweep and check_scaled_cache treat the
@@ -168,9 +173,12 @@ class DatasetABC(ABC):
         }
         path = Path(self.data_path) / SCALING_FILE
         tmp = path.with_name(path.name + ".tmp")
-        with open(tmp, "w") as file:
-            json.dump(stats, file, indent=4)
-        os.replace(tmp, path)
+        try:
+            with open(tmp, "w") as file:
+                json.dump(stats, file, indent=4)
+            os.replace(tmp, path)
+        finally:
+            tmp.unlink(missing_ok=True)
 
     def check_scaled_cache(self):
         if not (Path(self.default_folder) / SCALING_FILE).is_file():
@@ -193,11 +201,11 @@ class DatasetABC(ABC):
         distribution_percentage=0.9,
         alpha=0.5,
     ):
+        self.check_scaled_cache()
         for folder in Path(self.base_path).glob("node_*"):
             for file in folder.glob("*"):
                 file.unlink()
             folder.rmdir()
-        self.check_scaled_cache()
         self.division_master()
 
         if distribution == "iid":

@@ -111,9 +111,9 @@ run_sweep() {
 
                         mkdir -p "$base"
                         # Preprocess on demand: only if this dataset's _data cache is absent
-                        # or predates central scaling (no scaling.json; division refuses it).
-                        # Preprocessing is strategy- and node-count-independent, so it runs
-                        # once per dataset.
+                        # (first time seen, or after a resume that cleared it). Preprocessing
+                        # is strategy- and node-count-independent, so it runs once per dataset.
+                        # Keep the scaling.json test: division refuses a cache without it.
                         pflag=0
                         [ -f "data/${data_name}/_data/x_train.npy" ] &&
                             [ -f "data/${data_name}/_data/scaling.json" ] || pflag=1

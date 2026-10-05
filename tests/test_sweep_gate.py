@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 from sample_hyperparameters import sample
 
+from flexfl.builtins.DatasetABC import SCALING_FILE
+
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "_sweep_common.sh"
 
 
@@ -263,8 +265,8 @@ def _preprocess_flag(tmp_path, cached_files):
     (
         ((), "1"),
         (("x_train.npy",), "1"),
-        (("scaling.json",), "1"),
-        (("x_train.npy", "scaling.json"), "0"),
+        ((SCALING_FILE,), "1"),
+        (("x_train.npy", SCALING_FILE), "0"),
     ),
 )
 def test_sweep_rebuilds_a_cache_without_scaling_statistics(

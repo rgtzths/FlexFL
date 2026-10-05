@@ -3,7 +3,7 @@ import json
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 import flexfl.builtins.DatasetABC as DatasetABC_module
 import flexfl.datasets.Benchmark as Benchmark_module
@@ -203,6 +203,65 @@ def test_division_refuses_a_cache_without_scaling_statistics(monkeypatch, tmp_pa
     with pytest.raises(FileNotFoundError, match="flexfl-preprocess"):
         ds.data_division(num_workers=2, distribution="iid")
     assert not (tmp_path / "data" / ds.name / "node_0").exists()
+
+
+def test_refused_division_keeps_the_previous_partitions(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    ds = _Dataset()
+    x, y = _raw()
+    ds.split_save(x, y, 0.2, 0.2)
+    ds.data_division(num_workers=2, distribution="iid")
+    node = tmp_path / "data" / ds.name / "node_1" / "x_train.npy"
+    before = np.load(node)
+    (_cache(tmp_path, ds) / SCALING).unlink()
+    with pytest.raises(FileNotFoundError, match="flexfl-preprocess"):
+        ds.data_division(num_workers=2, distribution="iid")
+    assert np.array_equal(np.load(node), before)
+
+
+def test_failed_statistics_write_leaves_no_marker(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    ds = _Dataset()
+    x, y = _raw()
+    ds.split_save(x, y, 0.2, 0.2)
+
+    def failing_replace(src, dst):
+        raise OSError("rename failed")
+
+    monkeypatch.setattr(DatasetABC_module.os, "replace", failing_replace)
+    with pytest.raises(OSError, match="rename failed"):
+        ds.split_save(x * 2.0, y, 0.2, 0.2)
+    assert sorted(p.name for p in _cache(tmp_path, ds).glob("scaling*")) == []
+
+
+def test_failed_metadata_write_leaves_no_marker(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    ds = _Dataset()
+    x, y = _raw()
+    ds.split_save(x, y, 0.2, 0.2)
+
+    def failing_metadata():
+        raise OSError("metadata write failed")
+
+    ds.save_metadata = failing_metadata
+    with pytest.raises(OSError, match="metadata write failed"):
+        ds.split_save(x * 2.0, y, 0.2, 0.2)
+    assert not (_cache(tmp_path, ds) / SCALING).exists()
+
+
+def test_scaler_without_statistics_is_refused_before_saving(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+
+    class _MinMax(_Dataset):
+        @property
+        def scaler(self):
+            return MinMaxScaler
+
+    ds = _MinMax()
+    x, y = _raw()
+    with pytest.raises(TypeError, match="MinMaxScaler"):
+        ds.split_save(x, y, 0.2, 0.2)
+    assert not _cache(tmp_path, ds).exists()
 
 
 @pytest.mark.parametrize("cls", (Benchmark, Housing, IOT_DNL, Slicing5g, TON_IOT, UNSW))
