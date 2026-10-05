@@ -60,6 +60,7 @@ def _build_dataset(
     ds.data_path = ds.default_folder
     ds.save_data(x_train, y_train, "train")
     ds.save_data(x_val, y_val, "val")
+    (tmp_path / "data" / ds.name / "_data" / "scaling.json").write_text("{}")
     ds.data_path = ds.default_folder
     return ds
 
@@ -189,13 +190,13 @@ def test_iid_and_dirichlet_partitions_are_unchanged(monkeypatch, tmp_path):
     ds = _build_dataset(monkeypatch, tmp_path, n_train=400, n_classes=4)
     ds.data_division(num_workers=3, distribution="iid")
     assert _partition_digest(tmp_path, ds, 3) == [
-        (134, "0c15626f387f"),
-        (133, "87d654e4cd4d"),
-        (133, "135f4200cf07"),
+        (134, "f16cb5e2482f"),
+        (133, "245254fbf402"),
+        (133, "3cc6773094d6"),
     ]
     ds.data_division(num_workers=3, distribution="dirichlet")
     assert _partition_digest(tmp_path, ds, 3) == [
-        (151, "1bdf0212272a"),
-        (184, "8251bcc941ac"),
-        (65, "7b0ac045b9fc"),
+        (151, "d2355b81c595"),
+        (184, "2f7184158bb2"),
+        (65, "c25af16ea91c"),
     ]

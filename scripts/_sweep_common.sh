@@ -111,10 +111,12 @@ run_sweep() {
 
                         mkdir -p "$base"
                         # Preprocess on demand: only if this dataset's _data cache is absent
-                        # (first time seen, or after a resume that cleared it). Preprocessing
-                        # is strategy- and node-count-independent, so it runs once per dataset.
+                        # or predates central scaling (no scaling.json; division refuses it).
+                        # Preprocessing is strategy- and node-count-independent, so it runs
+                        # once per dataset.
                         pflag=0
-                        [ -f "data/${data_name}/_data/x_train.npy" ] || pflag=1
+                        [ -f "data/${data_name}/_data/x_train.npy" ] &&
+                            [ -f "data/${data_name}/_data/scaling.json" ] || pflag=1
                         if ! bash scripts/dataset_division.sh -d "$data_name" -n "$total" -s "$strategy" -p "$pflag"; then
                             log_failure "dataset_division"
                             continue
