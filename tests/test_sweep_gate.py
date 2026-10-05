@@ -4,7 +4,10 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
 from sample_hyperparameters import sample
+
+from flexfl.builtins.DatasetABC import SCALING_FILE
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "_sweep_common.sh"
 
@@ -150,8 +153,10 @@ def _rep_dir(work, seed):
     return work / "results/iid" / COMBO / DATA / ALGO / f"rep_{SEEDS.index(seed) + 1}"
 
 
-def _sweep(tmp_path, *, run_rc="0", sampler=None, preseed=()):
+def _sweep(tmp_path, *, run_rc="0", sampler=None, preseed=(), setup=None):
     work, bin_dir = _stub_sweep_workdir(tmp_path)
+    if setup is not None:
+        setup(work)
     if sampler is None:
         sampler = (
             "import runpy\nimport sys\n"
@@ -238,3 +243,33 @@ def test_sampler_writing_no_file_does_not_mark_the_repeat_successful(tmp_path):
 
     assert ran == {}
     _assert_repeats_stay_retryable(work)
+
+
+def _preprocess_flag(tmp_path, cached_files):
+    log = tmp_path / "division.txt"
+
+    def setup(work):
+        (work / "scripts" / "dataset_division.sh").write_text(f'echo "$@" >> "{log}"\n')
+        cache = work / "data" / DATA / "_data"
+        cache.mkdir(parents=True)
+        for name in cached_files:
+            (cache / name).touch()
+
+    _sweep(tmp_path, setup=setup)
+    args = log.read_text().split()
+    return args[args.index("-p") + 1]
+
+
+@pytest.mark.parametrize(
+    "cached_files, expected",
+    (
+        ((), "1"),
+        (("x_train.npy",), "1"),
+        ((SCALING_FILE,), "1"),
+        (("x_train.npy", SCALING_FILE), "0"),
+    ),
+)
+def test_sweep_rebuilds_a_cache_without_scaling_statistics(
+    tmp_path, cached_files, expected
+):
+    assert _preprocess_flag(tmp_path, cached_files) == expected
