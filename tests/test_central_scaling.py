@@ -614,6 +614,21 @@ def test_constant_target_uses_unit_scale(monkeypatch, tmp_path):
         ds.fit_target(np.array([1.0, np.nan]))
 
 
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("clf_cat_albert", True),
+        ("clf_num_MiniBooNE", True),
+        ("reg_num_abalone", False),
+        ("Housing", False),
+        ("reg_cat_clfish", False),
+        ("clf", False),
+    ],
+)
+def test_is_clf_requires_the_clf_prefix(name, expected):
+    assert Benchmark_module.is_clf(name) is expected
+
+
 def test_is_clf_matches_previous_rule_on_every_known_name():
     metadata = Path(Benchmark_module.__file__).parent / "_metadata"
     names = {path.stem for path in metadata.glob("*.json")}

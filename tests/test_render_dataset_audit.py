@@ -275,3 +275,16 @@ def test_render_states_none_when_nothing_misses():
     assert "constant baseline on none either" in document
     assert "counted over train, val and test, for: none." in document
     assert "delete `data/<name>/_data` for none on any host" in document
+
+
+def test_render_pairs_each_dropped_dataset_with_its_count():
+    from render_dataset_audit import render
+
+    audit, sanity, sanity_prov, before, before_prov = _inputs()
+    audit["rows"][0]["n_all_sentinel_rows"] = 500
+    document = render(audit, sanity, sanity_prov, before, before_prov)
+    assert "for: clf_num_MiniBooNE (173), reg_num_synthetic (500)." in document
+    assert (
+        "delete `data/<name>/_data` for clf_num_MiniBooNE, reg_num_synthetic on any"
+        in document
+    )

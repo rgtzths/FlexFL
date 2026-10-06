@@ -210,7 +210,7 @@ def test_run_prepares_targets_and_caps_training_rows(monkeypatch, tmp_path, name
             self.fits = []
 
         def compile(self, **kwargs):
-            pass
+            self.compiled = kwargs
 
         def fit(self, x, y, **kwargs):
             self.fits.append((x.copy(), y.copy()))
@@ -224,14 +224,40 @@ def test_run_prepares_targets_and_caps_training_rows(monkeypatch, tmp_path, name
         return model
 
     monkeypatch.setattr(audit_central_sanity, "_net", net)
+    curve_inputs = []
+    train_curve = audit_central_sanity._train_curve
+
+    def spy(model, x_train, y_fit, x_val, y_val, clf, target):
+        curve_inputs.append((x_val, y_val))
+        return train_curve(model, x_train, y_fit, x_val, y_val, clf, target)
+
+    monkeypatch.setattr(audit_central_sanity, "_train_curve", spy)
     (tmp_path / f"{name}.json").write_text("{}")
     result = audit_central_sanity.run(name, "rev1", tmp_path)
     assert result["n_train_used"] == 50
+    assert np.isfinite(result["hgb"])
+    if clf:
+        assert result["constant"] == 0.0
+    else:
+        idx = np.random.default_rng(audit_central_sanity.SEED).choice(
+            80, 50, replace=False
+        )
+        baseline = np.full(20, data["y_train"][idx].mean())
+        assert result["constant"] == pytest.approx(
+            audit_central_sanity._smape(data["y_val"], baseline)
+        )
+    assert curve_inputs
+    for x_val, y_val in curve_inputs:
+        assert len(x_val) == 20
+        np.testing.assert_array_equal(y_val, data["y_val"])
     assert len(models) == len(audit_central_sanity.KINDS) * len(
         audit_central_sanity.LRS
     )
     for model in models:
         assert len(model.fits) == 1
+        assert model.compiled["loss"] == (
+            "sparse_categorical_crossentropy" if clf else "mse"
+        )
         for x_fit, y_fit in model.fits:
             assert len(x_fit) == len(y_fit) == 50
             if clf:
