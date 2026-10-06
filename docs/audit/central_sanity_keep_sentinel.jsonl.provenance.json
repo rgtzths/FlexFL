@@ -1,0 +1,37 @@
+{
+  "git_commit": "4092ac2490ee8f8d90642b78c95f916a0ffdddda",
+  "git_dirty": false,
+  "sources_sha256": {
+    "scripts/audit_common.py": "0e8a2d961ff4ba014fc74545d13cdcaf994ef6b4d6a8ca6a807ebc0c6a6a2986",
+    "scripts/audit_datasets.py": "dacc37a9627ca5f0cb1533d40156fb351b27ae24eac03ba23cee71c097e1a29e",
+    "scripts/audit_central_sanity.py": "4674eabbe35228e7c29e51442891ea3537ed5f05e710af6ba53fb0ea3a800499",
+    "scripts/render_dataset_audit.py": "dd55e16f9d626542776fe95ac6fe8755144c41d2ac52129ac07477baf577b18d",
+    "src/flexfl/datasets/Benchmark.py": "50b72c382fa48e16747a78b52e550c0473036d69abef221ff3a947506d09e693",
+    "src/flexfl/builtins/DatasetABC.py": "bcb5146fb430f3dd1fa252ef101b85678548ef98373f678e7cfeb4d0e570b2b9"
+  },
+  "hf_dataset": "inria-soda/tabular-benchmark",
+  "hf_revision": "8d0ff9103525b7e3579b180230fddb3186258301",
+  "val_size": 0.2,
+  "test_size": 0.2,
+  "versions": {
+    "numpy": "2.0.2",
+    "scipy": "1.15.2",
+    "scikit-learn": "1.6.1",
+    "datasets": "4.2.0"
+  },
+  "run_constants": {
+    "MAX_TRAIN": 100000,
+    "EPOCHS": 40,
+    "PATIENCE": 8,
+    "BATCH": 512,
+    "LRS": [
+      0.001,
+      0.0001
+    ],
+    "SEED": 42
+  },
+  "keep_sentinel_rows": true,
+  "hpo_sha256": {
+    "clf_num_MiniBooNE": "fdf98a4922affb79a9415ebf3508e030b1f7a9f32dd09358a06c132ff4682b08"
+  }
+}

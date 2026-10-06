@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -93,6 +94,15 @@ def _train_stats(raw_train):
     scale = raw_train.std(axis=0)
     scale[scale == 0] = 1.0
     return mean, scale
+
+
+def test_split_data_is_static(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    x, y = _raw(300)
+    expected = Benchmark(data_name="clf_num_synthetic").split_data(x, y, 0.2, 0.2)
+    actual = DatasetABC.split_data(x, y, 0.2, 0.2)
+    for observed, wanted in zip(actual, expected):
+        np.testing.assert_array_equal(observed, wanted)
 
 
 def test_split_save_scales_every_split_with_train_statistics(monkeypatch, tmp_path):
@@ -321,6 +331,128 @@ def test_benchmark_preprocess_saves_standardized_splits(monkeypatch, tmp_path):
     assert (cache / SCALING).is_file()
 
 
+def test_drop_sentinel_rows_keeps_rows_with_any_real_value():
+    x = np.array([[1.0, 2.0], [-999.0, -999.0], [-999.0, 5.0], [999.0, 9999.0]])
+    y = np.array([0, 1, 0, 1])
+    kept_x, kept_y = Benchmark_module.drop_sentinel_rows(x, y)
+    np.testing.assert_array_equal(kept_x, x[[0, 2, 3]])
+    np.testing.assert_array_equal(kept_y, y[[0, 2, 3]])
+
+
+def test_benchmark_preprocess_drops_all_sentinel_rows(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    n = 300
+    dropped = [3, 50, 51, 120, 200, 299]
+    x, _ = _raw(n)
+    y = np.arange(n, dtype=np.float64)
+    x[:, 1] = y
+    x[dropped] = -999.0
+    frame = pd.DataFrame(x, columns=["a", "b", "c"]).assign(target=y)
+
+    class _Hub:
+        def to_pandas(self):
+            return frame.copy()
+
+    monkeypatch.setattr(
+        Benchmark_module, "load_dataset", lambda *a, **kw: {"train": _Hub()}
+    )
+    ds = Benchmark(data_name="reg_num_synthetic")
+    ds.preprocess(0.2, 0.2)
+    cache = tmp_path / "data" / "reg_num_synthetic" / "_data"
+    ys = {s: np.load(cache / f"y_{s}.npy") for s in ("train", "val", "test")}
+    kept = sorted(set(range(n)) - set(dropped))
+    np.testing.assert_array_equal(np.sort(np.concatenate(list(ys.values()))), kept)
+    assert ds.metadata["samples"] == n - len(dropped)
+    for split, y_split in ys.items():
+        feature = np.load(cache / f"x_{split}.npy")[:, 1]
+        assert np.corrcoef(feature, y_split)[0, 1] == pytest.approx(1.0)
+
+
+def test_benchmark_preprocess_drops_all_sentinel_rows_for_classification(
+    monkeypatch, tmp_path
+):
+    _isolate(monkeypatch, tmp_path)
+    n = 300
+    dropped = [3, 50, 51, 120, 200, 299]
+    x, _ = _raw(n)
+    x[:, 1] = np.arange(n)
+    labels = np.where(np.arange(n) % 3 == 0, "yes", "no")
+    x[dropped] = -999.0
+    frame = pd.DataFrame(x, columns=["a", "b", "c"]).assign(label=labels)
+
+    class _Hub:
+        def to_pandas(self):
+            return frame.copy()
+
+    monkeypatch.setattr(
+        Benchmark_module, "load_dataset", lambda *a, **kw: {"train": _Hub()}
+    )
+    ds = Benchmark(data_name="clf_num_synthetic")
+    ds.preprocess(0.2, 0.2)
+    cache = _cache(tmp_path, ds)
+    stats = json.loads((cache / SCALING).read_text())
+    indices = []
+    for split in ("train", "val", "test"):
+        feature = np.load(cache / f"x_{split}.npy")[:, 1]
+        original = np.rint(feature * stats["scale"][1] + stats["mean"][1]).astype(int)
+        indices.extend(original.tolist())
+        saved_y = np.load(cache / f"y_{split}.npy")
+        np.testing.assert_array_equal(saved_y, (labels[original] == "yes").astype(int))
+    assert set(indices) == set(range(n)) - set(dropped)
+    assert ds.metadata["samples"] == 294
+
+
+def test_benchmark_preprocess_pins_hf_revision(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    x, y = _raw(300)
+    frame = pd.DataFrame(x, columns=["a", "b", "c"]).assign(
+        label=np.where(y == 1, "yes", "no")
+    )
+    calls = []
+
+    class _Hub:
+        def to_pandas(self):
+            return frame.copy()
+
+    def load(*args, **kwargs):
+        calls.append((args, kwargs))
+        return {"train": _Hub()}
+
+    monkeypatch.setattr(Benchmark_module, "load_dataset", load)
+    Benchmark(data_name="clf_num_synthetic").preprocess(0.2, 0.2)
+    assert calls == [
+        (
+            ("inria-soda/tabular-benchmark", "clf_num_synthetic"),
+            {"revision": "8d0ff9103525b7e3579b180230fddb3186258301"},
+        )
+    ]
+
+
+def test_load_raw_keeps_sentinel_rows_on_request(monkeypatch):
+    x, y = _raw(30)
+    x[[2, 21]] = -999.0
+    frame = pd.DataFrame(x, columns=["a", "b", "c"]).assign(target=y)
+
+    class _Hub:
+        def to_pandas(self):
+            return frame.copy()
+
+    monkeypatch.setattr(
+        Benchmark_module, "load_dataset", lambda *a, **kw: {"train": _Hub()}
+    )
+    assert hasattr(Benchmark_module, "load_raw")
+    raw_x, raw_y = Benchmark_module.load_raw(
+        "reg_num_synthetic", "rev1", keep_sentinel_rows=True
+    )
+    np.testing.assert_array_equal(raw_x, x)
+    np.testing.assert_array_equal(raw_y, y)
+    kept = np.ones(len(x), dtype=bool)
+    kept[[2, 21]] = False
+    filtered_x, filtered_y = Benchmark_module.load_raw("reg_num_synthetic", "rev1")
+    np.testing.assert_array_equal(filtered_x, x[kept])
+    np.testing.assert_array_equal(filtered_y, y[kept])
+
+
 def test_regression_split_save_records_train_target_statistics(monkeypatch, tmp_path):
     ds = _regression_cache(monkeypatch, tmp_path)
     x, y = _regression_raw()
@@ -480,3 +612,38 @@ def test_constant_target_uses_unit_scale(monkeypatch, tmp_path):
     }
     with pytest.raises(ValueError, match="not finite"):
         ds.fit_target(np.array([1.0, np.nan]))
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("clf_cat_albert", True),
+        ("clf_num_MiniBooNE", True),
+        ("reg_num_abalone", False),
+        ("Housing", False),
+        ("reg_cat_clfish", False),
+        ("clf", False),
+    ],
+)
+def test_is_clf_requires_the_clf_prefix(name, expected):
+    assert Benchmark_module.is_clf(name) is expected
+
+
+def test_is_clf_matches_previous_rule_on_every_known_name():
+    metadata = Path(Benchmark_module.__file__).parent / "_metadata"
+    names = {path.stem for path in metadata.glob("*.json")}
+    assert {"clf_num_MiniBooNE", "reg_num_abalone", "Housing"} <= names
+    for name in names:
+        assert Benchmark_module.is_clf(name) == ("clf" in name)
+
+
+@pytest.mark.parametrize("name", ("clf_cat_synthetic", "clf_num_synthetic"))
+def test_load_raw_encodes_labels_for_every_clf_prefix(monkeypatch, name):
+    frame = pd.DataFrame({"x": [1.0, 2.0, 3.0, 4.0], "target": ["yes", "no"] * 2})
+    hub = type("Hub", (), {"to_pandas": lambda self: frame.copy()})()
+    monkeypatch.setattr(
+        Benchmark_module, "load_dataset", lambda *args, **kwargs: {"train": hub}
+    )
+    _, y = Benchmark_module.load_raw(name)
+    assert np.issubdtype(y.dtype, np.integer)
+    np.testing.assert_array_equal(y, [1, 0, 1, 0])

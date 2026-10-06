@@ -7,7 +7,7 @@ import tensorflow as tf
 
 from flexfl.builtins.DatasetABC import DatasetABC
 from flexfl.builtins.FederatedABC import smape
-from flexfl.datasets.Benchmark import Benchmark
+from flexfl.datasets.Benchmark import Benchmark, is_clf
 
 BATCHSIZE = 2560
 
@@ -86,7 +86,7 @@ def get_dataset(name):
         x_val, y_val = ds.load_data("val")
 
     target = None
-    if "clf" in name:
+    if is_clf(name):
         y_train = tf.keras.utils.to_categorical(
             y_train, num_classes=ds.metadata["output_size"]
         )
@@ -159,7 +159,7 @@ if __name__ == "__main__":
 
         study = (
             optuna.create_study(direction="maximize")
-            if "clf" in dataset["config"]
+            if is_clf(dataset["config"])
             else optuna.create_study(direction="minimize")
         )
         study.optimize(
