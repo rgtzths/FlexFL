@@ -4,13 +4,13 @@
     "type": "classification",
     "output_size": 2,
     "info": "",
-    "samples": 72998,
+    "samples": 72825,
     "input_shape": [
         50
     ],
     "split": {
-        "train": "60.00%: 43798",
-        "val": "20.00%: 14600",
-        "test": "20.00%: 14600"
+        "train": "60.00%: 43695",
+        "val": "20.00%: 14565",
+        "test": "20.00%: 14565"
     }
 }

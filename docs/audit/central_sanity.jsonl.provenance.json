@@ -1,0 +1,54 @@
+{
+  "git_commit": "19cdaa6a587bf7434f80da453ead74127b9142a7",
+  "git_dirty": true,
+  "sources_sha256": {
+    "scripts/audit_datasets.py": "26fda21820ccef1ced16d19d97460b65029b3880d0a287fd407bf94950705757",
+    "scripts/audit_central_sanity.py": "0690c733295d7c9d21c1f99a9c2e87518d8fedf732cdaa93c251189aa0a30c16",
+    "src/flexfl/datasets/Benchmark.py": "d51b18eda463b6cce0feef4ec2be9effc9ad36153d63ad63a6b9e8707c40595a",
+    "src/flexfl/builtins/DatasetABC.py": "af8307bdd026c2b3181b5a33bc6890409ffdfbb99ef7d5ffb0786d01b3fb70bf"
+  },
+  "hf_dataset": "inria-soda/tabular-benchmark",
+  "hf_revision": "8d0ff9103525b7e3579b180230fddb3186258301",
+  "val_size": 0.2,
+  "test_size": 0.2,
+  "versions": {
+    "numpy": "2.0.2",
+    "scipy": "1.15.2",
+    "scikit-learn": "1.6.1",
+    "datasets": "4.2.0"
+  },
+  "run_constants": {
+    "MAX_TRAIN": 100000,
+    "EPOCHS": 40,
+    "PATIENCE": 8,
+    "BATCH": 512,
+    "LRS": [
+      0.001,
+      0.0001
+    ],
+    "SEED": 42
+  },
+  "keep_sentinel_rows": false,
+  "hpo_sha256": {
+    "clf_num_Bioresponse": "065e91223b01e68c352d9044b855c823e3587c3364278b52681d63e18fa7f326",
+    "reg_cat_delays_zurich_transport": "deb05aab993299165fa58e5b175735925368aa29eae8ab0f1bf7942082cec61b",
+    "reg_num_abalone": "f439ca78f2c08b57161fb601d5aa7e7a448d8b7d5100f89ec7c0d3d813c0d08d",
+    "clf_cat_electricity": "8f36a0f1f2b13a13c4b1d6e1d206bda5ae9a44e827ba49e5122cb5b110f7ac3b",
+    "reg_cat_Mercedes_Benz_Greener_Manufacturing": "d19824606da76d7be9d5ffd1a176e3d4be1f5fb62781bcf760a35a09998b68dc",
+    "clf_num_covertype": "f6a17c16643528c3a2f0446892468331c1c20c9e63b490df371ae7cd45483958",
+    "reg_num_delays_zurich_transport": "a35cbc971102010a78120cd65870b2202aa1f0240305261534789cb2d04dd53f",
+    "reg_cat_visualizing_soil": "035aeeb7e95348899d4bb3e6598ce554ebab37d298dbdd347ef0c9ed6b99f439",
+    "clf_num_eye_movements": "5f033b34b8b5863d5085a3d5b8a76294dc58b9da32b8a406509a14305ebf2ae5",
+    "reg_cat_Allstate_Claims_Severity": "030698aa2ffa83d08b0cfd0ee73305729ea35364a615e7a6d62ae346159f8f52",
+    "reg_num_superconduct": "1f83de19558c096c0d89db931efb7f8f77837fcb1a7dcbea65f67fdd22aa3edf",
+    "reg_num_medical_charges": "11a7d379da87db52ddc888c8816e879c4e38617456edf6f71bde37d6d583fff3",
+    "clf_cat_covertype": "97879bb651ae1ad58093122cecb97e56d2bfe4a1e4710f41b0e61c91af7fc5f1",
+    "reg_cat_SGEMM_GPU_kernel_performance": "5a59927c7c9fb3693fa5ddcfe760494c6fef73414360f4c63a130358544d46c3",
+    "clf_num_MiniBooNE": "fdf98a4922affb79a9415ebf3508e030b1f7a9f32dd09358a06c132ff4682b08",
+    "reg_cat_house_sales": "9a9b7a8552fd7d96f22fe2d39abc3947f978160cfe477589b3a206dcf2202233",
+    "clf_cat_eye_movements": "a6ddd64801262e63f872c5a6488a7f4bf008df7b5db705e2e0971143fa31854f",
+    "clf_num_electricity": "e7b11edde6181c20671d37f129212914bb9e753ad73e70d3d86d070b237b86a4",
+    "reg_num_house_16H": "631bd503f6fde41880b8c0fcd13de0826e1449efca0b008429460be40468d96f",
+    "reg_num_nyc-taxi-green-dec-2016": "e9c34cb4754ba0b8aca38b5778c16cd688c9af1f32073aea98bc08b1784e632c"
+  }
+}

@@ -321,6 +321,43 @@ def test_benchmark_preprocess_saves_standardized_splits(monkeypatch, tmp_path):
     assert (cache / SCALING).is_file()
 
 
+def test_drop_sentinel_rows_keeps_rows_with_any_real_value():
+    x = np.array([[1.0, 2.0], [-999.0, -999.0], [-999.0, 5.0], [999.0, 9999.0]])
+    y = np.array([0, 1, 0, 1])
+    kept_x, kept_y = Benchmark_module.drop_sentinel_rows(x, y)
+    np.testing.assert_array_equal(kept_x, x[[0, 2, 3]])
+    np.testing.assert_array_equal(kept_y, y[[0, 2, 3]])
+
+
+def test_benchmark_preprocess_drops_all_sentinel_rows(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    n = 300
+    dropped = [3, 50, 51, 120, 200, 299]
+    x, _ = _raw(n)
+    y = np.arange(n, dtype=np.float64)
+    x[:, 1] = y
+    x[dropped] = -999.0
+    frame = pd.DataFrame(x, columns=["a", "b", "c"]).assign(target=y)
+
+    class _Hub:
+        def to_pandas(self):
+            return frame.copy()
+
+    monkeypatch.setattr(
+        Benchmark_module, "load_dataset", lambda *a, **kw: {"train": _Hub()}
+    )
+    ds = Benchmark(data_name="reg_num_synthetic")
+    ds.preprocess(0.2, 0.2)
+    cache = tmp_path / "data" / "reg_num_synthetic" / "_data"
+    ys = {s: np.load(cache / f"y_{s}.npy") for s in ("train", "val", "test")}
+    kept = sorted(set(range(n)) - set(dropped))
+    np.testing.assert_array_equal(np.sort(np.concatenate(list(ys.values()))), kept)
+    assert ds.metadata["samples"] == n - len(dropped)
+    for split, y_split in ys.items():
+        feature = np.load(cache / f"x_{split}.npy")[:, 1]
+        assert np.corrcoef(feature, y_split)[0, 1] == pytest.approx(1.0)
+
+
 def test_regression_split_save_records_train_target_statistics(monkeypatch, tmp_path):
     ds = _regression_cache(monkeypatch, tmp_path)
     x, y = _regression_raw()

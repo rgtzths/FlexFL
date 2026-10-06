@@ -4,6 +4,13 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 from flexfl.builtins.DatasetABC import DatasetABC
 
+SENTINEL = -999.0
+
+
+def drop_sentinel_rows(x, y):
+    keep = ~np.all(x == SENTINEL, axis=1)
+    return x[keep], y[keep]
+
 
 class Benchmark(DatasetABC):
 
@@ -31,6 +38,7 @@ class Benchmark(DatasetABC):
         ].to_pandas()
         x = df.iloc[:, :-1].to_numpy(dtype=np.float64)
         y = df.iloc[:, -1].to_numpy()
+        x, y = drop_sentinel_rows(x, y)
         if self.class_task:
             le = LabelEncoder()
             y = le.fit_transform(y)

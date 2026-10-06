@@ -65,6 +65,8 @@ uv run flexfl-division   -d Benchmark --data_name clf_num_bank-marketing -n 8 -s
 
 Preprocessing fits the dataset's scaler on the training split only, applies it to train, val and test, and writes the fitted statistics to `data/<name>/_data/scaling.json` last. For a regression dataset it also records the training-target mean and standard deviation under `"target"`; the saved `_data` targets stay raw. Division refuses a `_data` cache without `scaling.json`, or a regression cache without valid `"target"` statistics; re-run `flexfl-preprocess` for that dataset. For regression, division writes standardized targets and a `target_scaling.json` into every worker folder, and raw validation targets with the same file into `node_0`. Workers refuse a folder whose targets are not standardized. The master de-standardizes its predictions, so logged regression loss and metrics stay in original units, and it saves the statistics as `model_target_scaling.json` beside the model.
 
+The per-dataset preprocessing audit, its evidence and the commands to reproduce it are in [docs/dataset_preprocessing_audit.md](docs/dataset_preprocessing_audit.md).
+
 Division strategies (`-s`):
 
 | Strategy | Description |
