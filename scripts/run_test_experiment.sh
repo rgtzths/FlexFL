@@ -254,7 +254,7 @@ for row in rows:
     for i, v in enumerate(row):
         if v.strip():
             has_value[i] = True
-print(','.join(header[i] for i, v in enumerate(has_value) if not v))
+print(','.join(header[i] for i, v in enumerate(has_value) if not v and header[i] not in ('constant_mean_smape', 'beats_constant_mean')))
 " "$RESULTS_ROOT/meta_dataset.csv")
     if [ "$row_count" -eq "$expected_success" ] && [ -z "$empty_cols" ]; then
         echo "  - meta_dataset.csv: $row_count rows (warnings reported: $skipped), no empty columns OK"

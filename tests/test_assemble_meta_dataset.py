@@ -10,6 +10,7 @@ from assemble_meta_dataset import (
     DECOMPOSITION_COLUMNS,
     assemble,
     compute_targets,
+    constant_mean_smape,
     parse_combo,
     worker_compute,
 )
@@ -1999,3 +2000,269 @@ def test_assemble_cli_legacy_rule_writes_the_columns(tmp_path):
         assert [
             (row["early_stop_on"], row["min_epochs"]) for row in csv.DictReader(f)
         ] == [("metric", "0")]
+
+
+# --- constant-mean baseline (regression) ---
+
+
+def build_regression_run(
+    results_dir: Path,
+    metadata_dir: Path,
+    hpo_dir: Path,
+    mapes,
+    *,
+    dataset="reg_ds",
+    **kwargs,
+):
+    rep_dir = build_synthetic_run(
+        results_dir, metadata_dir, hpo_dir, dataset=dataset, **kwargs
+    )
+    events = [{"event": "start", "timestamp": 0}]
+    events += [
+        {"event": "epoch", "epoch": i, "mape": m} for i, m in enumerate(mapes, 1)
+    ]
+    events.append({"event": "end", "timestamp": 5})
+    write_jsonl(rep_dir / "log_0.jsonl", events)
+    write_json(
+        metadata_dir / f"{dataset}.json",
+        {
+            "type": "regression",
+            "input_shape": [4],
+            "samples": 100,
+            "output_size": 1,
+        },
+    )
+    return rep_dir
+
+
+def write_target_cache(data_dir: Path, dataset: str, y_train, y_val):
+    import numpy as np
+
+    cache = data_dir / dataset / "_data"
+    cache.mkdir(parents=True, exist_ok=True)
+    np.save(cache / "y_train.npy", np.asarray(y_train))
+    np.save(cache / "y_val.npy", np.asarray(y_val))
+
+
+# train mean 2.5 against val [1, 2, 4]; an integer mean would give 2.
+BASELINE = (6 / 7 + 2 / 9 + 6 / 13) / 3
+
+
+def test_constant_mean_smape_matches_hand_computed_value(tmp_path):
+    write_target_cache(tmp_path, "reg_ds", [1, 4], [1, 2, 4])
+
+    value, reason = constant_mean_smape(tmp_path, "reg_ds")
+
+    assert reason is None
+    assert value == pytest.approx(BASELINE, rel=1e-12)
+
+
+def test_constant_mean_smape_accepts_single_column_targets(tmp_path):
+    write_target_cache(tmp_path, "reg_ds", [[1.0], [4.0]], [[1.0], [2.0], [4.0]])
+
+    value, reason = constant_mean_smape(tmp_path, "reg_ds")
+
+    assert reason is None
+    assert value == pytest.approx(BASELINE, rel=1e-12)
+
+
+def test_constant_mean_smape_zero_targets_score_zero(tmp_path):
+    write_target_cache(tmp_path, "reg_ds", [0.0, 0.0], [0.0, 0.0])
+
+    assert constant_mean_smape(tmp_path, "reg_ds") == (0.0, None)
+
+
+@pytest.mark.parametrize(
+    "y_train, y_val, reason",
+    [
+        ([1.0, 2.0], [], "y_val.npy is not a non-empty single real target"),
+        ([1.0, float("nan")], [1.0], "y_train.npy has non-finite targets"),
+        ([[1.0, 2.0]], [1.0], "y_train.npy is not a non-empty single real target"),
+        ([True, False], [1.0], "y_train.npy is not a non-empty single real target"),
+    ],
+)
+def test_constant_mean_smape_rejects_invalid_targets(tmp_path, y_train, y_val, reason):
+    write_target_cache(tmp_path, "reg_ds", y_train, y_val)
+
+    assert constant_mean_smape(tmp_path, "reg_ds") == (None, reason)
+
+
+def test_constant_mean_smape_rejects_pickled_targets(tmp_path):
+    import numpy as np
+
+    cache = tmp_path / "reg_ds" / "_data"
+    cache.mkdir(parents=True)
+    np.save(cache / "y_train.npy", np.array([{"a": 1}], dtype=object))
+    np.save(cache / "y_val.npy", np.array([1.0]))
+
+    value, reason = constant_mean_smape(tmp_path, "reg_ds")
+
+    assert value is None
+    assert reason.startswith("unreadable y_train.npy")
+
+
+def test_constant_mean_smape_rejects_npz_archive(tmp_path):
+    import numpy as np
+
+    cache = tmp_path / "reg_ds" / "_data"
+    cache.mkdir(parents=True)
+    with open(cache / "y_train.npy", "wb") as f:
+        np.savez(f, y=np.array([1.0, 4.0]))
+    np.save(cache / "y_val.npy", np.array([1.0]))
+
+    assert constant_mean_smape(tmp_path, "reg_ds") == (
+        None,
+        "y_train.npy is not a .npy array",
+    )
+
+
+def test_constant_mean_smape_missing_cache(tmp_path):
+    value, reason = constant_mean_smape(tmp_path, "reg_ds")
+
+    assert value is None
+    assert reason.startswith("missing y_train.npy, y_val.npy in ")
+
+
+def test_assemble_flags_regression_rows_against_baseline_and_keeps_them(tmp_path):
+    results_dir, metadata_dir, hpo_dir, data_dir = (
+        tmp_path / "results",
+        tmp_path / "metadata",
+        tmp_path / "hpo",
+        tmp_path / "data",
+    )
+    write_target_cache(data_dir, "reg_ds", [1, 4], [1, 2, 4])
+    for rep, best in enumerate((BASELINE - 0.01, BASELINE, BASELINE + 0.01), 1):
+        build_regression_run(
+            results_dir, metadata_dir, hpo_dir, [best + 0.2, best, best + 0.1], rep=rep
+        )
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir, data_dir=data_dir)
+
+    by_rep = {r["repeat"]: r for r in rows}
+    assert [by_rep[r]["beats_constant_mean"] for r in (1, 2, 3)] == [
+        True,
+        False,
+        False,
+    ]
+    assert all(
+        r["constant_mean_smape"] == pytest.approx(BASELINE, rel=1e-12) for r in rows
+    )
+    assert not any("constant-mean baseline" in w for w in warnings)
+
+
+def test_assemble_leaves_baseline_empty_for_classification(tmp_path):
+    results_dir, metadata_dir, hpo_dir = (
+        tmp_path / "results",
+        tmp_path / "metadata",
+        tmp_path / "hpo",
+    )
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir)
+
+    rows, warnings = assemble(
+        results_dir, metadata_dir, hpo_dir, data_dir=tmp_path / "data"
+    )
+
+    assert rows[0]["constant_mean_smape"] is None
+    assert rows[0]["beats_constant_mean"] is None
+    assert not any("constant-mean baseline" in w for w in warnings)
+
+
+def test_assemble_missing_baseline_keeps_rows_and_warns_once_per_dataset(tmp_path):
+    results_dir, metadata_dir, hpo_dir = (
+        tmp_path / "results",
+        tmp_path / "metadata",
+        tmp_path / "hpo",
+    )
+    for rep in (1, 2):
+        build_regression_run(results_dir, metadata_dir, hpo_dir, [0.3], rep=rep)
+
+    rows, warnings = assemble(
+        results_dir, metadata_dir, hpo_dir, data_dir=tmp_path / "data"
+    )
+
+    assert len(rows) == 2
+    assert all(
+        r["constant_mean_smape"] is None and r["beats_constant_mean"] is None
+        for r in rows
+    )
+    baseline_warnings = [w for w in warnings if "constant-mean baseline" in w]
+    assert len(baseline_warnings) == 1
+    assert "reg_ds" in baseline_warnings[0]
+
+
+def test_assemble_keeps_rows_when_numpy_or_flexfl_cannot_import(tmp_path, monkeypatch):
+    results_dir, metadata_dir, hpo_dir, data_dir = (
+        tmp_path / "results",
+        tmp_path / "metadata",
+        tmp_path / "hpo",
+        tmp_path / "data",
+    )
+    write_target_cache(data_dir, "reg_ds", [1, 4], [1, 2, 4])
+    for rep in (1, 2):
+        build_regression_run(results_dir, metadata_dir, hpo_dir, [0.3], rep=rep)
+    monkeypatch.setitem(sys.modules, "flexfl.builtins.FederatedABC", None)
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir, data_dir=data_dir)
+
+    assert len(rows) == 2
+    assert all(
+        r["constant_mean_smape"] is None and r["beats_constant_mean"] is None
+        for r in rows
+    )
+    baseline_warnings = [w for w in warnings if "constant-mean baseline" in w]
+    assert len(baseline_warnings) == 1
+    assert "cannot import numpy or flexfl" in baseline_warnings[0]
+
+
+def test_assemble_without_data_dir_warns_no_data_dir(tmp_path):
+    results_dir, metadata_dir, hpo_dir = (
+        tmp_path / "results",
+        tmp_path / "metadata",
+        tmp_path / "hpo",
+    )
+    build_regression_run(results_dir, metadata_dir, hpo_dir, [0.3])
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert rows[0]["constant_mean_smape"] is None
+    assert any("(no data dir given)" in w for w in warnings)
+
+
+def test_assemble_cli_writes_baseline_columns_from_data_dir(tmp_path):
+    results_dir, metadata_dir, hpo_dir, data_dir = (
+        tmp_path / "results",
+        tmp_path / "metadata",
+        tmp_path / "hpo",
+        tmp_path / "data",
+    )
+    write_target_cache(data_dir, "reg_ds", [1, 4], [1, 2, 4])
+    build_regression_run(results_dir, metadata_dir, hpo_dir, [0.3])
+    out_csv = tmp_path / "meta_dataset.csv"
+    script = str(
+        Path(__file__).resolve().parent.parent / "scripts" / "assemble_meta_dataset.py"
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            script,
+            "--results-dir",
+            str(results_dir),
+            "--metadata-dir",
+            str(metadata_dir),
+            "--hpo-dir",
+            str(hpo_dir),
+            "--data-dir",
+            str(data_dir),
+            "--out",
+            str(out_csv),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    with open(out_csv, newline="") as f:
+        row = next(csv.DictReader(f))
+    assert float(row["constant_mean_smape"]) == pytest.approx(BASELINE, rel=1e-12)
+    assert row["beats_constant_mean"] == "True"
