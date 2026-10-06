@@ -14,18 +14,20 @@ The static audit describes raw rows before the all -999 drop, so its row counts 
 
 The sweep reuses any `data/<name>/_data` cache that holds `scaling.json`. Before the tier-20 pass, delete `data/<name>/_data` for clf_num_MiniBooNE on any host where that cache holds `scaling.json` and was built before the drop, so preprocessing runs again.
 
-Run the scripts from the repository root. The all -999 drop applies to the Benchmark datasets only. The HPO configs come from results/hyperparameter_optimization, which is not tracked.
+Run the scripts from the repository root. The all -999 drop applies to the Benchmark datasets only. The HPO configs come from results/hyperparameter_optimization, which is not tracked. A first-time preprocess needs network access to the Hugging Face Hub or revision 8d0ff9103525b7e3579b180230fddb3186258301 in the local Hugging Face cache.
 
 ## Audit provenance
 
 ```json
 {
-  "git_commit": "a411061c201dcc9cdcb7221c361506bd20161357",
+  "git_commit": "4092ac2490ee8f8d90642b78c95f916a0ffdddda",
   "git_dirty": false,
   "sources_sha256": {
-    "scripts/audit_datasets.py": "d938192b103eb1cd70020f7e8d6090e70756540e93d63afde40390a5efaca315",
-    "scripts/audit_central_sanity.py": "b33a6c5e685955942ca79742a66d2060b978d3cb22d6f9b98716aae4d401dc50",
-    "src/flexfl/datasets/Benchmark.py": "3028bc486212e8df5105fc192e28553b3dcfff3ba42fad87987f3dd3021e3693",
+    "scripts/audit_common.py": "0e8a2d961ff4ba014fc74545d13cdcaf994ef6b4d6a8ca6a807ebc0c6a6a2986",
+    "scripts/audit_datasets.py": "dacc37a9627ca5f0cb1533d40156fb351b27ae24eac03ba23cee71c097e1a29e",
+    "scripts/audit_central_sanity.py": "4674eabbe35228e7c29e51442891ea3537ed5f05e710af6ba53fb0ea3a800499",
+    "scripts/render_dataset_audit.py": "dd55e16f9d626542776fe95ac6fe8755144c41d2ac52129ac07477baf577b18d",
+    "src/flexfl/datasets/Benchmark.py": "50b72c382fa48e16747a78b52e550c0473036d69abef221ff3a947506d09e693",
     "src/flexfl/builtins/DatasetABC.py": "bcb5146fb430f3dd1fa252ef101b85678548ef98373f678e7cfeb4d0e570b2b9"
   },
   "hf_dataset": "inria-soda/tabular-benchmark",
@@ -46,12 +48,14 @@ Run the scripts from the repository root. The all -999 drop applies to the Bench
 ```json
 {
   "after": {
-    "git_commit": "a411061c201dcc9cdcb7221c361506bd20161357",
+    "git_commit": "4092ac2490ee8f8d90642b78c95f916a0ffdddda",
     "git_dirty": false,
     "sources_sha256": {
-      "scripts/audit_datasets.py": "d938192b103eb1cd70020f7e8d6090e70756540e93d63afde40390a5efaca315",
-      "scripts/audit_central_sanity.py": "b33a6c5e685955942ca79742a66d2060b978d3cb22d6f9b98716aae4d401dc50",
-      "src/flexfl/datasets/Benchmark.py": "3028bc486212e8df5105fc192e28553b3dcfff3ba42fad87987f3dd3021e3693",
+      "scripts/audit_common.py": "0e8a2d961ff4ba014fc74545d13cdcaf994ef6b4d6a8ca6a807ebc0c6a6a2986",
+      "scripts/audit_datasets.py": "dacc37a9627ca5f0cb1533d40156fb351b27ae24eac03ba23cee71c097e1a29e",
+      "scripts/audit_central_sanity.py": "4674eabbe35228e7c29e51442891ea3537ed5f05e710af6ba53fb0ea3a800499",
+      "scripts/render_dataset_audit.py": "dd55e16f9d626542776fe95ac6fe8755144c41d2ac52129ac07477baf577b18d",
+      "src/flexfl/datasets/Benchmark.py": "50b72c382fa48e16747a78b52e550c0473036d69abef221ff3a947506d09e693",
       "src/flexfl/builtins/DatasetABC.py": "bcb5146fb430f3dd1fa252ef101b85678548ef98373f678e7cfeb4d0e570b2b9"
     },
     "hf_dataset": "inria-soda/tabular-benchmark",
@@ -100,12 +104,14 @@ Run the scripts from the repository root. The all -999 drop applies to the Bench
     }
   },
   "before": {
-    "git_commit": "a411061c201dcc9cdcb7221c361506bd20161357",
+    "git_commit": "4092ac2490ee8f8d90642b78c95f916a0ffdddda",
     "git_dirty": false,
     "sources_sha256": {
-      "scripts/audit_datasets.py": "d938192b103eb1cd70020f7e8d6090e70756540e93d63afde40390a5efaca315",
-      "scripts/audit_central_sanity.py": "b33a6c5e685955942ca79742a66d2060b978d3cb22d6f9b98716aae4d401dc50",
-      "src/flexfl/datasets/Benchmark.py": "3028bc486212e8df5105fc192e28553b3dcfff3ba42fad87987f3dd3021e3693",
+      "scripts/audit_common.py": "0e8a2d961ff4ba014fc74545d13cdcaf994ef6b4d6a8ca6a807ebc0c6a6a2986",
+      "scripts/audit_datasets.py": "dacc37a9627ca5f0cb1533d40156fb351b27ae24eac03ba23cee71c097e1a29e",
+      "scripts/audit_central_sanity.py": "4674eabbe35228e7c29e51442891ea3537ed5f05e710af6ba53fb0ea3a800499",
+      "scripts/render_dataset_audit.py": "dd55e16f9d626542776fe95ac6fe8755144c41d2ac52129ac07477baf577b18d",
+      "src/flexfl/datasets/Benchmark.py": "50b72c382fa48e16747a78b52e550c0473036d69abef221ff3a947506d09e693",
       "src/flexfl/builtins/DatasetABC.py": "bcb5146fb430f3dd1fa252ef101b85678548ef98373f678e7cfeb4d0e570b2b9"
     },
     "hf_dataset": "inria-soda/tabular-benchmark",
