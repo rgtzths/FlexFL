@@ -58,6 +58,14 @@ Targets (master log_0.jsonl, single clock; T09)
                       regression metric is logged under the key `mape` but is
                       actually SMAPE (FederatedABC.smape); `main_metric` reports
                       that key verbatim.
+  constant_mean_smape   regression only: the SMAPE on the dataset's validation
+                      split of a constant prediction equal to the training-target
+                      mean, from <data-dir>/<dataset>/_data/y_train.npy and
+                      y_val.npy in original units. Empty for classification and,
+                      with a warning, when the cache or numpy is unavailable.
+  beats_constant_mean   regression only: performance < constant_mean_smape.
+                      Empty whenever constant_mean_smape is. Rows that do not beat
+                      the baseline are kept. Outcome, not a predictor.
   total_time_s        master start→end delta
   comm_bytes_{sent,recv,total}   Σ payload_size of the master's send/recv events
   n_epochs            last epoch reached: the `epoch` field of the final epoch
@@ -109,6 +117,8 @@ from flexfl.builtins.event_metrics import decomposition  # noqa: E402
 DEFAULT_HPO_DIR = (
     Path(__file__).resolve().parent.parent / "results/hyperparameter_optimization"
 )
+
+DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 DECOMPOSITION_COLUMNS = [
     "compute_time_total_s",
@@ -172,6 +182,8 @@ COLUMNS = [
     "worker_rate_cv",
     "performance",
     "main_metric",
+    "constant_mean_smape",
+    "beats_constant_mean",
     "total_time_s",
     "comm_bytes_sent",
     "comm_bytes_recv",
@@ -357,6 +369,54 @@ def compute_targets(events: list[dict], is_classification: bool) -> dict | None:
     }
 
 
+def constant_mean_smape(
+    data_dir: Path | None, dataset: str
+) -> tuple[float | None, str | None]:
+    if data_dir is None:
+        return None, "no data dir given"
+    cache = data_dir / dataset / "_data"
+    paths = [cache / "y_train.npy", cache / "y_val.npy"]
+    try:
+        missing = [p.name for p in paths if not p.is_file()]
+    except OSError as e:
+        return None, f"cannot read cache {cache} ({e})"
+    if missing:
+        return None, f"missing {', '.join(missing)} in {cache}"
+    # A module-level numpy or FederatedABC import breaks the stdlib-only import test.
+    try:
+        import numpy as np
+
+        from flexfl.builtins.FederatedABC import smape
+    except Exception as e:
+        return None, f"cannot import numpy or flexfl ({type(e).__name__}: {e})"
+    arrays = []
+    for path in paths:
+        try:
+            y = np.load(path, allow_pickle=False)
+        except Exception as e:
+            return None, f"unreadable {path.name} ({type(e).__name__}: {e})"
+        if not isinstance(y, np.ndarray):
+            y.close()
+            return None, f"{path.name} is not a .npy array"
+        if (
+            y.dtype.kind not in "fiu"
+            or y.size == 0
+            or y.ndim > 2
+            or (y.ndim == 2 and y.shape[1] != 1)
+        ):
+            return None, f"{path.name} is not a non-empty single real target"
+        y = y.astype(np.float64).ravel()
+        if not np.all(np.isfinite(y)):
+            return None, f"{path.name} has non-finite targets"
+        arrays.append(y)
+    y_train, y_val = arrays
+    with np.errstate(divide="ignore", invalid="ignore"):
+        value = float(smape(y_val, np.full(y_val.shape, y_train.mean())))
+    if not math.isfinite(value):
+        return None, "non-finite baseline"
+    return value, None
+
+
 def worker_compute(workers_txt: Path, benchmark_dir: Path) -> dict:
     empty = {
         "n_workers": None,
@@ -497,9 +557,12 @@ def assemble(
     hpo_dir: Path,
     legacy_epoch_cap: int | None = None,
     legacy_early_stop_rule: bool = False,
+    *,
+    data_dir: Path | None = None,
 ) -> tuple[list[dict], list[str]]:
     benchmark_dir = results_dir / "benchmark"
     rows, warnings = [], []
+    baselines = {}
     for success in sorted(results_dir.rglob("_SUCCESS")):
         rep_dir = success.parent
         rel = rep_dir.relative_to(results_dir).parts
@@ -691,6 +754,19 @@ def assemble(
                 "workers benchmarked "
                 f"(missing machine_benchmark_<node>_<vmid>.json for some workers)"
             )
+        row["constant_mean_smape"] = row["beats_constant_mean"] = None
+        if not mf["is_classification"]:
+            if dataset not in baselines:
+                baselines[dataset], reason = constant_mean_smape(data_dir, dataset)
+                if reason is not None:
+                    warnings.append(
+                        f"constant-mean baseline unavailable for {dataset} "
+                        f"({reason}), its baseline columns are empty"
+                    )
+            baseline = baselines[dataset]
+            if baseline is not None:
+                row["constant_mean_smape"] = baseline
+                row["beats_constant_mean"] = row["performance"] < baseline
         rows.append(row)
     return rows, warnings
 
@@ -702,6 +778,12 @@ def main():
     p.add_argument("--results-dir", type=Path, default=Path("results"))
     p.add_argument("--metadata-dir", type=Path, default=DEFAULT_METADATA_DIR)
     p.add_argument("--hpo-dir", type=Path, default=DEFAULT_HPO_DIR)
+    p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=DEFAULT_DATA_DIR,
+        help="preprocessed dataset caches for the regression constant-mean baseline",
+    )
     p.add_argument("--out", type=Path, default=Path("results/meta_dataset.csv"))
     p.add_argument(
         "--legacy-epoch-cap",
@@ -725,6 +807,7 @@ def main():
         args.hpo_dir,
         args.legacy_epoch_cap,
         args.legacy_early_stop_rule,
+        data_dir=args.data_dir,
     )
     for w in warnings:
         print(f"  ! {w}", file=sys.stderr)
