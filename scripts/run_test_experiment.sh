@@ -260,7 +260,7 @@ for row in rows:
 empty = [h for h, v in zip(header, has_value) if not v and h not in baseline_cols]
 empty += [h for h in baseline_cols if any(not row[header.index(h)].strip() for row in reg_rows)]
 print(','.join(empty))
-" "$RESULTS_ROOT/meta_dataset.csv")
+" "$RESULTS_ROOT/meta_dataset.csv") || { echo "  ! meta_dataset.csv: empty-column check crashed" >&2; verify_ok=0; empty_cols="check crashed"; }
     if [ "$row_count" -eq "$expected_success" ] && [ -z "$empty_cols" ]; then
         echo "  - meta_dataset.csv: $row_count rows (warnings reported: $skipped), no empty columns OK"
     else

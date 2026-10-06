@@ -2099,6 +2099,19 @@ def test_constant_mean_smape_rejects_invalid_targets(tmp_path, y_train, y_val, r
     assert constant_mean_smape(tmp_path, "reg_ds") == (None, reason)
 
 
+def test_constant_mean_smape_rejects_timedelta_targets(tmp_path):
+    import numpy as np
+
+    write_target_cache(
+        tmp_path, "reg_ds", [1, 4], np.array([1, 2], dtype="timedelta64[s]")
+    )
+
+    assert constant_mean_smape(tmp_path, "reg_ds") == (
+        None,
+        "y_val.npy is not a non-empty single real target",
+    )
+
+
 @pytest.mark.filterwarnings("ignore::RuntimeWarning")
 def test_constant_mean_smape_rejects_non_finite_baseline(tmp_path):
     write_target_cache(tmp_path, "reg_ds", [1.7e308, 1.7e308], [1.0])
@@ -2391,3 +2404,5 @@ def test_assemble_cli_writes_baseline_columns_from_data_dir(tmp_path):
         row = next(csv.DictReader(f))
     assert float(row["constant_mean_smape"]) == pytest.approx(BASELINE, rel=1e-12)
     assert row["beats_constant_mean"] == "True"
+    # scripts/run_test_experiment.sh selects regression rows by this exact string.
+    assert row["is_classification"] == "False"

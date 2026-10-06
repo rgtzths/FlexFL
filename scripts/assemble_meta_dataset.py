@@ -399,10 +399,7 @@ def constant_mean_smape(
             y.close()
             return None, f"{path.name} is not a .npy array"
         if (
-            not (
-                np.issubdtype(y.dtype, np.floating)
-                or np.issubdtype(y.dtype, np.integer)
-            )
+            y.dtype.kind not in "fiu"
             or y.size == 0
             or y.ndim > 2
             or (y.ndim == 2 and y.shape[1] != 1)
