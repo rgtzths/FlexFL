@@ -2079,12 +2079,61 @@ def test_constant_mean_smape_zero_targets_score_zero(tmp_path):
         ([1.0, float("nan")], [1.0], "y_train.npy has non-finite targets"),
         ([[1.0, 2.0]], [1.0], "y_train.npy is not a non-empty single real target"),
         ([True, False], [1.0], "y_train.npy is not a non-empty single real target"),
+        ([1 + 1j, 2 + 0j], [1.0], "y_train.npy is not a non-empty single real target"),
+        (
+            [[[1.0]], [[4.0]]],
+            [1.0],
+            "y_train.npy is not a non-empty single real target",
+        ),
+        (["a", "b"], [1.0], "y_train.npy is not a non-empty single real target"),
+        (
+            [1.0, 4.0],
+            [[1.0, 2.0], [3.0, 4.0]],
+            "y_val.npy is not a non-empty single real target",
+        ),
     ],
 )
 def test_constant_mean_smape_rejects_invalid_targets(tmp_path, y_train, y_val, reason):
     write_target_cache(tmp_path, "reg_ds", y_train, y_val)
 
     assert constant_mean_smape(tmp_path, "reg_ds") == (None, reason)
+
+
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")
+def test_constant_mean_smape_rejects_non_finite_baseline(tmp_path):
+    write_target_cache(tmp_path, "reg_ds", [1.7e308, 1.7e308], [1.0])
+
+    assert constant_mean_smape(tmp_path, "reg_ds") == (None, "non-finite baseline")
+
+
+@pytest.mark.parametrize(
+    "content",
+    [b"PK\x03\x04 not a zip archive", b"\x93NUMPY truncated header"],
+)
+def test_constant_mean_smape_reports_corrupt_cache_as_unreadable(tmp_path, content):
+    import numpy as np
+
+    cache = tmp_path / "reg_ds" / "_data"
+    cache.mkdir(parents=True)
+    (cache / "y_train.npy").write_bytes(content)
+    np.save(cache / "y_val.npy", np.array([1.0]))
+
+    value, reason = constant_mean_smape(tmp_path, "reg_ds")
+
+    assert value is None
+    assert reason.startswith("unreadable y_train.npy")
+
+
+def test_constant_mean_smape_reports_unstatable_cache(tmp_path, monkeypatch):
+    def denied(self):
+        raise PermissionError(13, "Permission denied", str(self))
+
+    monkeypatch.setattr(Path, "is_file", denied)
+
+    value, reason = constant_mean_smape(tmp_path, "reg_ds")
+
+    assert value is None
+    assert reason.startswith("cannot read cache ")
 
 
 def test_constant_mean_smape_rejects_pickled_targets(tmp_path):
@@ -2212,6 +2261,82 @@ def test_assemble_keeps_rows_when_numpy_or_flexfl_cannot_import(tmp_path, monkey
     baseline_warnings = [w for w in warnings if "constant-mean baseline" in w]
     assert len(baseline_warnings) == 1
     assert "cannot import numpy or flexfl" in baseline_warnings[0]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        OSError("libgomp.so.1: cannot open shared object file"),
+        ValueError("numpy.dtype size changed, may indicate binary incompatibility"),
+        AttributeError("module 'numpy' has no attribute 'float'"),
+    ],
+)
+def test_assemble_keeps_rows_when_flexfl_import_raises_non_import_error(
+    tmp_path, monkeypatch, error
+):
+    import builtins
+
+    results_dir, metadata_dir, hpo_dir, data_dir = (
+        tmp_path / "results",
+        tmp_path / "metadata",
+        tmp_path / "hpo",
+        tmp_path / "data",
+    )
+    write_target_cache(data_dir, "reg_ds", [1, 4], [1, 2, 4])
+    for rep in (1, 2):
+        build_regression_run(results_dir, metadata_dir, hpo_dir, [0.3], rep=rep)
+    real_import = builtins.__import__
+
+    def failing_import(name, *args, **kwargs):
+        if name == "flexfl.builtins.FederatedABC":
+            raise error
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", failing_import)
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir, data_dir=data_dir)
+
+    assert len(rows) == 2
+    assert all(
+        r["constant_mean_smape"] is None and r["beats_constant_mean"] is None
+        for r in rows
+    )
+    baseline_warnings = [w for w in warnings if "constant-mean baseline" in w]
+    assert len(baseline_warnings) == 1
+    assert f"cannot import numpy or flexfl ({type(error).__name__}: " in (
+        baseline_warnings[0]
+    )
+
+
+def test_assemble_computes_baseline_per_dataset(tmp_path):
+    results_dir, metadata_dir, hpo_dir, data_dir = (
+        tmp_path / "results",
+        tmp_path / "metadata",
+        tmp_path / "hpo",
+        tmp_path / "data",
+    )
+    write_target_cache(data_dir, "reg_a", [1, 4], [1, 2, 4])
+    write_target_cache(data_dir, "ds_a", [1, 4], [1, 2, 4])
+    for dataset in ("reg_a", "reg_b"):
+        for rep in (1, 2):
+            build_regression_run(
+                results_dir, metadata_dir, hpo_dir, [0.3], dataset=dataset, rep=rep
+            )
+    build_synthetic_run(results_dir, metadata_dir, hpo_dir)
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir, data_dir=data_dir)
+
+    by_dataset = {}
+    for r in rows:
+        by_dataset.setdefault(r["dataset"], []).append(
+            (r["constant_mean_smape"], r["beats_constant_mean"])
+        )
+    assert by_dataset["reg_a"] == [(pytest.approx(BASELINE, rel=1e-12), True)] * 2
+    assert by_dataset["reg_b"] == [(None, None)] * 2
+    assert by_dataset["ds_a"] == [(None, None)]
+    baseline_warnings = [w for w in warnings if "constant-mean baseline" in w]
+    assert len(baseline_warnings) == 1
+    assert "reg_b" in baseline_warnings[0]
 
 
 def test_assemble_without_data_dir_warns_no_data_dir(tmp_path):

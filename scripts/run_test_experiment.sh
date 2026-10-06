@@ -249,12 +249,17 @@ with open(sys.argv[1]) as f:
     reader = csv.reader(f)
     header = next(reader)
     rows = list(reader)
+baseline_cols = ('constant_mean_smape', 'beats_constant_mean')
+is_clf = header.index('is_classification')
+reg_rows = [row for row in rows if row[is_clf] == 'False']
 has_value = [False] * len(header)
 for row in rows:
     for i, v in enumerate(row):
         if v.strip():
             has_value[i] = True
-print(','.join(header[i] for i, v in enumerate(has_value) if not v and header[i] not in ('constant_mean_smape', 'beats_constant_mean')))
+empty = [h for h, v in zip(header, has_value) if not v and h not in baseline_cols]
+empty += [h for h in baseline_cols if any(not row[header.index(h)].strip() for row in reg_rows)]
+print(','.join(empty))
 " "$RESULTS_ROOT/meta_dataset.csv")
     if [ "$row_count" -eq "$expected_success" ] && [ -z "$empty_cols" ]; then
         echo "  - meta_dataset.csv: $row_count rows (warnings reported: $skipped), no empty columns OK"

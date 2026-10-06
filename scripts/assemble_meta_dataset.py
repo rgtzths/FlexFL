@@ -376,7 +376,10 @@ def constant_mean_smape(
         return None, "no data dir given"
     cache = data_dir / dataset / "_data"
     paths = [cache / "y_train.npy", cache / "y_val.npy"]
-    missing = [p.name for p in paths if not p.is_file()]
+    try:
+        missing = [p.name for p in paths if not p.is_file()]
+    except OSError as e:
+        return None, f"cannot read cache {cache} ({e})"
     if missing:
         return None, f"missing {', '.join(missing)} in {cache}"
     # A module-level numpy or FederatedABC import breaks the stdlib-only import test.
@@ -384,22 +387,22 @@ def constant_mean_smape(
         import numpy as np
 
         from flexfl.builtins.FederatedABC import smape
-    except ImportError as e:
-        return None, f"cannot import numpy or flexfl ({e})"
+    except Exception as e:
+        return None, f"cannot import numpy or flexfl ({type(e).__name__}: {e})"
     arrays = []
     for path in paths:
         try:
             y = np.load(path, allow_pickle=False)
-        except (OSError, ValueError, EOFError) as e:
-            return None, f"unreadable {path.name} ({e})"
+        except Exception as e:
+            return None, f"unreadable {path.name} ({type(e).__name__}: {e})"
         if not isinstance(y, np.ndarray):
-            if hasattr(y, "close"):
-                y.close()
+            y.close()
             return None, f"{path.name} is not a .npy array"
         if (
-            y.dtype == bool
-            or not np.issubdtype(y.dtype, np.number)
-            or np.iscomplexobj(y)
+            not (
+                np.issubdtype(y.dtype, np.floating)
+                or np.issubdtype(y.dtype, np.integer)
+            )
             or y.size == 0
             or y.ndim > 2
             or (y.ndim == 2 and y.shape[1] != 1)
@@ -757,13 +760,13 @@ def assemble(
         row["constant_mean_smape"] = row["beats_constant_mean"] = None
         if not mf["is_classification"]:
             if dataset not in baselines:
-                baselines[dataset] = constant_mean_smape(data_dir, dataset)
-                if baselines[dataset][1] is not None:
+                baselines[dataset], reason = constant_mean_smape(data_dir, dataset)
+                if reason is not None:
                     warnings.append(
                         f"constant-mean baseline unavailable for {dataset} "
-                        f"({baselines[dataset][1]}), its baseline columns are empty"
+                        f"({reason}), its baseline columns are empty"
                     )
-            baseline = baselines[dataset][0]
+            baseline = baselines[dataset]
             if baseline is not None:
                 row["constant_mean_smape"] = baseline
                 row["beats_constant_mean"] = row["performance"] < baseline
