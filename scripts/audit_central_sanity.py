@@ -1,3 +1,14 @@
+#!/usr/bin/env python3
+"""Train each dataset's HPO network for central preprocessing sanity checks.
+
+Reads dataset names and HPO configs, compares standard, clip and quantile
+features against a constant baseline and a boosting reference, and writes
+JSONL plus a provenance sidecar. Requires the ml extra. Run from the repo root:
+
+    .venv/bin/python scripts/audit_central_sanity.py --names names.txt \
+        --hpo-dir results/hyperparameter_optimization --out sanity.jsonl
+"""
+
 import argparse
 import hashlib
 import json
@@ -6,7 +17,7 @@ import time
 from pathlib import Path
 
 import numpy as np
-from audit_datasets import load_splits, provenance
+from audit_datasets import is_clf, load_splits, provenance, read_lines
 from sklearn.ensemble import (
     HistGradientBoostingClassifier,
     HistGradientBoostingRegressor,
@@ -20,40 +31,48 @@ PATIENCE = 8
 BATCH = 512
 LRS = (1e-3, 1e-4)
 SEED = 42
+KINDS = ("standard", "clip", "quantile")
 
 
-def smape(y, p):
+def score_key(kind, lr):
+    return f"{kind}_lr{lr:g}"
+
+
+def _smape(y, p):
     y, p = np.ravel(y), np.ravel(p)
     d = (np.abs(y) + np.abs(p)) / 2
     return float(np.mean(np.where(d == 0, 0, np.abs(y - p) / np.where(d == 0, 1, d))))
 
 
-def features(kind, xtr, xva):
+def _scale_features(kind, xtr, xva):
     if kind == "quantile":
-        q = QuantileTransformer(
+        transformer = QuantileTransformer(
             output_distribution="normal",
             n_quantiles=min(1000, len(xtr)),
             subsample=100_000,
             random_state=0,
         )
-        return q.fit_transform(xtr), q.transform(xva)
-    s = StandardScaler()
-    a, b = s.fit_transform(xtr), s.transform(xva)
+        return transformer.fit_transform(xtr), transformer.transform(xva)
+    scaler = StandardScaler()
+    x_train_scaled, x_val_scaled = scaler.fit_transform(xtr), scaler.transform(xva)
     if kind == "clip":
-        a, b = np.clip(a, -5, 5), np.clip(b, -5, 5)
-    return a, b
+        x_train_scaled, x_val_scaled = (
+            np.clip(x_train_scaled, -5, 5),
+            np.clip(x_val_scaled, -5, 5),
+        )
+    return x_train_scaled, x_val_scaled
 
 
-def net(cfg, n_in, n_out, clf):
+def _net(config, n_in, n_out, clf):
     import keras
 
     layers = [keras.layers.Input(shape=(n_in,))]
-    for i in range(cfg["n_layers"]):
+    for i in range(config["n_layers"]):
         layers.append(
             keras.layers.Dense(
-                cfg[f"n_units_l{i}"],
+                config[f"n_units_l{i}"],
                 activation="relu",
-                kernel_regularizer=keras.regularizers.L2(cfg["weight_decay"]),
+                kernel_regularizer=keras.regularizers.L2(config["weight_decay"]),
             )
         )
     layers.append(keras.layers.Dense(n_out))
@@ -62,23 +81,47 @@ def net(cfg, n_in, n_out, clf):
     return keras.models.Sequential(layers)
 
 
-def score(clf, y, pred, target):
+def _score(clf, y, pred, target):
     if clf:
         return float(matthews_corrcoef(y, np.argmax(pred, axis=1)))
-    return smape(y, np.ravel(pred) * target[1] + target[0])
+    return _smape(y, np.ravel(pred) * target[1] + target[0])
+
+
+def _train_curve(model, x_train, y_fit, x_val, y_val, clf, target):
+    best, best_epoch, first, wait, t0 = None, 0, None, 0, time.time()
+    for epoch in range(1, EPOCHS + 1):
+        model.fit(x_train, y_fit, batch_size=BATCH, epochs=1, verbose=0, shuffle=True)
+        val_score = _score(
+            clf, y_val, model.predict(x_val, batch_size=4096, verbose=0), target
+        )
+        first = val_score if first is None else first
+        better = best is None or (val_score > best if clf else val_score < best)
+        if better:
+            best, best_epoch, wait = val_score, epoch, 0
+        else:
+            wait += 1
+            if wait >= PATIENCE:
+                break
+    return {
+        "best": best,
+        "best_epoch": best_epoch,
+        "epoch1": first,
+        "epochs": epoch,
+        "secs": round(time.time() - t0, 1),
+    }
 
 
 def run(name, revision, hpo_dir, keep_sentinel_rows=False):
     import keras
 
-    data = load_splits(name, revision, drop_sentinel=not keep_sentinel_rows)
+    data = load_splits(name, revision, keep_sentinel_rows=keep_sentinel_rows)
     xtr, ytr, xva, yva = (data[k] for k in ("x_train", "y_train", "x_val", "y_val"))
-    clf = name.startswith("clf_")
+    clf = is_clf(name)
     rng = np.random.default_rng(SEED)
     if len(xtr) > MAX_TRAIN:
         idx = rng.choice(len(xtr), MAX_TRAIN, replace=False)
         xtr, ytr = xtr[idx], ytr[idx]
-    cfg = json.loads((Path(hpo_dir) / f"{name}.json").read_text())
+    config = json.loads((Path(hpo_dir) / f"{name}.json").read_text())
     out = {
         "dataset": name,
         "n_train_used": len(xtr),
@@ -86,49 +129,50 @@ def run(name, revision, hpo_dir, keep_sentinel_rows=False):
     }
     if clf:
         ytr, yva = ytr.astype(int), yva.astype(int)
-        n_out, loss, target = (
-            int(max(ytr.max(), yva.max()) + 1),
-            "sparse_categorical_crossentropy",
-            None,
-        )
+        n_out = int(max(ytr.max(), yva.max()) + 1)
+        loss = "sparse_categorical_crossentropy"
+        target = None
         out["constant"] = 0.0
         ref = HistGradientBoostingClassifier(random_state=SEED).fit(xtr, ytr)
         out["hgb"] = float(matthews_corrcoef(yva, ref.predict(xva)))
-        ytr_fit = ytr
+        y_fit = ytr
     else:
         ytr, yva = ytr.astype(np.float64), yva.astype(np.float64)
         target = (ytr.mean(), ytr.std() or 1.0)
-        n_out, loss = 1, "mse"
-        out["constant"] = smape(yva, np.full_like(yva, target[0]))
+        n_out = 1
+        loss = "mse"
+        out["constant"] = _smape(yva, np.full_like(yva, target[0]))
         ref = HistGradientBoostingRegressor(random_state=SEED).fit(xtr, ytr)
-        out["hgb"] = smape(yva, ref.predict(xva))
-        ytr_fit = (ytr - target[0]) / target[1]
-    for kind in ("standard", "clip", "quantile"):
-        a, b = features(kind, xtr, xva)
+        out["hgb"] = _smape(yva, ref.predict(xva))
+        y_fit = (ytr - target[0]) / target[1]
+    for kind in KINDS:
+        a, b = _scale_features(kind, xtr, xva)
         for lr in LRS:
             keras.utils.set_random_seed(SEED)
-            m = net(cfg, a.shape[1], n_out, clf)
-            m.compile(optimizer=keras.optimizers.Adam(learning_rate=lr), loss=loss)
-            best, best_ep, first, wait, t0 = None, 0, None, 0, time.time()
-            for ep in range(1, EPOCHS + 1):
-                m.fit(a, ytr_fit, batch_size=BATCH, epochs=1, verbose=0, shuffle=True)
-                s = score(clf, yva, m.predict(b, batch_size=4096, verbose=0), target)
-                first = s if first is None else first
-                better = best is None or (s > best if clf else s < best)
-                if better:
-                    best, best_ep, wait = s, ep, 0
-                else:
-                    wait += 1
-                    if wait >= PATIENCE:
-                        break
-            out[f"{kind}_lr{lr:g}"] = {
-                "best": best,
-                "best_epoch": best_ep,
-                "epoch1": first,
-                "epochs": ep,
-                "secs": round(time.time() - t0, 1),
-            }
+            model = _net(config, a.shape[1], n_out, clf)
+            model.compile(optimizer=keras.optimizers.Adam(learning_rate=lr), loss=loss)
+            out[score_key(kind, lr)] = _train_curve(
+                model, a, y_fit, b, yva, clf, target
+            )
     return out
+
+
+def build_provenance(names, hpo_dir, keep_sentinel_rows):
+    prov = provenance()
+    prov["run_constants"] = {
+        "MAX_TRAIN": MAX_TRAIN,
+        "EPOCHS": EPOCHS,
+        "PATIENCE": PATIENCE,
+        "BATCH": BATCH,
+        "LRS": LRS,
+        "SEED": SEED,
+    }
+    prov["keep_sentinel_rows"] = keep_sentinel_rows
+    prov["hpo_sha256"] = {
+        name: hashlib.sha256((hpo_dir / f"{name}.json").read_bytes()).hexdigest()
+        for name in names
+    }
+    return prov
 
 
 def main(argv=None):
@@ -141,25 +185,10 @@ def main(argv=None):
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
     import keras
 
-    names = [
-        line.strip() for line in args.names.read_text().splitlines() if line.strip()
-    ]
+    names = read_lines(args.names)
+    prov = build_provenance(names, args.hpo_dir, args.keep_sentinel_rows)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text("")
-    prov = provenance()
-    prov["run_constants"] = {
-        "MAX_TRAIN": MAX_TRAIN,
-        "EPOCHS": EPOCHS,
-        "PATIENCE": PATIENCE,
-        "BATCH": BATCH,
-        "LRS": LRS,
-        "SEED": SEED,
-    }
-    prov["keep_sentinel_rows"] = args.keep_sentinel_rows
-    prov["hpo_sha256"] = {
-        name: hashlib.sha256((args.hpo_dir / f"{name}.json").read_bytes()).hexdigest()
-        for name in names
-    }
     Path(f"{args.out}.provenance.json").write_text(json.dumps(prov, indent=2))
     keras.utils.set_random_seed(SEED)
     for name in names:

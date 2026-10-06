@@ -1,4 +1,6 @@
+import json
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
@@ -88,6 +90,36 @@ def _cells(table):
     ]
 
 
+def test_render_main_round_trip(tmp_path):
+    import render_dataset_audit
+
+    audit, sanity, sanity_prov, before, before_prov = _inputs()
+    audit_path = tmp_path / "audit.json"
+    sanity_path = tmp_path / "sanity.jsonl"
+    before_path = tmp_path / "before.jsonl"
+    output = tmp_path / "report.md"
+    audit_path.write_text(json.dumps(audit))
+    for path, records, prov in (
+        (sanity_path, sanity, sanity_prov),
+        (before_path, before, before_prov),
+    ):
+        path.write_text("".join(json.dumps(record) + "\n" for record in records))
+        Path(f"{path}.provenance.json").write_text(json.dumps(prov))
+    render_dataset_audit.main(
+        [
+            "--audit-json",
+            str(audit_path),
+            "--sanity",
+            str(sanity_path),
+            "--sanity-before",
+            str(before_path),
+            "--out",
+            str(output),
+        ]
+    )
+    assert output.read_text() == render_dataset_audit.render(*_inputs())
+
+
 def test_render_tables_preserve_dataset_names_and_metric_columns():
     from render_dataset_audit import render, sanity_table, static_table
 
@@ -154,6 +186,14 @@ def test_render_tables_preserve_dataset_names_and_metric_columns():
     assert "2026-10-05" in document
     assert "outside `results/`" in document
     assert "--keep-sentinel-rows" in document
+    assert "every sanity dataset except reg_num_synthetic" in document
+    assert "does not beat the constant baseline on reg_num_synthetic either" in document
+    assert "clf_num_MiniBooNE (173)" in document
+    assert "best validation score over at most 40 epochs (patience 8)" in document
+    assert "--hpo-dir results/hyperparameter_optimization" in document
+    assert "mktemp -d" in document
+    assert "Run the scripts from the repository root" in document
+    assert "~/" not in document
     assert document.isascii()
 
 
@@ -175,6 +215,7 @@ def test_render_tables_preserve_dataset_names_and_metric_columns():
         "missing_before_record",
         "missing_sanity_sidecar",
         "missing_before_sidecar",
+        "rationale",
     ],
 )
 def test_render_rejects_incompatible_evidence(mismatch):
@@ -212,5 +253,7 @@ def test_render_rejects_incompatible_evidence(mismatch):
         del sanity_prov["keep_sentinel_rows"]
     elif mismatch == "missing_before_sidecar":
         del before_prov["keep_sentinel_rows"]
+    elif mismatch == "rationale":
+        sanity[1]["hgb"] = 1.0
     with pytest.raises(ValueError):
         render(audit, sanity, sanity_prov, before, before_prov)

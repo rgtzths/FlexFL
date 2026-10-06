@@ -95,6 +95,15 @@ def _train_stats(raw_train):
     return mean, scale
 
 
+def test_split_data_is_static(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    x, y = _raw(300)
+    expected = Benchmark(data_name="clf_num_synthetic").split_data(x, y, 0.2, 0.2)
+    actual = DatasetABC.split_data(x, y, 0.2, 0.2)
+    for observed, wanted in zip(actual, expected):
+        np.testing.assert_array_equal(observed, wanted)
+
+
 def test_split_save_scales_every_split_with_train_statistics(monkeypatch, tmp_path):
     _isolate(monkeypatch, tmp_path)
     ds = _Dataset()
@@ -356,6 +365,91 @@ def test_benchmark_preprocess_drops_all_sentinel_rows(monkeypatch, tmp_path):
     for split, y_split in ys.items():
         feature = np.load(cache / f"x_{split}.npy")[:, 1]
         assert np.corrcoef(feature, y_split)[0, 1] == pytest.approx(1.0)
+
+
+def test_benchmark_preprocess_drops_all_sentinel_rows_for_classification(
+    monkeypatch, tmp_path
+):
+    _isolate(monkeypatch, tmp_path)
+    n = 300
+    dropped = [3, 50, 51, 120, 200, 299]
+    x, _ = _raw(n)
+    x[:, 1] = np.arange(n)
+    labels = np.where(np.arange(n) % 3 == 0, "yes", "no")
+    x[dropped] = -999.0
+    frame = pd.DataFrame(x, columns=["a", "b", "c"]).assign(label=labels)
+
+    class _Hub:
+        def to_pandas(self):
+            return frame.copy()
+
+    monkeypatch.setattr(
+        Benchmark_module, "load_dataset", lambda *a, **kw: {"train": _Hub()}
+    )
+    ds = Benchmark(data_name="clf_num_synthetic")
+    ds.preprocess(0.2, 0.2)
+    cache = _cache(tmp_path, ds)
+    stats = json.loads((cache / SCALING).read_text())
+    indices = []
+    for split in ("train", "val", "test"):
+        feature = np.load(cache / f"x_{split}.npy")[:, 1]
+        original = np.rint(feature * stats["scale"][1] + stats["mean"][1]).astype(int)
+        indices.extend(original.tolist())
+        saved_y = np.load(cache / f"y_{split}.npy")
+        np.testing.assert_array_equal(saved_y, (labels[original] == "yes").astype(int))
+    assert set(indices) == set(range(n)) - set(dropped)
+    assert ds.metadata["samples"] == 294
+
+
+def test_benchmark_preprocess_pins_hf_revision(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+    x, y = _raw(300)
+    frame = pd.DataFrame(x, columns=["a", "b", "c"]).assign(
+        label=np.where(y == 1, "yes", "no")
+    )
+    calls = []
+
+    class _Hub:
+        def to_pandas(self):
+            return frame.copy()
+
+    def load(*args, **kwargs):
+        calls.append((args, kwargs))
+        return {"train": _Hub()}
+
+    monkeypatch.setattr(Benchmark_module, "load_dataset", load)
+    Benchmark(data_name="clf_num_synthetic").preprocess(0.2, 0.2)
+    assert calls == [
+        (
+            ("inria-soda/tabular-benchmark", "clf_num_synthetic"),
+            {"revision": "8d0ff9103525b7e3579b180230fddb3186258301"},
+        )
+    ]
+
+
+def test_load_raw_keeps_sentinel_rows_on_request(monkeypatch):
+    x, y = _raw(30)
+    x[[2, 21]] = -999.0
+    frame = pd.DataFrame(x, columns=["a", "b", "c"]).assign(target=y)
+
+    class _Hub:
+        def to_pandas(self):
+            return frame.copy()
+
+    monkeypatch.setattr(
+        Benchmark_module, "load_dataset", lambda *a, **kw: {"train": _Hub()}
+    )
+    assert hasattr(Benchmark_module, "load_raw")
+    raw_x, raw_y = Benchmark_module.load_raw(
+        "reg_num_synthetic", "rev1", keep_sentinel_rows=True
+    )
+    np.testing.assert_array_equal(raw_x, x)
+    np.testing.assert_array_equal(raw_y, y)
+    kept = np.ones(len(x), dtype=bool)
+    kept[[2, 21]] = False
+    filtered_x, filtered_y = Benchmark_module.load_raw("reg_num_synthetic", "rev1")
+    np.testing.assert_array_equal(filtered_x, x[kept])
+    np.testing.assert_array_equal(filtered_y, y[kept])
 
 
 def test_regression_split_save_records_train_target_statistics(monkeypatch, tmp_path):

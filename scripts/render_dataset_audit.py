@@ -1,6 +1,85 @@
+#!/usr/bin/env python3
+"""Render audit and sanity evidence into the Markdown preprocessing report.
+
+Reads audit JSON, sanity JSONL and provenance sidecars, refuses incompatible
+evidence, and writes Markdown. Run from the repository root:
+
+    .venv/bin/python scripts/render_dataset_audit.py --audit-json audit.json \
+        --sanity sanity.jsonl --sanity-before before.jsonl --out report.md
+"""
+
 import argparse
 import json
 from pathlib import Path
+
+from audit_central_sanity import LRS, score_key
+from audit_datasets import is_clf
+
+from flexfl.datasets.Benchmark import SENTINEL
+
+MINIBOONE = "clf_num_MiniBooNE"
+SENTINEL_TEXT = f"{SENTINEL:g}"
+SANITY_COLUMNS = (
+    ("standard (1e-3)", score_key("standard", LRS[0])),
+    ("clip (1e-3)", score_key("clip", LRS[0])),
+    ("quantile (1e-3)", score_key("quantile", LRS[0])),
+    ("standard (1e-4)", score_key("standard", LRS[1])),
+)
+INTRO = (
+    "Features are standardized with training-split statistics (T068) "
+    "and regression targets likewise (T069).",
+    "Keep standard scaling for every dataset. Rows whose features are all "
+    f"{SENTINEL_TEXT} are dropped at preprocessing. No HPO re-tune.",
+    "Worker-feature entropy before and after T068 is not comparable, so "
+    "the meta-dataset is built only from runs gathered after the T068 "
+    "relaunch on 2026-10-05, and older corpora stay archived "
+    "outside `results/`.",
+    "No HPO re-tune: at learning rate 1e-3 the tuned network beats the constant "
+    "baseline on every sanity dataset except {network_misses}. The boosting "
+    "reference does not beat the constant baseline on {reference_misses} either, "
+    "so the metric carries little signal there.",
+    "Network scores are the best validation score over at most {epochs} epochs "
+    "(patience {patience}), so they are optimistic against the boosting reference, "
+    "which has no selection.",
+    f"The static audit describes raw rows before the all {SENTINEL_TEXT} drop, "
+    f"so its row counts include the all {SENTINEL_TEXT} rows, counted over train, "
+    "val and test, for: {dropped}.",
+    "The sweep reuses any `data/<name>/_data` cache that holds `scaling.json`. "
+    "Before the tier-20 pass, delete `data/<name>/_data` for {drop_names} on any "
+    "host where that cache holds `scaling.json` and was built before the drop, "
+    "so preprocessing runs again.",
+    f"Run the scripts from the repository root. The all {SENTINEL_TEXT} drop "
+    "applies to the Benchmark datasets only. The HPO configs come from "
+    "results/hyperparameter_optimization, which is not tracked.",
+)
+REPRODUCE = (
+    "out=$(mktemp -d)\n"
+    'sed -n "/^datasets=(/,/^)/p" scripts/run_full_experiments.sh '
+    '| tr -d "\'" | grep -v \'[()]\' > "$out"/names.txt\n'
+    ".venv/bin/python scripts/select_dataset_tiers.py --tier 20 "
+    '< "$out"/names.txt > "$out"/tier20.txt\n'
+    "printf '%s\\n' clf_num_MiniBooNE > \"$out\"/miniboone.txt\n"
+    '.venv/bin/python scripts/audit_datasets.py --names "$out"/names.txt '
+    '--tier20 "$out"/tier20.txt --out-json "$out"/dataset_audit.json '
+    '--out-csv "$out"/dataset_audit.csv\n'
+    "uv sync --frozen --extra ml\n"
+    '.venv/bin/python scripts/audit_central_sanity.py --names "$out"/tier20.txt '
+    "--hpo-dir results/hyperparameter_optimization "
+    '--out "$out"/central_sanity.jsonl\n'
+    '.venv/bin/python scripts/audit_central_sanity.py --names "$out"/miniboone.txt '
+    "--hpo-dir results/hyperparameter_optimization --keep-sentinel-rows "
+    '--out "$out"/central_sanity_keep_sentinel.jsonl\n'
+    "uv sync --frozen\n"
+    'cp "$out"/dataset_audit.json "$out"/dataset_audit.csv '
+    '"$out"/central_sanity.jsonl "$out"/central_sanity.jsonl.provenance.json '
+    '"$out"/central_sanity_keep_sentinel.jsonl '
+    '"$out"/central_sanity_keep_sentinel.jsonl.provenance.json docs/audit/\n'
+    ".venv/bin/python scripts/render_dataset_audit.py "
+    "--audit-json docs/audit/dataset_audit.json "
+    "--sanity docs/audit/central_sanity.jsonl "
+    "--sanity-before docs/audit/central_sanity_keep_sentinel.jsonl "
+    "--out docs/dataset_preprocessing_audit.md"
+)
 
 
 def _table(headers, rows):
@@ -21,7 +100,7 @@ def static_table(rows):
         "features",
         "max abs z",
         "features with abs z above 10",
-        "all -999 rows",
+        f"all {SENTINEL_TEXT} rows",
         "duplicate train rows",
         "label conflicts",
         "imbalance ratio / target skew",
@@ -33,7 +112,7 @@ def static_table(rows):
         count = r["n_all_sentinel_rows"]
         action = "standard scaling"
         if count > 0:
-            action += f"; drop all -999 rows ({count})"
+            action += f"; drop all {SENTINEL_TEXT} rows ({count})"
         target = r["imbalance_ratio"] if r["task"] == "clf" else r["y_skew"]
         values.append(
             [
@@ -61,31 +140,34 @@ def sanity_table(records):
         "metric",
         "constant",
         "boosting reference",
-        "standard (1e-3)",
-        "clip (1e-3)",
-        "quantile (1e-3)",
-        "standard (1e-4)",
+        *(header for header, _ in SANITY_COLUMNS),
     ]
     values = []
     for r in records:
         scores = [r["constant"], r["hgb"]]
-        scores.extend(
-            r[k]["best"]
-            for k in (
-                "standard_lr0.001",
-                "clip_lr0.001",
-                "quantile_lr0.001",
-                "standard_lr0.0001",
-            )
-        )
+        scores.extend(r[key]["best"] for _, key in SANITY_COLUMNS)
         values.append(
             [
                 r["dataset"],
-                "MCC" if r["dataset"].startswith("clf_") else "SMAPE",
+                "MCC" if is_clf(r["dataset"]) else "SMAPE",
                 *(f"{score:.3f}" for score in scores),
             ]
         )
     return _table(headers, values)
+
+
+def _best(records, name):
+    return next(r for r in records if r["dataset"] == name)[SANITY_COLUMNS[0][1]][
+        "best"
+    ]
+
+
+def _beats(record, value):
+    return (
+        value > record["constant"]
+        if is_clf(record["dataset"])
+        else value < record["constant"]
+    )
 
 
 def _validate(audit, sanity, sanity_prov, before, before_prov):
@@ -94,8 +176,7 @@ def _validate(audit, sanity, sanity_prov, before, before_prov):
             raise ValueError(f"Provenance differs in {key}")
     if sanity_prov["run_constants"] != before_prov["run_constants"]:
         raise ValueError("Run constants differ")
-    name = "clf_num_MiniBooNE"
-    if sanity_prov["hpo_sha256"][name] != before_prov["hpo_sha256"][name]:
+    if sanity_prov["hpo_sha256"][MINIBOONE] != before_prov["hpo_sha256"][MINIBOONE]:
         raise ValueError("MiniBooNE HPO config hashes differ")
     for records, prov, keep in (
         (sanity, sanity_prov, False),
@@ -109,49 +190,41 @@ def _validate(audit, sanity, sanity_prov, before, before_prov):
 
 def render(audit, sanity, sanity_prov, before, before_prov):
     _validate(audit, sanity, sanity_prov, before, before_prov)
-    name = "clf_num_MiniBooNE"
-    after_score = next(r for r in sanity if r["dataset"] == name)["standard_lr0.001"][
-        "best"
+    after_score = _best(sanity, MINIBOONE)
+    before_score = _best(before, MINIBOONE)
+    network_misses = {
+        r["dataset"] for r in sanity if not _beats(r, r[SANITY_COLUMNS[0][1]]["best"])
+    }
+    reference_misses = {r["dataset"] for r in sanity if not _beats(r, r["hgb"])}
+    dropped = [
+        (r["dataset"], r["n_all_sentinel_rows"])
+        for r in audit["rows"]
+        if r["n_all_sentinel_rows"] > 0
     ]
-    before_score = next(r for r in before if r["dataset"] == name)["standard_lr0.001"][
-        "best"
-    ]
-    commands = (
-        'sed -n "/^datasets=(/,/^)/p" scripts/run_full_experiments.sh '
-        "| tr -d \"'\" | grep -v '[()]' > names.txt\n"
-        ".venv/bin/python scripts/select_dataset_tiers.py --tier 20 "
-        "< names.txt > tier20.txt\n"
-        "printf '%s\\n' clf_num_MiniBooNE > miniboone.txt\n"
-        ".venv/bin/python scripts/audit_datasets.py --names names.txt "
-        "--tier20 tier20.txt --out-json docs/audit/dataset_audit.json "
-        "--out-csv docs/audit/dataset_audit.csv\n"
-        "uv sync --frozen --extra ml\n"
-        ".venv/bin/python scripts/audit_central_sanity.py --names tier20.txt "
-        "--hpo-dir ~/research/pkdd26_cost_modeling/FlexFL/results/"
-        "hyperparameter_optimization --out docs/audit/central_sanity.jsonl\n"
-        ".venv/bin/python scripts/audit_central_sanity.py --names miniboone.txt "
-        "--hpo-dir ~/research/pkdd26_cost_modeling/FlexFL/results/"
-        "hyperparameter_optimization --keep-sentinel-rows "
-        "--out docs/audit/central_sanity_keep_sentinel.jsonl\n"
-        "uv sync --frozen\n"
-        ".venv/bin/python scripts/render_dataset_audit.py "
-        "--audit-json docs/audit/dataset_audit.json "
-        "--sanity docs/audit/central_sanity.jsonl "
-        "--sanity-before docs/audit/central_sanity_keep_sentinel.jsonl "
-        "--out docs/dataset_preprocessing_audit.md"
-    )
+    if not network_misses.issubset(reference_misses):
+        raise ValueError(
+            "No-re-tune rationale no longer holds: "
+            + ", ".join(sorted(network_misses - reference_misses))
+        )
     return (
         "\n\n".join(
             [
                 "# Dataset preprocessing audit",
-                "Features are standardized with training-split statistics (T068) "
-                "and regression targets likewise (T069).",
-                "Keep standard scaling for every dataset. Rows whose features are all "
-                "-999 are dropped at preprocessing. No HPO re-tune.",
-                "Worker-feature entropy before and after T068 is not comparable, so "
-                "the meta-dataset is built only from runs gathered after the T068 "
-                "relaunch on 2026-10-05, and older corpora stay archived "
-                "outside `results/`.",
+                *(
+                    paragraph.format(
+                        network_misses=", ".join(sorted(network_misses)) or "none",
+                        reference_misses=", ".join(sorted(reference_misses)) or "none",
+                        epochs=sanity_prov["run_constants"]["EPOCHS"],
+                        patience=sanity_prov["run_constants"]["PATIENCE"],
+                        dropped=", ".join(
+                            f"{name} ({count})" for name, count in sorted(dropped)
+                        )
+                        or "none",
+                        drop_names=", ".join(sorted(name for name, _ in dropped))
+                        or "none",
+                    )
+                    for paragraph in INTRO
+                ),
                 "## Audit provenance",
                 "```json\n" + json.dumps(audit["provenance"], indent=2) + "\n```",
                 "## Central sanity provenance",
@@ -166,7 +239,10 @@ def render(audit, sanity, sanity_prov, before, before_prov):
                 f"with sentinel rows: {before_score:.3f}; "
                 f"without sentinel rows: {after_score:.3f}.",
                 "## Reproduce",
-                "```bash\n" + commands + "\n```",
+                "Outputs go to a scratch directory first, because the scripts record "
+                "git_dirty and files written inside the tree would mark the next "
+                "run dirty.",
+                "```bash\n" + REPRODUCE + "\n```",
             ]
         )
         + "\n"

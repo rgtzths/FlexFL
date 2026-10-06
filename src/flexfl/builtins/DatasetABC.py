@@ -110,7 +110,8 @@ class DatasetABC(ABC):
             x = torch.tensor(x, dtype=torch.float32)
         return x, y
 
-    def split_data(self, x, y, val_size, test_size):
+    @staticmethod
+    def split_data(x, y, val_size, test_size):
         total_size = val_size + test_size
         assert total_size < 1, "val_size + test_size must be less than 1"
         if total_size == 0:
