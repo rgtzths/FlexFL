@@ -10,30 +10,28 @@ writes JSON and CSV with provenance. Run from the repository root:
 
 import argparse
 import csv
-import hashlib
 import json
 import subprocess
 from importlib.metadata import version
 from pathlib import Path
 
 import numpy as np
+from audit_common import read_lines, sha256_file
 from scipy import stats
 
 from flexfl.builtins.DatasetABC import DatasetABC
-from flexfl.datasets.Benchmark import HF_DATASET, HF_REVISION, SENTINEL, load_raw
+from flexfl.datasets.Benchmark import (
+    HF_DATASET,
+    HF_REVISION,
+    SENTINEL,
+    is_clf,
+    load_raw,
+)
 
 VAL_SIZE = 0.2
 TEST_SIZE = 0.2
 SPLIT_KEYS = ("x_train", "y_train", "x_val", "y_val", "x_test", "y_test")
 SENTINEL_CANDIDATES = {-99999.0, -9999.0, SENTINEL, -99.0, 999.0, 9999.0, 99999.0}
-
-
-def is_clf(name):
-    return name.startswith("clf_")
-
-
-def read_lines(path):
-    return [line.strip() for line in path.read_text().splitlines() if line.strip()]
 
 
 def load_splits(name, revision, *, keep_sentinel_rows):
@@ -201,8 +199,10 @@ def flags(row):
 def provenance():
     root = Path(__file__).resolve().parent.parent
     sources = (
+        "scripts/audit_common.py",
         "scripts/audit_datasets.py",
         "scripts/audit_central_sanity.py",
+        "scripts/render_dataset_audit.py",
         "src/flexfl/datasets/Benchmark.py",
         "src/flexfl/builtins/DatasetABC.py",
     )
@@ -215,10 +215,7 @@ def provenance():
                 ["git", "status", "--porcelain"], cwd=root, text=True
             ).strip()
         ),
-        "sources_sha256": {
-            path: hashlib.sha256((root / path).read_bytes()).hexdigest()
-            for path in sources
-        },
+        "sources_sha256": {path: sha256_file(root / path) for path in sources},
         "hf_dataset": HF_DATASET,
         "hf_revision": HF_REVISION,
         "val_size": VAL_SIZE,
@@ -243,11 +240,11 @@ def main(argv=None):
     rows = []
     for name in names:
         data = load_splits(name, prov["hf_revision"], keep_sentinel_rows=True)
-        r = audit(name, data, tier20)
-        r["flags"] = ",".join(flags(r))
-        rows.append(r)
-        print(f"{name:45s} {r['flags']}", flush=True)
-    keys = sorted({k for r in rows for k in r}, key=lambda k: (k not in rows[0], k))
+        row = audit(name, data, tier20)
+        row["flags"] = ",".join(flags(row))
+        rows.append(row)
+        print(f"{name:45s} {row['flags']}", flush=True)
+    keys = sorted({k for row in rows for k in row}, key=lambda k: (k not in rows[0], k))
     args.out_csv.parent.mkdir(parents=True, exist_ok=True)
     with args.out_csv.open("w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=keys)

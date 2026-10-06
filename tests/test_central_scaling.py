@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -611,3 +612,23 @@ def test_constant_target_uses_unit_scale(monkeypatch, tmp_path):
     }
     with pytest.raises(ValueError, match="not finite"):
         ds.fit_target(np.array([1.0, np.nan]))
+
+
+def test_is_clf_matches_previous_rule_on_every_known_name():
+    metadata = Path(Benchmark_module.__file__).parent / "_metadata"
+    names = {path.stem for path in metadata.glob("*.json")}
+    assert {"clf_num_MiniBooNE", "reg_num_abalone", "Housing"} <= names
+    for name in names:
+        assert Benchmark_module.is_clf(name) == ("clf" in name)
+
+
+@pytest.mark.parametrize("name", ("clf_cat_synthetic", "clf_num_synthetic"))
+def test_load_raw_encodes_labels_for_every_clf_prefix(monkeypatch, name):
+    frame = pd.DataFrame({"x": [1.0, 2.0, 3.0, 4.0], "target": ["yes", "no"] * 2})
+    hub = type("Hub", (), {"to_pandas": lambda self: frame.copy()})()
+    monkeypatch.setattr(
+        Benchmark_module, "load_dataset", lambda *args, **kwargs: {"train": hub}
+    )
+    _, y = Benchmark_module.load_raw(name)
+    assert np.issubdtype(y.dtype, np.integer)
+    np.testing.assert_array_equal(y, [1, 0, 1, 0])

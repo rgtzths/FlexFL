@@ -14,13 +14,17 @@ def drop_sentinel_rows(x, y):
     return x[keep], y[keep]
 
 
+def is_clf(name):
+    return name.startswith("clf_")
+
+
 def load_raw(name, revision=HF_REVISION, keep_sentinel_rows=False):
     df = load_dataset(HF_DATASET, name, revision=revision)["train"].to_pandas()
     x = df.iloc[:, :-1].to_numpy(dtype=np.float64)
     y = df.iloc[:, -1].to_numpy()
     if not keep_sentinel_rows:
         x, y = drop_sentinel_rows(x, y)
-    if "clf" in name:
+    if is_clf(name):
         y = LabelEncoder().fit_transform(y)
     return x, y
 
@@ -30,7 +34,7 @@ class Benchmark(DatasetABC):
     def __init__(
         self, *, data_name: str = "clf_cat_albert", data_folder: str = None, **kwargs
     ):
-        self.class_task = True if "clf" in data_name else False
+        self.class_task = is_clf(data_name)
 
         super().__init__(data_name=data_name, data_folder=data_folder, **kwargs)
 

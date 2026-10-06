@@ -10,14 +10,14 @@ JSONL plus a provenance sidecar. Requires the ml extra. Run from the repo root:
 """
 
 import argparse
-import hashlib
 import json
 import os
 import time
 from pathlib import Path
 
 import numpy as np
-from audit_datasets import is_clf, load_splits, provenance, read_lines
+from audit_common import KINDS, LRS, better, read_lines, score_key, sha256_file
+from audit_datasets import load_splits, provenance
 from sklearn.ensemble import (
     HistGradientBoostingClassifier,
     HistGradientBoostingRegressor,
@@ -25,17 +25,13 @@ from sklearn.ensemble import (
 from sklearn.metrics import matthews_corrcoef
 from sklearn.preprocessing import QuantileTransformer, StandardScaler
 
+from flexfl.datasets.Benchmark import is_clf
+
 MAX_TRAIN = 100_000
 EPOCHS = 40
 PATIENCE = 8
 BATCH = 512
-LRS = (1e-3, 1e-4)
 SEED = 42
-KINDS = ("standard", "clip", "quantile")
-
-
-def score_key(kind, lr):
-    return f"{kind}_lr{lr:g}"
 
 
 def _smape(y, p):
@@ -56,10 +52,7 @@ def _scale_features(kind, xtr, xva):
     scaler = StandardScaler()
     x_train_scaled, x_val_scaled = scaler.fit_transform(xtr), scaler.transform(xva)
     if kind == "clip":
-        x_train_scaled, x_val_scaled = (
-            np.clip(x_train_scaled, -5, 5),
-            np.clip(x_val_scaled, -5, 5),
-        )
+        return np.clip(x_train_scaled, -5, 5), np.clip(x_val_scaled, -5, 5)
     return x_train_scaled, x_val_scaled
 
 
@@ -84,7 +77,8 @@ def _net(config, n_in, n_out, clf):
 def _score(clf, y, pred, target):
     if clf:
         return float(matthews_corrcoef(y, np.argmax(pred, axis=1)))
-    return _smape(y, np.ravel(pred) * target[1] + target[0])
+    mean, std = target
+    return _smape(y, np.ravel(pred) * std + mean)
 
 
 def _train_curve(model, x_train, y_fit, x_val, y_val, clf, target):
@@ -95,8 +89,7 @@ def _train_curve(model, x_train, y_fit, x_val, y_val, clf, target):
             clf, y_val, model.predict(x_val, batch_size=4096, verbose=0), target
         )
         first = val_score if first is None else first
-        better = best is None or (val_score > best if clf else val_score < best)
-        if better:
+        if best is None or better(clf, val_score, best):
             best, best_epoch, wait = val_score, epoch, 0
         else:
             wait += 1
@@ -108,6 +101,33 @@ def _train_curve(model, x_train, y_fit, x_val, y_val, clf, target):
         "epoch1": first,
         "epochs": epoch,
         "secs": round(time.time() - t0, 1),
+    }
+
+
+def _reference_scores(clf, xtr, ytr, xva, yva):
+    if clf:
+        ytr, yva = ytr.astype(int), yva.astype(int)
+        ref = HistGradientBoostingClassifier(random_state=SEED).fit(xtr, ytr)
+        return {
+            "y_val": yva,
+            "y_fit": ytr,
+            "n_out": int(max(ytr.max(), yva.max()) + 1),
+            "loss": "sparse_categorical_crossentropy",
+            "target": None,
+            "constant": 0.0,
+            "hgb": float(matthews_corrcoef(yva, ref.predict(xva))),
+        }
+    ytr, yva = ytr.astype(np.float64), yva.astype(np.float64)
+    mean, std = ytr.mean(), ytr.std() or 1.0
+    ref = HistGradientBoostingRegressor(random_state=SEED).fit(xtr, ytr)
+    return {
+        "y_val": yva,
+        "y_fit": (ytr - mean) / std,
+        "n_out": 1,
+        "loss": "mse",
+        "target": (mean, std),
+        "constant": _smape(yva, np.full_like(yva, mean)),
+        "hgb": _smape(yva, ref.predict(xva)),
     }
 
 
@@ -127,32 +147,24 @@ def run(name, revision, hpo_dir, keep_sentinel_rows=False):
         "n_train_used": len(xtr),
         "keep_sentinel_rows": keep_sentinel_rows,
     }
-    if clf:
-        ytr, yva = ytr.astype(int), yva.astype(int)
-        n_out = int(max(ytr.max(), yva.max()) + 1)
-        loss = "sparse_categorical_crossentropy"
-        target = None
-        out["constant"] = 0.0
-        ref = HistGradientBoostingClassifier(random_state=SEED).fit(xtr, ytr)
-        out["hgb"] = float(matthews_corrcoef(yva, ref.predict(xva)))
-        y_fit = ytr
-    else:
-        ytr, yva = ytr.astype(np.float64), yva.astype(np.float64)
-        target = (ytr.mean(), ytr.std() or 1.0)
-        n_out = 1
-        loss = "mse"
-        out["constant"] = _smape(yva, np.full_like(yva, target[0]))
-        ref = HistGradientBoostingRegressor(random_state=SEED).fit(xtr, ytr)
-        out["hgb"] = _smape(yva, ref.predict(xva))
-        y_fit = (ytr - target[0]) / target[1]
+    setup = _reference_scores(clf, xtr, ytr, xva, yva)
+    out["constant"], out["hgb"] = setup["constant"], setup["hgb"]
     for kind in KINDS:
-        a, b = _scale_features(kind, xtr, xva)
+        x_train_scaled, x_val_scaled = _scale_features(kind, xtr, xva)
         for lr in LRS:
             keras.utils.set_random_seed(SEED)
-            model = _net(config, a.shape[1], n_out, clf)
-            model.compile(optimizer=keras.optimizers.Adam(learning_rate=lr), loss=loss)
+            model = _net(config, x_train_scaled.shape[1], setup["n_out"], clf)
+            model.compile(
+                optimizer=keras.optimizers.Adam(learning_rate=lr), loss=setup["loss"]
+            )
             out[score_key(kind, lr)] = _train_curve(
-                model, a, y_fit, b, yva, clf, target
+                model,
+                x_train_scaled,
+                setup["y_fit"],
+                x_val_scaled,
+                setup["y_val"],
+                clf,
+                setup["target"],
             )
     return out
 
@@ -168,10 +180,7 @@ def build_provenance(names, hpo_dir, keep_sentinel_rows):
         "SEED": SEED,
     }
     prov["keep_sentinel_rows"] = keep_sentinel_rows
-    prov["hpo_sha256"] = {
-        name: hashlib.sha256((hpo_dir / f"{name}.json").read_bytes()).hexdigest()
-        for name in names
-    }
+    prov["hpo_sha256"] = {name: sha256_file(hpo_dir / f"{name}.json") for name in names}
     return prov
 
 

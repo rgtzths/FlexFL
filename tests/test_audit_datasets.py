@@ -8,7 +8,7 @@ import pytest
 
 import flexfl.builtins.DatasetABC as DatasetABC_module
 import flexfl.datasets.Benchmark as Benchmark_module
-from flexfl.datasets.Benchmark import Benchmark
+from flexfl.datasets.Benchmark import Benchmark, is_clf
 
 
 def _isolate(monkeypatch, tmp_path):
@@ -70,7 +70,7 @@ def test_audit_rows_unchanged_by_refactor(name):
     x = np.arange(90, dtype=np.float64).reshape(30, 3)
     x[1, 0] = 999.0
     x[[2, 21]] = -999.0
-    y = np.arange(30) % 3 if name.startswith("clf_") else np.arange(30) - 15.0
+    y = np.arange(30) % 3 if is_clf(name) else np.arange(30) - 15.0
     data = {}
     for split, indices in (
         ("train", slice(0, 18)),
@@ -239,3 +239,24 @@ def test_provenance_records_pinned_revision(monkeypatch):
     monkeypatch.setattr(audit_datasets.subprocess, "check_output", check_output)
     monkeypatch.setattr(HfApi, "dataset_info", no_network)
     assert audit_datasets.provenance()["hf_revision"] == Benchmark_module.HF_REVISION
+
+
+def test_provenance_hashes_every_audit_source(monkeypatch):
+    import audit_datasets
+
+    def check_output(command, **kwargs):
+        assert command in (
+            ["git", "rev-parse", "HEAD"],
+            ["git", "status", "--porcelain"],
+        )
+        return "abc\n" if command[1] == "rev-parse" else ""
+
+    monkeypatch.setattr(audit_datasets.subprocess, "check_output", check_output)
+    assert set(audit_datasets.provenance()["sources_sha256"]) == {
+        "scripts/audit_common.py",
+        "scripts/audit_datasets.py",
+        "scripts/audit_central_sanity.py",
+        "scripts/render_dataset_audit.py",
+        "src/flexfl/datasets/Benchmark.py",
+        "src/flexfl/builtins/DatasetABC.py",
+    }

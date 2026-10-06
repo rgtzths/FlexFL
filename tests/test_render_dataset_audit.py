@@ -195,6 +195,10 @@ def test_render_tables_preserve_dataset_names_and_metric_columns():
     assert "Run the scripts from the repository root" in document
     assert "~/" not in document
     assert document.isascii()
+    assert (
+        "revision 8d0ff9103525b7e3579b180230fddb3186258301 "
+        "in the local Hugging Face cache"
+    ) in document
 
 
 @pytest.mark.parametrize(
@@ -257,3 +261,17 @@ def test_render_rejects_incompatible_evidence(mismatch):
         sanity[1]["hgb"] = 1.0
     with pytest.raises(ValueError):
         render(audit, sanity, sanity_prov, before, before_prov)
+
+
+def test_render_states_none_when_nothing_misses():
+    from render_dataset_audit import render
+
+    audit, sanity, sanity_prov, before, before_prov = _inputs()
+    sanity[1]["standard_lr0.001"]["best"] = 1.0
+    sanity[1]["hgb"] = 1.0
+    audit["rows"][1]["n_all_sentinel_rows"] = 0
+    document = render(audit, sanity, sanity_prov, before, before_prov)
+    assert "every sanity dataset except none." in document
+    assert "constant baseline on none either" in document
+    assert "counted over train, val and test, for: none." in document
+    assert "delete `data/<name>/_data` for none on any host" in document

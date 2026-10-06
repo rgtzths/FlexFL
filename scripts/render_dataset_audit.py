@@ -12,45 +12,17 @@ import argparse
 import json
 from pathlib import Path
 
-from audit_central_sanity import LRS, score_key
-from audit_datasets import is_clf
+from audit_common import HEADLINE_KEY, LRS, better, read_lines, score_key
 
-from flexfl.datasets.Benchmark import SENTINEL
+from flexfl.datasets.Benchmark import HF_REVISION, SENTINEL, is_clf
 
 MINIBOONE = "clf_num_MiniBooNE"
 SENTINEL_TEXT = f"{SENTINEL:g}"
 SANITY_COLUMNS = (
-    ("standard (1e-3)", score_key("standard", LRS[0])),
+    ("standard (1e-3)", HEADLINE_KEY),
     ("clip (1e-3)", score_key("clip", LRS[0])),
     ("quantile (1e-3)", score_key("quantile", LRS[0])),
     ("standard (1e-4)", score_key("standard", LRS[1])),
-)
-INTRO = (
-    "Features are standardized with training-split statistics (T068) "
-    "and regression targets likewise (T069).",
-    "Keep standard scaling for every dataset. Rows whose features are all "
-    f"{SENTINEL_TEXT} are dropped at preprocessing. No HPO re-tune.",
-    "Worker-feature entropy before and after T068 is not comparable, so "
-    "the meta-dataset is built only from runs gathered after the T068 "
-    "relaunch on 2026-10-05, and older corpora stay archived "
-    "outside `results/`.",
-    "No HPO re-tune: at learning rate 1e-3 the tuned network beats the constant "
-    "baseline on every sanity dataset except {network_misses}. The boosting "
-    "reference does not beat the constant baseline on {reference_misses} either, "
-    "so the metric carries little signal there.",
-    "Network scores are the best validation score over at most {epochs} epochs "
-    "(patience {patience}), so they are optimistic against the boosting reference, "
-    "which has no selection.",
-    f"The static audit describes raw rows before the all {SENTINEL_TEXT} drop, "
-    f"so its row counts include the all {SENTINEL_TEXT} rows, counted over train, "
-    "val and test, for: {dropped}.",
-    "The sweep reuses any `data/<name>/_data` cache that holds `scaling.json`. "
-    "Before the tier-20 pass, delete `data/<name>/_data` for {drop_names} on any "
-    "host where that cache holds `scaling.json` and was built before the drop, "
-    "so preprocessing runs again.",
-    f"Run the scripts from the repository root. The all {SENTINEL_TEXT} drop "
-    "applies to the Benchmark datasets only. The HPO configs come from "
-    "results/hyperparameter_optimization, which is not tracked.",
 )
 REPRODUCE = (
     "out=$(mktemp -d)\n"
@@ -58,7 +30,7 @@ REPRODUCE = (
     '| tr -d "\'" | grep -v \'[()]\' > "$out"/names.txt\n'
     ".venv/bin/python scripts/select_dataset_tiers.py --tier 20 "
     '< "$out"/names.txt > "$out"/tier20.txt\n'
-    "printf '%s\\n' clf_num_MiniBooNE > \"$out\"/miniboone.txt\n"
+    f"printf '%s\\n' {MINIBOONE} > \"$out\"/miniboone.txt\n"
     '.venv/bin/python scripts/audit_datasets.py --names "$out"/names.txt '
     '--tier20 "$out"/tier20.txt --out-json "$out"/dataset_audit.json '
     '--out-csv "$out"/dataset_audit.csv\n'
@@ -80,6 +52,45 @@ REPRODUCE = (
     "--sanity-before docs/audit/central_sanity_keep_sentinel.jsonl "
     "--out docs/dataset_preprocessing_audit.md"
 )
+
+
+def _join(items):
+    return ", ".join(sorted(items)) or "none"
+
+
+def _intro(network_misses, reference_misses, epochs, patience, dropped):
+    return (
+        "Features are standardized with training-split statistics (T068) "
+        "and regression targets likewise (T069).",
+        "Keep standard scaling for every dataset. Rows whose features are all "
+        f"{SENTINEL_TEXT} are dropped at preprocessing. No HPO re-tune.",
+        "Worker-feature entropy before and after T068 is not comparable, so "
+        "the meta-dataset is built only from runs gathered after the T068 "
+        "relaunch on 2026-10-05, and older corpora stay archived "
+        "outside `results/`.",
+        "No HPO re-tune: at learning rate 1e-3 the tuned network beats the constant "
+        f"baseline on every sanity dataset except {_join(network_misses)}. "
+        "The boosting reference does not beat the constant baseline on "
+        f"{_join(reference_misses)} either, so the metric carries little signal there.",
+        f"Network scores are the best validation score over at most {epochs} epochs "
+        f"(patience {patience}), so they are optimistic against the boosting "
+        "reference, "
+        "which has no selection.",
+        f"The static audit describes raw rows before the all {SENTINEL_TEXT} drop, "
+        f"so its row counts include the all {SENTINEL_TEXT} rows, counted over train, "
+        "val and test, for: "
+        f"{_join(f'{name} ({count})' for name, count in dropped.items())}.",
+        "The sweep reuses any `data/<name>/_data` cache that holds `scaling.json`. "
+        f"Before the tier-20 pass, delete `data/<name>/_data` for {_join(dropped)} "
+        "on any "
+        "host where that cache holds `scaling.json` and was built before the drop, "
+        "so preprocessing runs again.",
+        f"Run the scripts from the repository root. The all {SENTINEL_TEXT} drop "
+        "applies to the Benchmark datasets only. The HPO configs come from "
+        "results/hyperparameter_optimization, which is not tracked. "
+        "A first-time preprocess needs network access to the Hugging Face Hub or "
+        f"revision {HF_REVISION} in the local Hugging Face cache.",
+    )
 
 
 def _table(headers, rows):
@@ -108,26 +119,26 @@ def static_table(rows):
         "action",
     ]
     values = []
-    for r in sorted(rows, key=lambda row: row["dataset"]):
-        count = r["n_all_sentinel_rows"]
+    for row in sorted(rows, key=lambda row: row["dataset"]):
+        count = row["n_all_sentinel_rows"]
         action = "standard scaling"
         if count > 0:
             action += f"; drop all {SENTINEL_TEXT} rows ({count})"
-        target = r["imbalance_ratio"] if r["task"] == "clf" else r["y_skew"]
+        target = row["imbalance_ratio"] if row["task"] == "clf" else row["y_skew"]
         values.append(
             [
-                r["dataset"],
-                "yes" if r["tier20"] else "",
-                r["task"],
-                r["n_train"],
-                r["n_feat"],
-                f"{r['max_abs_z']:.2f}",
-                r["n_feat_z_gt10"],
+                row["dataset"],
+                "yes" if row["tier20"] else "",
+                row["task"],
+                row["n_train"],
+                row["n_feat"],
+                f"{row['max_abs_z']:.2f}",
+                row["n_feat_z_gt10"],
                 count,
-                f"{r['frac_dup_rows_train']:.1%}",
-                f"{r['frac_dup_label_conflict']:.1%}",
+                f"{row['frac_dup_rows_train']:.1%}",
+                f"{row['frac_dup_label_conflict']:.1%}",
                 f"{target:.2f}",
-                r["flags"],
+                row["flags"],
                 action,
             ]
         )
@@ -143,13 +154,13 @@ def sanity_table(records):
         *(header for header, _ in SANITY_COLUMNS),
     ]
     values = []
-    for r in records:
-        scores = [r["constant"], r["hgb"]]
-        scores.extend(r[key]["best"] for _, key in SANITY_COLUMNS)
+    for record in records:
+        scores = [record["constant"], record["hgb"]]
+        scores.extend(record[key]["best"] for _, key in SANITY_COLUMNS)
         values.append(
             [
-                r["dataset"],
-                "MCC" if is_clf(r["dataset"]) else "SMAPE",
+                record["dataset"],
+                "MCC" if is_clf(record["dataset"]) else "SMAPE",
                 *(f"{score:.3f}" for score in scores),
             ]
         )
@@ -157,17 +168,13 @@ def sanity_table(records):
 
 
 def _best(records, name):
-    return next(r for r in records if r["dataset"] == name)[SANITY_COLUMNS[0][1]][
-        "best"
-    ]
+    return next(record for record in records if record["dataset"] == name)[
+        HEADLINE_KEY
+    ]["best"]
 
 
 def _beats(record, value):
-    return (
-        value > record["constant"]
-        if is_clf(record["dataset"])
-        else value < record["constant"]
-    )
+    return better(is_clf(record["dataset"]), value, record["constant"])
 
 
 def _validate(audit, sanity, sanity_prov, before, before_prov):
@@ -193,14 +200,14 @@ def render(audit, sanity, sanity_prov, before, before_prov):
     after_score = _best(sanity, MINIBOONE)
     before_score = _best(before, MINIBOONE)
     network_misses = {
-        r["dataset"] for r in sanity if not _beats(r, r[SANITY_COLUMNS[0][1]]["best"])
+        row["dataset"] for row in sanity if not _beats(row, row[HEADLINE_KEY]["best"])
     }
-    reference_misses = {r["dataset"] for r in sanity if not _beats(r, r["hgb"])}
-    dropped = [
-        (r["dataset"], r["n_all_sentinel_rows"])
-        for r in audit["rows"]
-        if r["n_all_sentinel_rows"] > 0
-    ]
+    reference_misses = {row["dataset"] for row in sanity if not _beats(row, row["hgb"])}
+    dropped = {
+        row["dataset"]: row["n_all_sentinel_rows"]
+        for row in audit["rows"]
+        if row["n_all_sentinel_rows"] > 0
+    }
     if not network_misses.issubset(reference_misses):
         raise ValueError(
             "No-re-tune rationale no longer holds: "
@@ -210,20 +217,12 @@ def render(audit, sanity, sanity_prov, before, before_prov):
         "\n\n".join(
             [
                 "# Dataset preprocessing audit",
-                *(
-                    paragraph.format(
-                        network_misses=", ".join(sorted(network_misses)) or "none",
-                        reference_misses=", ".join(sorted(reference_misses)) or "none",
-                        epochs=sanity_prov["run_constants"]["EPOCHS"],
-                        patience=sanity_prov["run_constants"]["PATIENCE"],
-                        dropped=", ".join(
-                            f"{name} ({count})" for name, count in sorted(dropped)
-                        )
-                        or "none",
-                        drop_names=", ".join(sorted(name for name, _ in dropped))
-                        or "none",
-                    )
-                    for paragraph in INTRO
+                *_intro(
+                    network_misses,
+                    reference_misses,
+                    sanity_prov["run_constants"]["EPOCHS"],
+                    sanity_prov["run_constants"]["PATIENCE"],
+                    dropped,
                 ),
                 "## Audit provenance",
                 "```json\n" + json.dumps(audit["provenance"], indent=2) + "\n```",
@@ -250,7 +249,7 @@ def render(audit, sanity, sanity_prov, before, before_prov):
 
 
 def _read_records(path):
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return [json.loads(line) for line in read_lines(path)]
 
 
 def main(argv=None):
