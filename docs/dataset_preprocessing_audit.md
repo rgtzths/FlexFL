@@ -6,17 +6,27 @@ Keep standard scaling for every dataset. Rows whose features are all -999 are dr
 
 Worker-feature entropy before and after T068 is not comparable, so the meta-dataset is built only from runs gathered after the T068 relaunch on 2026-10-05, and older corpora stay archived outside `results/`.
 
+No HPO re-tune: at learning rate 1e-3 the tuned network beats the constant baseline on every sanity dataset except reg_cat_delays_zurich_transport. The boosting reference does not beat the constant baseline on reg_cat_delays_zurich_transport, reg_num_delays_zurich_transport either, so the metric carries little signal there.
+
+Network scores are the best validation score over at most 40 epochs (patience 8), so they are optimistic against the boosting reference, which has no selection.
+
+The static audit describes raw rows before the all -999 drop, so its row counts include the all -999 rows, counted over train, val and test, for: clf_num_MiniBooNE (173).
+
+The sweep reuses any `data/<name>/_data` cache that holds `scaling.json`. Before the tier-20 pass, delete `data/<name>/_data` for clf_num_MiniBooNE on any host where that cache holds `scaling.json` and was built before the drop, so preprocessing runs again.
+
+Run the scripts from the repository root. The all -999 drop applies to the Benchmark datasets only. The HPO configs come from results/hyperparameter_optimization, which is not tracked.
+
 ## Audit provenance
 
 ```json
 {
-  "git_commit": "19cdaa6a587bf7434f80da453ead74127b9142a7",
-  "git_dirty": true,
+  "git_commit": "a411061c201dcc9cdcb7221c361506bd20161357",
+  "git_dirty": false,
   "sources_sha256": {
-    "scripts/audit_datasets.py": "26fda21820ccef1ced16d19d97460b65029b3880d0a287fd407bf94950705757",
-    "scripts/audit_central_sanity.py": "0690c733295d7c9d21c1f99a9c2e87518d8fedf732cdaa93c251189aa0a30c16",
-    "src/flexfl/datasets/Benchmark.py": "d51b18eda463b6cce0feef4ec2be9effc9ad36153d63ad63a6b9e8707c40595a",
-    "src/flexfl/builtins/DatasetABC.py": "af8307bdd026c2b3181b5a33bc6890409ffdfbb99ef7d5ffb0786d01b3fb70bf"
+    "scripts/audit_datasets.py": "d938192b103eb1cd70020f7e8d6090e70756540e93d63afde40390a5efaca315",
+    "scripts/audit_central_sanity.py": "b33a6c5e685955942ca79742a66d2060b978d3cb22d6f9b98716aae4d401dc50",
+    "src/flexfl/datasets/Benchmark.py": "3028bc486212e8df5105fc192e28553b3dcfff3ba42fad87987f3dd3021e3693",
+    "src/flexfl/builtins/DatasetABC.py": "bcb5146fb430f3dd1fa252ef101b85678548ef98373f678e7cfeb4d0e570b2b9"
   },
   "hf_dataset": "inria-soda/tabular-benchmark",
   "hf_revision": "8d0ff9103525b7e3579b180230fddb3186258301",
@@ -36,13 +46,13 @@ Worker-feature entropy before and after T068 is not comparable, so the meta-data
 ```json
 {
   "after": {
-    "git_commit": "19cdaa6a587bf7434f80da453ead74127b9142a7",
-    "git_dirty": true,
+    "git_commit": "a411061c201dcc9cdcb7221c361506bd20161357",
+    "git_dirty": false,
     "sources_sha256": {
-      "scripts/audit_datasets.py": "26fda21820ccef1ced16d19d97460b65029b3880d0a287fd407bf94950705757",
-      "scripts/audit_central_sanity.py": "0690c733295d7c9d21c1f99a9c2e87518d8fedf732cdaa93c251189aa0a30c16",
-      "src/flexfl/datasets/Benchmark.py": "d51b18eda463b6cce0feef4ec2be9effc9ad36153d63ad63a6b9e8707c40595a",
-      "src/flexfl/builtins/DatasetABC.py": "af8307bdd026c2b3181b5a33bc6890409ffdfbb99ef7d5ffb0786d01b3fb70bf"
+      "scripts/audit_datasets.py": "d938192b103eb1cd70020f7e8d6090e70756540e93d63afde40390a5efaca315",
+      "scripts/audit_central_sanity.py": "b33a6c5e685955942ca79742a66d2060b978d3cb22d6f9b98716aae4d401dc50",
+      "src/flexfl/datasets/Benchmark.py": "3028bc486212e8df5105fc192e28553b3dcfff3ba42fad87987f3dd3021e3693",
+      "src/flexfl/builtins/DatasetABC.py": "bcb5146fb430f3dd1fa252ef101b85678548ef98373f678e7cfeb4d0e570b2b9"
     },
     "hf_dataset": "inria-soda/tabular-benchmark",
     "hf_revision": "8d0ff9103525b7e3579b180230fddb3186258301",
@@ -90,13 +100,13 @@ Worker-feature entropy before and after T068 is not comparable, so the meta-data
     }
   },
   "before": {
-    "git_commit": "19cdaa6a587bf7434f80da453ead74127b9142a7",
-    "git_dirty": true,
+    "git_commit": "a411061c201dcc9cdcb7221c361506bd20161357",
+    "git_dirty": false,
     "sources_sha256": {
-      "scripts/audit_datasets.py": "26fda21820ccef1ced16d19d97460b65029b3880d0a287fd407bf94950705757",
-      "scripts/audit_central_sanity.py": "0690c733295d7c9d21c1f99a9c2e87518d8fedf732cdaa93c251189aa0a30c16",
-      "src/flexfl/datasets/Benchmark.py": "d51b18eda463b6cce0feef4ec2be9effc9ad36153d63ad63a6b9e8707c40595a",
-      "src/flexfl/builtins/DatasetABC.py": "af8307bdd026c2b3181b5a33bc6890409ffdfbb99ef7d5ffb0786d01b3fb70bf"
+      "scripts/audit_datasets.py": "d938192b103eb1cd70020f7e8d6090e70756540e93d63afde40390a5efaca315",
+      "scripts/audit_central_sanity.py": "b33a6c5e685955942ca79742a66d2060b978d3cb22d6f9b98716aae4d401dc50",
+      "src/flexfl/datasets/Benchmark.py": "3028bc486212e8df5105fc192e28553b3dcfff3ba42fad87987f3dd3021e3693",
+      "src/flexfl/builtins/DatasetABC.py": "bcb5146fb430f3dd1fa252ef101b85678548ef98373f678e7cfeb4d0e570b2b9"
     },
     "hf_dataset": "inria-soda/tabular-benchmark",
     "hf_revision": "8d0ff9103525b7e3579b180230fddb3186258301",
@@ -220,14 +230,18 @@ MiniBooNE standard MCC at 1e-3, with sentinel rows: 0.836; without sentinel rows
 
 ## Reproduce
 
+Outputs go to a scratch directory first, because the scripts record git_dirty and files written inside the tree would mark the next run dirty.
+
 ```bash
-sed -n "/^datasets=(/,/^)/p" scripts/run_full_experiments.sh | tr -d "'" | grep -v '[()]' > names.txt
-.venv/bin/python scripts/select_dataset_tiers.py --tier 20 < names.txt > tier20.txt
-printf '%s\n' clf_num_MiniBooNE > miniboone.txt
-.venv/bin/python scripts/audit_datasets.py --names names.txt --tier20 tier20.txt --out-json docs/audit/dataset_audit.json --out-csv docs/audit/dataset_audit.csv
+out=$(mktemp -d)
+sed -n "/^datasets=(/,/^)/p" scripts/run_full_experiments.sh | tr -d "'" | grep -v '[()]' > "$out"/names.txt
+.venv/bin/python scripts/select_dataset_tiers.py --tier 20 < "$out"/names.txt > "$out"/tier20.txt
+printf '%s\n' clf_num_MiniBooNE > "$out"/miniboone.txt
+.venv/bin/python scripts/audit_datasets.py --names "$out"/names.txt --tier20 "$out"/tier20.txt --out-json "$out"/dataset_audit.json --out-csv "$out"/dataset_audit.csv
 uv sync --frozen --extra ml
-.venv/bin/python scripts/audit_central_sanity.py --names tier20.txt --hpo-dir ~/research/pkdd26_cost_modeling/FlexFL/results/hyperparameter_optimization --out docs/audit/central_sanity.jsonl
-.venv/bin/python scripts/audit_central_sanity.py --names miniboone.txt --hpo-dir ~/research/pkdd26_cost_modeling/FlexFL/results/hyperparameter_optimization --keep-sentinel-rows --out docs/audit/central_sanity_keep_sentinel.jsonl
+.venv/bin/python scripts/audit_central_sanity.py --names "$out"/tier20.txt --hpo-dir results/hyperparameter_optimization --out "$out"/central_sanity.jsonl
+.venv/bin/python scripts/audit_central_sanity.py --names "$out"/miniboone.txt --hpo-dir results/hyperparameter_optimization --keep-sentinel-rows --out "$out"/central_sanity_keep_sentinel.jsonl
 uv sync --frozen
+cp "$out"/dataset_audit.json "$out"/dataset_audit.csv "$out"/central_sanity.jsonl "$out"/central_sanity.jsonl.provenance.json "$out"/central_sanity_keep_sentinel.jsonl "$out"/central_sanity_keep_sentinel.jsonl.provenance.json docs/audit/
 .venv/bin/python scripts/render_dataset_audit.py --audit-json docs/audit/dataset_audit.json --sanity docs/audit/central_sanity.jsonl --sanity-before docs/audit/central_sanity_keep_sentinel.jsonl --out docs/dataset_preprocessing_audit.md
 ```

@@ -1,12 +1,12 @@
 {
  "provenance": {
-  "git_commit": "19cdaa6a587bf7434f80da453ead74127b9142a7",
-  "git_dirty": true,
+  "git_commit": "a411061c201dcc9cdcb7221c361506bd20161357",
+  "git_dirty": false,
   "sources_sha256": {
-   "scripts/audit_datasets.py": "26fda21820ccef1ced16d19d97460b65029b3880d0a287fd407bf94950705757",
-   "scripts/audit_central_sanity.py": "0690c733295d7c9d21c1f99a9c2e87518d8fedf732cdaa93c251189aa0a30c16",
-   "src/flexfl/datasets/Benchmark.py": "d51b18eda463b6cce0feef4ec2be9effc9ad36153d63ad63a6b9e8707c40595a",
-   "src/flexfl/builtins/DatasetABC.py": "af8307bdd026c2b3181b5a33bc6890409ffdfbb99ef7d5ffb0786d01b3fb70bf"
+   "scripts/audit_datasets.py": "d938192b103eb1cd70020f7e8d6090e70756540e93d63afde40390a5efaca315",
+   "scripts/audit_central_sanity.py": "b33a6c5e685955942ca79742a66d2060b978d3cb22d6f9b98716aae4d401dc50",
+   "src/flexfl/datasets/Benchmark.py": "3028bc486212e8df5105fc192e28553b3dcfff3ba42fad87987f3dd3021e3693",
+   "src/flexfl/builtins/DatasetABC.py": "bcb5146fb430f3dd1fa252ef101b85678548ef98373f678e7cfeb4d0e570b2b9"
   },
   "hf_dataset": "inria-soda/tabular-benchmark",
   "hf_revision": "8d0ff9103525b7e3579b180230fddb3186258301",
