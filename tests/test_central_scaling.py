@@ -497,12 +497,10 @@ def test_regression_division_standardizes_worker_targets(
             np.load(node / "y_train.npy"),
             (raw_y[worker] - train_y.mean()) / train_y.std(),
         )
-    if distribution != "non_iid":
-        assert {tuple(row) for row in np.concatenate(raw_x)} == {
-            tuple(row) for row in np.load(cache / "x_train.npy")
-        }
-    else:
-        assert sum(map(len, raw_y)) < len(train_y)
+    assert {tuple(row) for row in np.concatenate(raw_x)} == {
+        tuple(row) for row in np.load(cache / "x_train.npy")
+    }
+    assert sum(map(len, raw_y)) == len(train_y)
     np.testing.assert_array_equal(
         np.load(cache.parent / "node_0" / "y_val.npy"), np.load(cache / "y_val.npy")
     )

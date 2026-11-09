@@ -144,6 +144,7 @@ run_sweep() {
   "distribution_percentage": 0.9,
   "alpha": 0.5,
   "seed": 42,
+  "split_version": 2,
   "preprocess": {"val_size": 0.2, "test_size": 0.2}
 }
 EOF
