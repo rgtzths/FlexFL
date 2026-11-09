@@ -66,6 +66,10 @@ def _binary_labels(n_samples):
         (2506, 6, 10),
         (23084, 40, 10),
         (4564, 40, 5),
+        (2060, 20, 5),
+        (2000, 21, 4),
+        (1000, 10, 5),
+        (1000, 11, 4),
         (100, 10, 1),
         (5, 10, 1),
     ),
@@ -102,6 +106,32 @@ def test_enforce_min_samples_takes_from_the_lowest_index_largest_worker_on_ties(
     assert [len(p) for p in out_x] == [10, 391, 400]
     assert np.array_equal(out_x[1], np.arange(1, 392))
     assert np.array_equal(out_x[2], np.arange(401, 801))
+
+
+def test_enforce_min_samples_tops_up_from_the_largest_not_the_first_eligible_worker():
+    xs = [np.arange(0, 0), np.arange(0, 30), np.arange(30, 530), np.arange(530, 1000)]
+    ys = [x.astype(np.float64) for x in xs]
+    out_x, _ = DatasetABC.enforce_min_samples(xs, ys)
+    assert [len(p) for p in out_x] == [10, 30, 490, 470]
+    assert np.array_equal(out_x[0], np.arange(520, 530))
+
+
+def test_enforce_min_samples_uses_the_floor_for_its_worker_count():
+    xs = [np.arange(0, 0)]
+    xs += [np.arange(i * 111, (i + 1) * 111) for i in range(8)]
+    xs += [np.arange(888, 1000)]
+    ys = [x.astype(np.float64) for x in xs]
+    out_x, _ = DatasetABC.enforce_min_samples(xs, ys)
+    assert len(out_x[0]) == 5
+
+
+def test_enforce_min_samples_tops_up_needy_workers_in_index_order():
+    xs = [np.arange(0, 1), np.arange(1, 2), np.arange(2, 1000)]
+    ys = [x.astype(np.float64) for x in xs]
+    out_x, _ = DatasetABC.enforce_min_samples(xs, ys)
+    assert np.array_equal(out_x[0], np.concatenate([[0], np.arange(991, 1000)]))
+    assert np.array_equal(out_x[1], np.concatenate([[1], np.arange(982, 991)]))
+    assert np.array_equal(out_x[2], np.arange(2, 982))
 
 
 def test_enforce_min_samples_leaves_infeasible_partitions_for_the_guard():
@@ -163,19 +193,58 @@ def test_dirichlet_three_classes_meets_the_floor_and_keeps_every_sample(
         assert np.array_equal(y[part.ravel().astype(int)], label)
 
 
-def test_data_division_rejects_a_worker_below_the_floor(monkeypatch, tmp_path):
-    y = _binary_labels(400)
+def _division_entry(monkeypatch, tmp_path, y):
     ds = _dataset(monkeypatch, tmp_path, y, _ClassificationDataset)
     monkeypatch.setattr(ds, "check_scaled_cache", lambda: None)
     monkeypatch.setattr(ds, "target_stats", lambda: None)
     monkeypatch.setattr(ds, "division_master", lambda target=None: None)
+    written = []
+    monkeypatch.setattr(
+        ds, "division_worker", lambda x, *args, **kwargs: written.append(len(x))
+    )
+    return ds, written
+
+
+def _division_with_sizes(monkeypatch, tmp_path, sizes):
+    ds, written = _division_entry(monkeypatch, tmp_path, _binary_labels(sum(sizes)))
     monkeypatch.setattr(
         ds,
         "division_iid",
         lambda num_workers: (
-            [np.zeros((3, 1)), np.zeros((397, 1))],
-            [np.zeros(3), np.zeros(397)],
+            [np.zeros((size, 1)) for size in sizes],
+            [np.zeros(size) for size in sizes],
         ),
     )
+    return ds, written
+
+
+def test_data_division_rejects_a_worker_below_the_floor(monkeypatch, tmp_path):
+    ds, _ = _division_with_sizes(monkeypatch, tmp_path, [3, 397])
     with pytest.raises(ValueError, match="worker 1/2 received 3 training samples"):
         ds.data_division(num_workers=2, distribution="iid")
+
+
+def test_data_division_accepts_a_worker_exactly_at_the_floor(monkeypatch, tmp_path):
+    ds, written = _division_with_sizes(monkeypatch, tmp_path, [10, 390])
+    ds.data_division(num_workers=2, distribution="iid")
+    assert written == [10, 390]
+
+
+@pytest.mark.parametrize("sizes", ([9, 391], [7, 393]))
+def test_data_division_rejects_a_worker_just_below_the_floor(
+    monkeypatch, tmp_path, sizes
+):
+    ds, written = _division_with_sizes(monkeypatch, tmp_path, sizes)
+    with pytest.raises(ValueError, match=f"received {sizes[0]} training samples"):
+        ds.data_division(num_workers=2, distribution="iid")
+    assert written == []
+
+
+def test_data_division_accepts_a_dirichlet_split_it_had_to_top_up(
+    monkeypatch, tmp_path
+):
+    ds, written = _division_entry(monkeypatch, tmp_path, _binary_labels(2060))
+    ds.data_division(num_workers=44, distribution="dirichlet")
+    assert len(written) == 44
+    assert sum(written) == 2060
+    assert min(written) == _expected_floor(2060, 44)

@@ -9,7 +9,8 @@ functions are run on data/<dataset>/_data/y_train.npy with row indices in place
 of features, so only partition membership and order are compared and no
 node_* folder is written. Changed cells are printed with their _SUCCESS count;
 with --apply each is moved under --archive-to, keeping its relative path, so the
-resumable sweep reruns it.
+resumable sweep reruns it. --archive-to must lie outside --results, and nothing
+moves when any archive target already exists.
 """
 
 import argparse
@@ -101,8 +102,6 @@ def load_labels(data_dir, name):
     metadata = json.loads(
         Path(current_module.METADATA_FOLDER, f"{name}.json").read_text()
     )
-    if metadata["type"] != "classification":
-        y = y.astype(np.float64)
     return y, metadata["type"]
 
 
@@ -123,10 +122,20 @@ def changed_cells(cells, old_cls, new_cls, data_dir):
 
 
 def archive(cells, results_root, archive_root):
-    for cell in cells:
-        target = Path(archive_root, cell.relative_to(results_root))
+    results_root = Path(results_root).resolve()
+    archive_root = Path(archive_root).resolve()
+    if archive_root == results_root or results_root in archive_root.parents:
+        raise ValueError(
+            f"{archive_root} is inside {results_root}, where the assembler would "
+            "still read the archived runs; choose a directory outside it"
+        )
+    targets = [
+        archive_root / Path(cell).resolve().relative_to(results_root) for cell in cells
+    ]
+    for target in targets:
         if target.exists():
             raise FileExistsError(f"{target} already exists; refusing to overwrite")
+    for cell, target in zip(cells, targets):
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(cell), str(target))
 
