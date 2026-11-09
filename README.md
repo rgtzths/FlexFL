@@ -75,6 +75,8 @@ Division strategies (`-s`):
 | `non_iid` | Majority-class assignment; `--distribution_percentage` controls skew |
 | `dirichlet` | Dirichlet(α) sampling; lower α = more heterogeneous (default α=0.5) |
 
+Every training sample goes to some worker under every strategy. Under `non_iid` and `dirichlet`, a worker below the minimum, 5% of an even share (training samples divided by workers) rounded down, capped at 10 and at least 1, is topped up from the largest worker; splits already above it are unchanged. Division refuses a split it cannot bring to the minimum. The sweep records `"split_version": 2` in each `division.json`; a `division.json` without it predates this rule. `scripts/find_changed_partitions.py --old-ref <commit>` lists the `non_iid` and `dirichlet` result cells whose split differs between that commit and the installed code, and moves them to a directory outside `results/` with `--archive-to <dir> --apply` so the sweep reruns them.
+
 ## Neural Networks
 
 Neural nets live in `src/flexfl/neural_nets/`. The `Benchmark` class dynamically builds a network from the hyperparameter-optimised config in `results/hyperparameter_optimization/<data_name>.json`, making it the default net for all benchmark datasets.

@@ -14,6 +14,8 @@ METADATA_FOLDER = Path(__file__).parent.parent / "datasets/_metadata"
 DATA_FOLDER = "data"
 SCALING_FILE = "scaling.json"
 TARGET_FILE = "target_scaling.json"
+MIN_WORKER_SHARE = 0.05
+MIN_WORKER_CAP = 10
 
 
 class DatasetABC(ABC):
@@ -299,16 +301,45 @@ class DatasetABC(ABC):
             x, y = self.division_non_iid_dirichlet(num_workers, alpha)
         else:
             x, y = self.division_non_iid(num_workers, distribution_percentage)
+        floor = self.min_worker_samples(sum(len(part) for part in x), num_workers)
         for i in range(num_workers):
-            if len(x[i]) == 0:
+            if len(x[i]) < floor:
                 raise ValueError(
-                    f"{self.name}: worker {i+1}/{num_workers} received 0 training "
-                    f"samples under distribution='{distribution}' (dataset too small "
-                    f"for this worker count, or an extreme non-iid/dirichlet skew) -- "
-                    f"reduce num_workers or adjust distribution_percentage/alpha for "
-                    f"this dataset."
+                    f"{self.name}: worker {i+1}/{num_workers} received {len(x[i])} "
+                    f"training samples under distribution='{distribution}', below "
+                    f"the minimum of {floor} (dataset too small for this worker "
+                    f"count) -- reduce num_workers for this dataset."
                 )
             self.division_worker(x[i], y[i], i + 1, val_size, test_size, target)
+
+    @staticmethod
+    def min_worker_samples(n_samples, num_workers):
+        share = int(MIN_WORKER_SHARE * n_samples / num_workers)
+        return max(1, min(MIN_WORKER_CAP, share))
+
+    @classmethod
+    def enforce_min_samples(cls, workers_x, workers_y):
+        sizes = [len(part) for part in workers_x]
+        floor = cls.min_worker_samples(sum(sizes), len(sizes))
+        if min(sizes) >= floor or sum(sizes) < floor * len(sizes):
+            return workers_x, workers_y
+        workers_x, workers_y = list(workers_x), list(workers_y)
+        for needy in range(len(sizes)):
+            while sizes[needy] < floor:
+                donor = int(np.argmax(sizes))
+                moved = min(floor - sizes[needy], sizes[donor] - floor)
+                cut = sizes[donor] - moved
+                workers_x[needy] = np.concatenate(
+                    [workers_x[needy], workers_x[donor][cut:]], axis=0
+                )
+                workers_y[needy] = np.concatenate(
+                    [workers_y[needy], workers_y[donor][cut:]], axis=0
+                )
+                workers_x[donor] = workers_x[donor][:cut]
+                workers_y[donor] = workers_y[donor][:cut]
+                sizes[needy] += moved
+                sizes[donor] -= moved
+        return workers_x, workers_y
 
     def division_master(self, target=None):
         self.data_path = self.default_folder
@@ -402,91 +433,30 @@ class DatasetABC(ABC):
             out_count = 0
 
             if num_workers > len(classes):
-                in_subset_size = len(in_class) // counts[idx]
-                out_subset_size = len(out_class) // (num_workers - counts[idx])
-
+                out_workers = num_workers - counts[idx]
             else:
-                out_subset_size = len(out_class) // (num_workers - 1)
+                out_workers = num_workers - 1
+            if out_workers == 0:
+                in_class, out_class = indexes, indexes[:0]
+            if num_workers > len(classes):
+                in_chunks = np.array_split(in_class, counts[idx])
+            out_chunks = np.array_split(out_class, max(out_workers, 1))
 
             for worker in workers:
                 if num_workers > len(classes):
                     if dist[worker] == c:
-                        worker_x_values = (
-                            x[in_class]
-                            if counts[idx] == 1
-                            else x[
-                                in_class[
-                                    in_count
-                                    * in_subset_size : in_count
-                                    * in_subset_size
-                                    + in_subset_size
-                                ]
-                            ]
-                        )
-                        worker_y_values = (
-                            y[in_class]
-                            if counts[idx] == 1
-                            else y[
-                                in_class[
-                                    in_count
-                                    * in_subset_size : in_count
-                                    * in_subset_size
-                                    + in_subset_size
-                                ]
-                            ]
-                        )
-
+                        chosen = in_chunks[in_count]
                         in_count += 1
                     else:
-                        worker_x_values = (
-                            x[out_class]
-                            if num_workers - counts[idx] == 1
-                            else x[
-                                out_class[
-                                    out_count
-                                    * out_subset_size : out_count
-                                    * out_subset_size
-                                    + out_subset_size
-                                ]
-                            ]
-                        )
-
-                        worker_y_values = (
-                            y[out_class]
-                            if num_workers - counts[idx] == 1
-                            else y[
-                                out_class[
-                                    out_count
-                                    * out_subset_size : out_count
-                                    * out_subset_size
-                                    + out_subset_size
-                                ]
-                            ]
-                        )
+                        chosen = out_chunks[out_count]
                         out_count += 1
+                elif c in dist[worker]:
+                    chosen = in_class
                 else:
-                    if c in dist[worker]:
-                        worker_x_values = x[in_class]
-                        worker_y_values = y[in_class]
-                    else:
-                        worker_x_values = x[
-                            out_class[
-                                out_count
-                                * out_subset_size : out_count
-                                * out_subset_size
-                                + out_subset_size
-                            ]
-                        ]
-                        worker_y_values = y[
-                            out_class[
-                                out_count
-                                * out_subset_size : out_count
-                                * out_subset_size
-                                + out_subset_size
-                            ]
-                        ]
-
-                        out_count += 1
+                    chosen = out_chunks[out_count]
+                    out_count += 1
+                worker_x_values = x[chosen]
+                worker_y_values = y[chosen]
 
                 if type(workers_x[worker]) is int:
                     workers_x[worker] = [worker_x_values]
@@ -499,7 +469,7 @@ class DatasetABC(ABC):
             workers_x[worker] = np.concatenate(workers_x[worker], axis=0)
             workers_y[worker] = np.concatenate(workers_y[worker], axis=0)
 
-        return workers_x, workers_y
+        return self.enforce_min_samples(workers_x, workers_y)
 
     def division_non_iid_dirichlet(self, num_workers, alpha=0.5, seed=42):
         self.data_path = self.default_folder
@@ -563,7 +533,7 @@ class DatasetABC(ABC):
                 workers_x[worker] = np.empty((0, *x.shape[1:]), dtype=x.dtype)
                 workers_y[worker] = np.empty((0, *y.shape[1:]), dtype=y.dtype)
 
-        return workers_x, workers_y
+        return self.enforce_min_samples(workers_x, workers_y)
 
     def division_worker(self, x, y, worker_id, val_size, test_size, target=None):
         if target is not None:
