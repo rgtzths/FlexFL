@@ -7,7 +7,9 @@ without "split_version" 2 or later, which cells divided by the old code lack. Fo
 each distinct (dataset, strategy, num_workers) the old and new division
 functions are run on data/<dataset>/_data/y_train.npy with row indices in place
 of features, so only partition membership and order are compared and no
-node_* folder is written. Changed cells are printed with their _SUCCESS count;
+node_* folder is written. The replay uses the sweep's recorded parameters
+(distribution_percentage 0.9, alpha 0.5, seed 42) and refuses a cell whose
+division.json records others. Changed cells are printed with their _SUCCESS count;
 with --apply each is moved under --archive-to, keeping its relative path, so the
 resumable sweep reruns it. --archive-to must lie outside --results, and nothing
 moves when any archive target already exists.
@@ -29,6 +31,7 @@ from flexfl.builtins import DatasetABC as current_module
 
 STRATEGIES = ("non_iid", "dirichlet")
 MODULE_PATH = "src/flexfl/builtins/DatasetABC.py"
+REPLAY_PARAMETERS = {"distribution_percentage": 0.9, "alpha": 0.5, "seed": 42}
 
 
 def load_module_at_ref(ref, repo_root):
@@ -67,10 +70,15 @@ def make_probe(division_cls, name, y, task_type):
 
 def partition_digests(division_cls, name, strategy, num_workers, y, task_type):
     probe = make_probe(division_cls, name, y, task_type)
+    seed = REPLAY_PARAMETERS["seed"]
     if strategy == "dirichlet":
-        parts, _ = probe.division_non_iid_dirichlet(num_workers, 0.5)
+        parts, _ = probe.division_non_iid_dirichlet(
+            num_workers, REPLAY_PARAMETERS["alpha"], seed
+        )
     else:
-        parts, _ = probe.division_non_iid(num_workers, 0.9)
+        parts, _ = probe.division_non_iid(
+            num_workers, REPLAY_PARAMETERS["distribution_percentage"], seed
+        )
     return [
         hashlib.sha256(np.ascontiguousarray(part).tobytes()).hexdigest()
         for part in parts
@@ -86,6 +94,13 @@ def find_cells(results_root):
             recipe = json.loads(division_json.read_text())
             if recipe.get("split_version", 1) >= 2:
                 continue
+            for parameter, replayed in REPLAY_PARAMETERS.items():
+                if recipe.get(parameter, replayed) != replayed:
+                    raise ValueError(
+                        f"{division_json} records {parameter}="
+                        f"{recipe[parameter]}, but the replay only reproduces "
+                        f"{parameter}={replayed}"
+                    )
             cells.append(
                 (
                     division_json.parent,

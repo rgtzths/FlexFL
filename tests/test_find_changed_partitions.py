@@ -79,6 +79,39 @@ def test_find_cells_skips_cells_already_divided_by_split_version_2_or_later(
     assert [strategy for _, strategy, _, _ in find_cells(results)] == ["non_iid"]
 
 
+@pytest.mark.parametrize(
+    "parameter, value",
+    (("distribution_percentage", 0.8), ("alpha", 0.3), ("seed", 7)),
+)
+def test_find_cells_refuses_a_recipe_the_replay_cannot_reproduce(
+    monkeypatch, tmp_path, parameter, value
+):
+    results, _ = _campaign(monkeypatch, tmp_path)
+    recipe = results / "dirichlet" / "atnog-test1_2_hobbit_2_samwise_2" / "clf_toy"
+    _write(
+        recipe / "division.json",
+        {"dataset": "clf_toy", "num_workers": 6, parameter: value},
+    )
+    with pytest.raises(ValueError, match=parameter):
+        find_cells(results)
+
+
+def test_find_cells_accepts_the_recipe_values_the_sweep_records(monkeypatch, tmp_path):
+    results, _ = _campaign(monkeypatch, tmp_path)
+    recipe = results / "dirichlet" / "atnog-test1_2_hobbit_2_samwise_2" / "clf_toy"
+    _write(
+        recipe / "division.json",
+        {
+            "dataset": "clf_toy",
+            "num_workers": 6,
+            "distribution_percentage": 0.9,
+            "alpha": 0.5,
+            "seed": 42,
+        },
+    )
+    assert len(find_cells(results)) == 2
+
+
 def test_identical_division_code_changes_no_cell(monkeypatch, tmp_path):
     results, data = _campaign(monkeypatch, tmp_path)
     assert changed_cells(find_cells(results), DatasetABC, DatasetABC, data) == []

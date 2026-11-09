@@ -163,6 +163,25 @@ def test_non_iid_classification_keeps_every_sample(monkeypatch, tmp_path, num_wo
     assert np.array_equal(assigned, np.arange(len(y), dtype=np.float64))
 
 
+@pytest.mark.parametrize(
+    "dataset_cls, y, num_workers",
+    (
+        (_ClassificationDataset, np.zeros(500, dtype=np.int64), 4),
+        (_RegressionDataset, np.full(500, 3.0), 4),
+        (_ClassificationDataset, np.array([i % 3 for i in range(500)]), 1),
+    ),
+)
+def test_non_iid_without_out_of_class_workers_keeps_every_sample(
+    monkeypatch, tmp_path, dataset_cls, y, num_workers
+):
+    ds = _dataset(monkeypatch, tmp_path, y, dataset_cls)
+    parts, _ = ds.division_non_iid(num_workers, 0.9)
+    assert len(parts) == num_workers
+    assert min(len(p) for p in parts) >= _expected_floor(len(y), num_workers)
+    assigned = np.sort(np.concatenate([p.ravel() for p in parts]))
+    assert np.array_equal(assigned, np.arange(len(y), dtype=np.float64))
+
+
 @pytest.mark.parametrize("num_workers", (36, 40, 44, 52, 56))
 def test_dirichlet_binary_meets_the_floor_and_keeps_every_sample(
     monkeypatch, tmp_path, num_workers

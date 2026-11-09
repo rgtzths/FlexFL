@@ -433,10 +433,14 @@ class DatasetABC(ABC):
             out_count = 0
 
             if num_workers > len(classes):
-                in_chunks = np.array_split(in_class, counts[idx])
-                out_chunks = np.array_split(out_class, num_workers - counts[idx])
+                out_workers = num_workers - counts[idx]
             else:
-                out_chunks = np.array_split(out_class, num_workers - 1)
+                out_workers = num_workers - 1
+            if out_workers == 0:
+                in_class, out_class = indexes, indexes[:0]
+            if num_workers > len(classes):
+                in_chunks = np.array_split(in_class, counts[idx])
+            out_chunks = np.array_split(out_class, max(out_workers, 1))
 
             for worker in workers:
                 if num_workers > len(classes):
