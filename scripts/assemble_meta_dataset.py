@@ -47,6 +47,18 @@ and n_workers_joined counts the master's `new_worker` events, i.e. the workers t
 actually registered and were eligible for the aggregation pool.
 n_workers_joined < num_workers marks a short-pool run.
 
+Message accounting (inputs to an analytic communication-cost model, not predictors)
+  min_workers         the `min_workers` the master recorded in its args.json: the
+                      aggregation pool size. Empty when unrecorded or not a
+                      positive int.
+  pool_batches        Centralized algorithms only: the sum of the `n_batches` the
+                      first min_workers workers (lowest node ids among those
+                      that joined before the master's `start` event) reported in
+                      their `new_worker` events, i.e. the master's batches per
+                      epoch. Empty for Decentralized rows, when min_workers is
+                      empty, and when fewer workers joined than min_workers or
+                      one of them reported no positive int.
+
 local_epochs is 0 for every Centralized row by construction (T46) — a sentinel for
 "this algorithm has no local-training concept," not a measured zero. Do not use it as
 a multiplicative or log-scale compute term without gating on fl_algo; a consumer that
@@ -141,6 +153,8 @@ COLUMNS = [
     "n_samwise",
     "num_workers",
     "n_workers_joined",
+    "min_workers",
+    "pool_batches",
     "dataset",
     "fl_algo",
     "fl_algo_CentralizedSync",
@@ -520,6 +534,35 @@ def recorded_args(
     return args, None, None
 
 
+def positive_int(value: object) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 1:
+        return value
+    return None
+
+
+def pool_batches(events: list[dict], pool_size: int) -> int | None:
+    """Batches per epoch of a Centralized run: the `n_batches` its first
+    pool reported at join, or None when a pool worker never reported one."""
+    infos: dict[int, object] = {}
+    for e in events:
+        if e.get("event") == "start":
+            break
+        node_id = positive_int(e.get("node_id"))
+        if e.get("event") == "new_worker" and node_id is not None:
+            infos.setdefault(node_id, e.get("info"))
+    pool = sorted(infos)[:pool_size]
+    if pool_size < 1 or len(pool) < pool_size:
+        return None
+    total = 0
+    for node_id in pool:
+        info = infos[node_id]
+        count = positive_int(info.get("n_batches")) if isinstance(info, dict) else None
+        if count is None:
+            return None
+        total += count
+    return total
+
+
 def recorded_epoch_cap(
     args: dict | None, missing_reason: str | None
 ) -> tuple[object, str | None]:
@@ -677,6 +720,7 @@ def assemble(
             "n_workers_joined": sum(
                 1 for e in events if e.get("event") == "new_worker"
             ),
+            "min_workers": positive_int((args or {}).get("min_workers")),
             "dataset": dataset,
             "fl_algo": fl_algo,
             "repeat": int(rep.split("_")[1]),
@@ -714,6 +758,11 @@ def assemble(
                 f"unrecognized fl_algo {row['fl_algo']!r}, skipped: {rep_dir}"
             )
             continue
+        row["pool_batches"] = (
+            pool_batches(events, row["min_workers"])
+            if canonical_fl_algo in CENTRALIZED_ALGOS and row["min_workers"] is not None
+            else None
+        )
         if canonical_fl_algo in CENTRALIZED_ALGOS and row["local_epochs"] is None:
             row["local_epochs"] = 0
         elif row["local_epochs"] is None:
