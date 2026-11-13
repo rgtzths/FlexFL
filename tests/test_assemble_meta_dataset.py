@@ -12,6 +12,7 @@ from assemble_meta_dataset import (
     compute_targets,
     constant_mean_smape,
     parse_combo,
+    pool_batches,
     worker_compute,
 )
 from run_logs import MASTER_EVENTS, write_run_logs
@@ -323,12 +324,14 @@ def build_synthetic_run(
     new_workers=0,
     epoch_cap=200,
     early_stop_rule=("loss", 10),
+    worker_info=None,
+    extra_args=None,
 ):
     rep_dir = results_dir / strategy / combo / dataset / fl_algo / f"rep_{rep}"
     rep_dir.mkdir(parents=True, exist_ok=True)
 
     events = [
-        {"event": "new_worker", "node_id": i, "info": {}}
+        {"event": "new_worker", "node_id": i, "info": (worker_info or {}).get(i, {})}
         for i in range(1, new_workers + 1)
     ]
     events.append({"event": "start", "timestamp": 0})
@@ -340,6 +343,7 @@ def build_synthetic_run(
         args = {"epochs": epoch_cap}
         if early_stop_rule is not None:
             args["early_stop_on"], args["min_epochs"] = early_stop_rule
+        args.update(extra_args or {})
         write_json(rep_dir / "args.json", args)
 
     (rep_dir / sentinel).write_text("")
@@ -1171,6 +1175,130 @@ def test_assemble_n_workers_joined_is_zero_when_no_worker_registered(tmp_path):
     rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
 
     assert rows[0]["n_workers_joined"] == 0
+
+
+def test_pool_batches_sums_the_first_pool_by_node_id():
+    events = [
+        {"event": "new_worker", "node_id": 3, "info": {"n_batches": 100}},
+        {"event": "new_worker", "node_id": 1, "info": {"n_batches": 2}},
+        {"event": "new_worker", "node_id": 2, "info": {"n_batches": 5}},
+        {"event": "new_worker", "node_id": 1, "info": {"n_batches": 40}},
+    ]
+
+    assert pool_batches(events, 2) == 7
+    assert pool_batches(events, 3) == 107
+
+
+def test_pool_batches_ignores_workers_that_joined_after_start():
+    events = [
+        {"event": "new_worker", "node_id": 3, "info": {"n_batches": 100}},
+        {"event": "new_worker", "node_id": 2, "info": {"n_batches": 5}},
+        {"event": "start", "timestamp": 0},
+        {"event": "new_worker", "node_id": 1, "info": {"n_batches": 2}},
+    ]
+
+    assert pool_batches(events, 2) == 105
+    assert pool_batches(events, 3) is None
+
+
+@pytest.mark.parametrize(
+    "events, pool_size",
+    [
+        ([{"event": "new_worker", "node_id": 1, "info": {"n_batches": 2}}], 2),
+        ([{"event": "new_worker", "node_id": 1, "info": {}}], 1),
+        ([{"event": "new_worker", "node_id": 1, "info": {"n_batches": 0}}], 1),
+        ([{"event": "new_worker", "node_id": 1, "info": {"n_batches": True}}], 1),
+        ([{"event": "new_worker", "node_id": 1, "info": None}], 1),
+        ([], 1),
+        ([{"event": "new_worker", "node_id": 1, "info": {"n_batches": 2}}], 0),
+    ],
+)
+def test_pool_batches_is_none_without_a_full_reported_pool(events, pool_size):
+    assert pool_batches(events, pool_size) is None
+
+
+@pytest.mark.parametrize("fl_algo", ["CentralizedSync", "CentralizedAsync", "ca"])
+def test_assemble_records_min_workers_and_centralized_pool_batches(tmp_path, fl_algo):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(
+        results_dir,
+        metadata_dir,
+        hpo_dir,
+        fl_algo=fl_algo,
+        new_workers=3,
+        worker_info={1: {"n_batches": 4}, 2: {"n_batches": 6}, 3: {"n_batches": 9}},
+        extra_args={"min_workers": 2},
+    )
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert rows[0]["min_workers"] == 2
+    assert rows[0]["pool_batches"] == 10
+
+
+def test_columns_place_the_message_accounting_after_n_workers_joined():
+    start = COLUMNS.index("n_workers_joined")
+    assert COLUMNS[start : start + 4] == [
+        "n_workers_joined",
+        "min_workers",
+        "pool_batches",
+        "dataset",
+    ]
+
+
+def test_assemble_pool_batches_is_empty_without_min_workers(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(
+        results_dir,
+        metadata_dir,
+        hpo_dir,
+        fl_algo="CentralizedAsync",
+        new_workers=2,
+        worker_info={1: {"n_batches": 4}, 2: {"n_batches": 6}},
+    )
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert rows[0]["min_workers"] is None
+    assert rows[0]["pool_batches"] is None
+
+
+@pytest.mark.parametrize("min_workers", [0, -1, True, "2", 2.0])
+def test_assemble_min_workers_is_empty_when_not_a_positive_int(tmp_path, min_workers):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(
+        results_dir, metadata_dir, hpo_dir, extra_args={"min_workers": min_workers}
+    )
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert rows[0]["min_workers"] is None
+
+
+def test_assemble_pool_batches_is_empty_for_decentralized_runs(tmp_path):
+    results_dir = tmp_path / "results"
+    metadata_dir = tmp_path / "metadata"
+    hpo_dir = tmp_path / "hpo"
+    build_synthetic_run(
+        results_dir,
+        metadata_dir,
+        hpo_dir,
+        fl_algo="DecentralizedSync",
+        new_workers=2,
+        worker_info={1: {"n_batches": 4}, 2: {"n_batches": 6}},
+        extra_args={"min_workers": 2},
+    )
+
+    rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
+
+    assert rows[0]["min_workers"] == 2
+    assert rows[0]["pool_batches"] is None
 
 
 def test_assemble_time_decomposition_clips_to_master_window(tmp_path):
