@@ -52,12 +52,14 @@ Message accounting (inputs to an analytic communication-cost model, not predicto
                       aggregation pool size. Empty when unrecorded or not a
                       positive int.
   pool_batches        Centralized algorithms only: the sum of the `n_batches` the
-                      first min_workers workers (lowest node ids among those
-                      that joined before the master's `start` event) reported in
-                      their `new_worker` events, i.e. the master's batches per
-                      epoch. Empty for Decentralized rows, when min_workers is
-                      empty, and when fewer workers joined than min_workers or
-                      one of them reported no positive int.
+                      first min_workers workers reported, i.e. the master's
+                      batches per epoch. The master's registry is replayed up
+                      to its `start` event: a `new_worker` event sets that node's
+                      latest report, a `leave` event removes the node, and the
+                      pool is the lowest min_workers node ids left. Empty for
+                      Decentralized rows, when min_workers is empty, and when
+                      fewer workers remain than min_workers or one of them
+                      reported no positive int.
 
 local_epochs is 0 for every Centralized row by construction (T46) — a sentinel for
 "this algorithm has no local-training concept," not a measured zero. Do not use it as
@@ -542,14 +544,21 @@ def positive_int(value: object) -> int | None:
 
 def pool_batches(events: list[dict], pool_size: int) -> int | None:
     """Batches per epoch of a Centralized run: the `n_batches` its first
-    pool reported at join, or None when a pool worker never reported one."""
+    pool reported, or None when a pool worker never reported one.
+
+    Replays the master's worker registry up to `start`: a node's latest
+    `new_worker` report replaces its earlier one and a `leave` removes it."""
     infos: dict[int, object] = {}
     for e in events:
         if e.get("event") == "start":
             break
         node_id = positive_int(e.get("node_id"))
-        if e.get("event") == "new_worker" and node_id is not None:
-            infos.setdefault(node_id, e.get("info"))
+        if node_id is None:
+            continue
+        if e.get("event") == "new_worker":
+            infos[node_id] = e.get("info")
+        elif e.get("event") == "leave":
+            infos.pop(node_id, None)
     pool = sorted(infos)[:pool_size]
     if pool_size < 1 or len(pool) < pool_size:
         return None

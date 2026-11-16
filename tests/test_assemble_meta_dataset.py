@@ -1177,7 +1177,7 @@ def test_assemble_n_workers_joined_is_zero_when_no_worker_registered(tmp_path):
     assert rows[0]["n_workers_joined"] == 0
 
 
-def test_pool_batches_sums_the_first_pool_by_node_id():
+def test_pool_batches_sums_the_latest_reports_of_the_lowest_node_ids():
     events = [
         {"event": "new_worker", "node_id": 3, "info": {"n_batches": 100}},
         {"event": "new_worker", "node_id": 1, "info": {"n_batches": 2}},
@@ -1185,8 +1185,45 @@ def test_pool_batches_sums_the_first_pool_by_node_id():
         {"event": "new_worker", "node_id": 1, "info": {"n_batches": 40}},
     ]
 
-    assert pool_batches(events, 2) == 7
-    assert pool_batches(events, 3) == 107
+    assert pool_batches(events, 2) == 45
+    assert pool_batches(events, 3) == 145
+
+
+def test_pool_batches_drops_workers_that_left_before_start():
+    events = [
+        {"event": "new_worker", "node_id": 1, "info": {"n_batches": 2}},
+        {"event": "leave", "node_id": 1},
+        {"event": "new_worker", "node_id": 2, "info": {"n_batches": 5}},
+        {"event": "new_worker", "node_id": 3, "info": {"n_batches": 9}},
+        {"event": "start", "timestamp": 0},
+        {"event": "leave", "node_id": 2},
+    ]
+
+    assert pool_batches(events, 2) == 14
+    assert pool_batches(events, 3) is None
+
+
+def test_pool_batches_counts_a_worker_that_rejoined_after_leaving():
+    events = [
+        {"event": "new_worker", "node_id": 1, "info": {"n_batches": 2}},
+        {"event": "leave", "node_id": 1},
+        {"event": "new_worker", "node_id": 2, "info": {"n_batches": 5}},
+        {"event": "new_worker", "node_id": 1, "info": {"n_batches": 7}},
+    ]
+
+    assert pool_batches(events, 2) == 12
+
+
+def test_pool_batches_ignores_reports_without_a_positive_int_node_id():
+    events = [
+        {"event": "new_worker", "node_id": 0, "info": {"n_batches": 100}},
+        {"event": "new_worker", "node_id": "1", "info": {"n_batches": 100}},
+        {"event": "new_worker", "node_id": True, "info": {"n_batches": 100}},
+        {"event": "new_worker", "node_id": 2, "info": {"n_batches": 4}},
+    ]
+
+    assert pool_batches(events, 1) == 4
+    assert pool_batches(events, 2) is None
 
 
 def test_pool_batches_ignores_workers_that_joined_after_start():
@@ -1208,7 +1245,9 @@ def test_pool_batches_ignores_workers_that_joined_after_start():
         ([{"event": "new_worker", "node_id": 1, "info": {}}], 1),
         ([{"event": "new_worker", "node_id": 1, "info": {"n_batches": 0}}], 1),
         ([{"event": "new_worker", "node_id": 1, "info": {"n_batches": True}}], 1),
+        ([{"event": "new_worker", "node_id": 1, "info": {"n_batches": -3}}], 1),
         ([{"event": "new_worker", "node_id": 1, "info": None}], 1),
+        ([{"event": "new_worker", "node_id": 1, "info": [1]}], 1),
         ([], 1),
         ([{"event": "new_worker", "node_id": 1, "info": {"n_batches": 2}}], 0),
     ],
@@ -1252,7 +1291,7 @@ def test_assemble_pool_batches_is_empty_without_min_workers(tmp_path):
     results_dir = tmp_path / "results"
     metadata_dir = tmp_path / "metadata"
     hpo_dir = tmp_path / "hpo"
-    build_synthetic_run(
+    rep_dir = build_synthetic_run(
         results_dir,
         metadata_dir,
         hpo_dir,
@@ -1260,9 +1299,11 @@ def test_assemble_pool_batches_is_empty_without_min_workers(tmp_path):
         new_workers=2,
         worker_info={1: {"n_batches": 4}, 2: {"n_batches": 6}},
     )
+    write_json(rep_dir.parent.parent / "division.json", {"num_workers": 2})
 
     rows, warnings = assemble(results_dir, metadata_dir, hpo_dir)
 
+    assert rows[0]["num_workers"] == 2
     assert rows[0]["min_workers"] is None
     assert rows[0]["pool_batches"] is None
 
