@@ -241,9 +241,10 @@ EOF
             fi
             execute_fl_run "$IPS_SUBSET_TXT" "$data_name" "$fl_algo" "$seed" "$hp_args" "$total"
 
-            bash scripts/gather_results.sh -f "$IPS_SUBSET_TXT" -o "$run_dir"
+            gather_rc=0
+            gather_run_results "$IPS_SUBSET_TXT" "$run_dir" || gather_rc=1
 
-            if [ "$run_rc" -eq 0 ] && run_output_complete "$run_dir" "$total"; then
+            if [ "$run_rc" -eq 0 ] && [ "$gather_rc" -eq 0 ] && run_output_complete "$run_dir" "$total"; then
                 cp -f "$hp_file" "$run_dir/hyperparameters.json"
                 master_log="$(find "$run_dir" -name 'log_0.jsonl' | head -n 1)"
                 args_json="$(dirname "$master_log")/args.json"
@@ -269,10 +270,17 @@ EOF
                 fi
             else
                 touch "$run_dir/_FAILED"
-                log_failure "run_on_vms"
+                if [ "$gather_rc" -ne 0 ]; then
+                    log_failure "gather_results"
+                else
+                    log_failure "run_on_vms"
+                fi
                 echo "    - ${fl_algo} rep 1: FAILED (marked _FAILED, will retry on re-run)"
             fi
             rm -f "$hp_file" "$expected_hp"
+            if [ "$gather_rc" -ne 0 ]; then
+                halt_for_gather_failure "$IPS_SUBSET_TXT" "$run_dir"
+            fi
         done
         fl_algo=""; seed=""
 

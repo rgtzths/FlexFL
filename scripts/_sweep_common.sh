@@ -56,6 +56,24 @@ sample_hp_args() {
         --json-out "$json_out"
 }
 
+gather_run_results() {
+    local ips_file="$1" run_dir="$2" attempt
+    for attempt in 1 2 3; do
+        bash scripts/gather_results.sh -f "$ips_file" -o "$run_dir" && return 0
+        echo "  ! gather attempt ${attempt}/3 failed for ${run_dir}" >&2
+        if [ "$attempt" -lt 3 ]; then
+            sleep "${FLEXFL_GATHER_RETRY_DELAY:-10}"
+        fi
+    done
+    return 1
+}
+
+halt_for_gather_failure() {
+    local ips_file="$1" run_dir="$2"
+    echo "HALT: logs for ${run_dir} could not be copied from every VM. They are still in ~/flexfl/results on the VMs and nothing was removed. Before restarting, copy them with: bash scripts/gather_results.sh -f ${ips_file} -o <directory outside the results tree>. A restart reruns this run and clears ~/flexfl/results." >&2
+    exit 3
+}
+
 # --- Sweep (fault-tolerant, resumable) ---
 run_sweep() {
     for strategy in "${distributions[@]}"; do
@@ -179,18 +197,26 @@ EOF
                                 # Gather regardless of outcome so a completed run's logs — and
                                 # partial logs on failure — are kept locally for the sentinel
                                 # check and for diagnosis.
-                                bash scripts/gather_results.sh -f "$IPS_SUBSET_TXT" -o "$run_dir"
+                                gather_rc=0
+                                gather_run_results "$IPS_SUBSET_TXT" "$run_dir" || gather_rc=1
 
-                                if [ "$run_rc" -eq 0 ] && run_output_complete "$run_dir" "$total"; then
+                                if [ "$run_rc" -eq 0 ] && [ "$gather_rc" -eq 0 ] && run_output_complete "$run_dir" "$total"; then
                                     cp -f "$hp_file" "$run_dir/hyperparameters.json"
                                     touch "$run_dir/_SUCCESS"
                                     echo "    - ${fl_algo} rep ${r}: success"
                                 else
                                     touch "$run_dir/_FAILED"
-                                    log_failure "run_on_vms"
+                                    if [ "$gather_rc" -ne 0 ]; then
+                                        log_failure "gather_results"
+                                    else
+                                        log_failure "run_on_vms"
+                                    fi
                                     echo "    - ${fl_algo} rep ${r}: FAILED (marked _FAILED, will retry on re-run)"
                                 fi
                                 rm -f "$hp_file"
+                                if [ "$gather_rc" -ne 0 ]; then
+                                    halt_for_gather_failure "$IPS_SUBSET_TXT" "$run_dir"
+                                fi
                             done
                         done
                         fl_algo=""; r=""

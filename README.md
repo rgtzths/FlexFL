@@ -134,7 +134,7 @@ All scripts accept a `-f <ips_file>` flag to target a custom set of VMs. Run fro
 | `scripts/dataset_division.sh` | `dataset_division.sh -d <dataset> -n <workers> -s <strategy> [-p <0\|1>]` — `-p 0` skips preprocessing; division then fails if `data/<dataset>/_data` has no `scaling.json`, or a regression dataset's `scaling.json` has no valid `"target"` statistics |
 | `scripts/send_dataset.sh` | `send_dataset.sh -d <dataset> -f <ips>` |
 | `scripts/run_on_vms.sh` | `run_on_vms.sh [-f <ips>] <interval> <chance> [args]` — exits non-zero if the master-wait watchdog detects a stall (see `FLEXFL_STALL_TIMEOUT`/`FLEXFL_STALL_BACKSTOP`) |
-| `scripts/gather_results.sh` | `gather_results.sh [-f <ips>] [-o <output_dir>]` |
+| `scripts/gather_results.sh` | `gather_results.sh [-f <ips>] [-o <output_dir>]`; tries every VM, then exits `1` if any copy failed; it never removes results on the VMs |
 | `scripts/run_commands.sh` | `run_commands.sh [-v] [-w] [-i <ips>] -f <script>` or `run_commands.sh [-v] [-w] [-i <ips>] <command>` |
 | `scripts/run_machine_benchmark.sh` | `run_machine_benchmark.sh <ids.json> <ips.json> <output_dir> [benchmark_args]` |
 | `scripts/known_hosts.sh` | `known_hosts.sh [ips_file]` — rebuild local `~/.ssh/known_hosts` |
@@ -154,6 +154,7 @@ FlexFL is deployed to VMs via `rsync` (not installed from PyPI). `setup_vms.sh` 
 | `SLICING5G_URL` | URL of the Slicing5g dataset archive (required to download the Slicing5g legacy dataset) |
 | `FLEXFL_STALL_TIMEOUT` | Stall timeout in seconds for `run_on_vms.sh`'s master-wait watchdog (default `1200`) — a run whose master log stops advancing for this long is killed and marked `_FAILED` |
 | `FLEXFL_STALL_BACKSTOP` | Absolute wall-clock bound in seconds for `run_on_vms.sh`'s master-wait watchdog (default `21600`) — a backstop independent of stall detection |
+| `FLEXFL_GATHER_RETRY_DELAY` | Seconds between the sweep's three gather attempts for one run (default `10`). A run whose gather still fails is marked `_FAILED` and the sweep exits `3` before it removes `~/flexfl/results` on the VMs, so the logs stay there; copy them out before restarting, because a restart reruns that run and clears them |
 | `FLEXFL_RUN_TIMEOUT` | Per-run wall-clock cap in seconds for `run_test_experiment.sh` (default `900`); keep it above `FLEXFL_STALL_BACKSTOP` so the inner watchdog fires first |
 | `FLEXFL_TEST_DATASETS` | Comma-separated `data_name` list replacing `run_test_experiment.sh`'s two datasets, for example to pilot a large dataset; an unknown name aborts the sweep |
 | `FLEXFL_KEEP_TEST_RESULTS` | Set to `1` to keep a successful `run_test_experiment.sh` sweep's results in `results_pilot/test_<UTC timestamp>/` instead of deleting them; if the move fails, the results stay in `results/test/` and the script exits `1` |
