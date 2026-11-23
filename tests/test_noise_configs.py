@@ -543,6 +543,15 @@ class TestSample:
         assert DATASETS[7] in res.stderr
         assert not out.exists()
 
+    def test_csv_without_one_algorithm_exits_1(self, csv_path, tmp_path):
+        rows = [row for row in synthetic_rows() if row["fl_algo"] != ALGOS[3]]
+        write_csv(csv_path, rows)
+        out = tmp_path / "list.jsonl"
+        res = sample_cmd(csv_path, out, "--target", 150)
+        assert res.returncode == 1
+        assert ALGOS[3] in res.stderr
+        assert not out.exists()
+
     def test_datasets_option_restricts_the_sample(self, csv_path, tmp_path):
         out = tmp_path / "list.jsonl"
         keep = DATASETS[:4]

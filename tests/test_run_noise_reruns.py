@@ -374,6 +374,35 @@ def test_short_gather_fails_the_run(tmp_path):
     assert _failures(run) == [_failure("gather_incomplete", DATA_A, SYNC)]
 
 
+def test_failed_run_is_retried_then_skipped_on_the_same_root(tmp_path):
+    shared = tmp_path / "shared"
+    rep = shared / STRATEGY / COMBO / DATA_A / SYNC / "rep_1"
+    entries = [_entry(DATA_A, SYNC)]
+    for name in ("first", "second", "third"):
+        (tmp_path / name).mkdir()
+
+    first = _run(
+        tmp_path / "first", entries, root=str(shared), env={"GATHER_SHORT": "3"}
+    )
+    assert first.proc.returncode == 0, first.proc.stderr
+    assert (rep / "_FAILED").exists()
+    assert not (rep / "_SUCCESS").exists()
+    (rep / "stale.txt").write_text("left by the failed attempt")
+
+    second = _run(tmp_path / "second", entries, root=str(shared))
+    assert second.proc.returncode == 0, second.proc.stderr
+    assert (rep / "_SUCCESS").exists()
+    assert not (rep / "_FAILED").exists()
+    assert not (rep / "stale.txt").exists()
+    assert len(_calls(second, "run_on_vms")) == 1
+
+    third = _run(tmp_path / "third", entries, root=str(shared))
+    assert third.proc.returncode == 0, third.proc.stderr
+    assert _calls(third, "run_on_vms") == []
+    assert (rep / "_SUCCESS").exists()
+    assert "all algos done, skipping" in third.proc.stdout
+
+
 def test_tampered_expected_hyperparameters_skip_the_entry(tmp_path):
     tampered = dict(sample(SYNC, f"{COMBO}|{DATA_A}|{SYNC}|42"), learning_rate=0.5)
     entries = [_entry(DATA_A, SYNC, hp=tampered), _entry(DATA_A, DSYNC)]

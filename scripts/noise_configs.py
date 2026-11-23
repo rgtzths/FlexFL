@@ -319,7 +319,7 @@ def load_rows(
     candidates = []
     universe = {
         "strategy": set(STRATEGIES),
-        "fl_algo": set(),
+        "fl_algo": set(FL_ALGOS),
         "dataset": set(datasets or ()),
     }
     seen = set()
