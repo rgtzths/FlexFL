@@ -245,28 +245,27 @@ EOF
 
             if [ "$run_rc" -eq 0 ] && run_output_complete "$run_dir" "$total"; then
                 cp -f "$hp_file" "$run_dir/hyperparameters.json"
-                args_json="$(dirname "$(find "$run_dir" -name 'log_0.jsonl' | head -n 1)")/args.json"
-                if noise_cfg compare --expected "$expected_hp" --actual "$run_dir/hyperparameters.json" >&2 && \
-                    [ -f "$args_json" ] && noise_cfg args-check --args-json "$args_json" \
+                master_log="$(find "$run_dir" -name 'log_0.jsonl' | head -n 1)"
+                args_json="$(dirname "$master_log")/args.json"
+                worker_logs="$(find "$(dirname "$master_log")" -path '*/worker_*/log_*.jsonl' | wc -l)"
+                step=""
+                if ! noise_cfg compare --expected "$expected_hp" --actual "$run_dir/hyperparameters.json" >&2; then
+                    step="hp_written_mismatch"
+                elif [ "$worker_logs" -lt "$total" ]; then
+                    echo "  ! gathered ${worker_logs} worker logs, expected ${total}" >&2
+                    step="gather_incomplete"
+                elif [ ! -f "$args_json" ] || ! noise_cfg args-check --args-json "$args_json" \
                     --expected-hp "$expected_hp" --seed "$seed" --data-name "$data_name" \
-                    --fl-algo "$fl_algo" >&2; then
+                    --fl-algo "$fl_algo" --min-workers "$total" >&2; then
+                    step="args_mismatch"
+                fi
+                if [ -z "$step" ]; then
                     touch "$run_dir/_SUCCESS"
                     echo "    - ${fl_algo} rep 1: success"
                 else
-                    rm -f "$run_dir/_SUCCESS"
                     touch "$run_dir/_FAILED"
-                    if [ ! -f "$args_json" ]; then
-                        log_failure "args_mismatch"
-                        echo "    - ${fl_algo} rep 1: FAILED (effective arguments differ from the list, marked _FAILED, will retry on re-run)"
-                    elif ! noise_cfg args-check --args-json "$args_json" \
-                        --expected-hp "$expected_hp" --seed "$seed" --data-name "$data_name" \
-                        --fl-algo "$fl_algo" >&2; then
-                        log_failure "args_mismatch"
-                        echo "    - ${fl_algo} rep 1: FAILED (effective arguments differ from the list, marked _FAILED, will retry on re-run)"
-                    else
-                        log_failure "hp_written_mismatch"
-                        echo "    - ${fl_algo} rep 1: FAILED (written hyperparameters differ, marked _FAILED, will retry on re-run)"
-                    fi
+                    log_failure "$step"
+                    echo "    - ${fl_algo} rep 1: FAILED (${step}, marked _FAILED, will retry on re-run)"
                 fi
             else
                 touch "$run_dir/_FAILED"

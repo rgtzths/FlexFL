@@ -450,6 +450,11 @@ class TestSeedGuard:
         line = next(line for line in text.splitlines() if line.startswith("fl_algos=("))
         assert noise_configs.FL_ALGOS == tuple(re.findall(r"\w+", line)[1:])
 
+    def test_launcher_constants_match_replay_script(self):
+        text = (REPO / "scripts" / "run_noise_reruns.sh").read_text()
+        assert f"--dataset {noise_configs.LAUNCHER_DATASET} " in text
+        assert f"--nn {noise_configs.LAUNCHER_NN} " in text
+
     def test_helpers(self):
         entry = make_entry()
         assert noise_configs.combo_of(entry) == "atnog-test1_2_hobbit_4_samwise_8"
@@ -639,8 +644,22 @@ def results_tree(tmp_path):
         key = f"{row['combo']}|{row['dataset']}|{row['fl_algo']}|42"
         hp_dir = base / row["fl_algo"] / "rep_1"
         hp_dir.mkdir(parents=True, exist_ok=True)
-        (hp_dir / "hyperparameters.json").write_text(
-            json.dumps(sample_hp(row["fl_algo"], key))
+        vector = sample_hp(row["fl_algo"], key)
+        (hp_dir / "hyperparameters.json").write_text(json.dumps(vector))
+        (hp_dir / "master").mkdir(exist_ok=True)
+        (hp_dir / "master" / "log_0.jsonl").write_text("{}\n")
+        (hp_dir / "master" / "args.json").write_text(
+            json.dumps(
+                {
+                    "dataset": noise_configs.LAUNCHER_DATASET,
+                    "data_name": row["dataset"],
+                    "nn": noise_configs.LAUNCHER_NN,
+                    "fl": row["fl_algo"],
+                    "seed": 42,
+                    "min_workers": row["num_workers"],
+                    **vector,
+                }
+            )
         )
         (base / "division.json").write_text(
             json.dumps(
@@ -746,6 +765,58 @@ class TestSampleResultsDir:
         assert "/".join(division_id) in res.stderr
         assert not out.exists()
 
+    @pytest.mark.parametrize(
+        "key, value", [("seed", 43), ("learning_rate", 0.5), ("min_workers", 2)]
+    )
+    def test_original_args_override_exits_1_and_writes_no_list(
+        self, csv_path, results_tree, tmp_path, key, value
+    ):
+        first = tmp_path / "first.jsonl"
+        assert (
+            sample_cmd(
+                csv_path, first, "--target", 20, "--results-dir", results_tree
+            ).returncode
+            == 0
+        )
+        victim = identity(read_entries(first)[0])
+        args_file = (
+            results_tree.joinpath(*victim[:3], victim[3], "rep_1")
+            / "master"
+            / "args.json"
+        )
+        stored = json.loads(args_file.read_text())
+        stored[key] = value
+        args_file.write_text(json.dumps(stored))
+
+        out = tmp_path / "second.jsonl"
+        res = sample_cmd(csv_path, out, "--target", 20, "--results-dir", results_tree)
+        assert res.returncode == 1
+        assert "/".join(victim) in res.stderr
+        assert key in res.stderr
+        assert not out.exists()
+
+    def test_missing_original_args_json_exits_1(self, csv_path, results_tree, tmp_path):
+        first = tmp_path / "first.jsonl"
+        assert (
+            sample_cmd(
+                csv_path, first, "--target", 20, "--results-dir", results_tree
+            ).returncode
+            == 0
+        )
+        victim = identity(read_entries(first)[0])
+        (
+            results_tree.joinpath(*victim[:3], victim[3], "rep_1")
+            / "master"
+            / "args.json"
+        ).unlink()
+
+        out = tmp_path / "second.jsonl"
+        res = sample_cmd(csv_path, out, "--target", 20, "--results-dir", results_tree)
+        assert res.returncode == 1
+        assert "/".join(victim) in res.stderr
+        assert "args.json" in res.stderr
+        assert not out.exists()
+
     def test_missing_division_lists_identity(self, csv_path, results_tree, tmp_path):
         first = tmp_path / "first.jsonl"
         assert (
@@ -782,3 +853,62 @@ class TestSampleResultsDir:
         assert res.returncode == 1
         assert "worker_feature_entropy" in res.stderr
         assert not out.exists()
+
+
+class TestArgsCheck:
+    ALGO = "CentralizedSync"
+    DATA = "clf_num_a"
+    KEY = f"atnog-test1_2_hobbit_2_samwise_2|{DATA}|{ALGO}|42"
+
+    def _check(self, tmp_path, **overrides):
+        vector = sample_hp(self.ALGO, self.KEY)
+        args = {
+            "dataset": noise_configs.LAUNCHER_DATASET,
+            "data_name": self.DATA,
+            "nn": noise_configs.LAUNCHER_NN,
+            "fl": self.ALGO,
+            "seed": 42,
+            "min_workers": 6,
+            **vector,
+        }
+        args.update(overrides)
+        args = {k: v for k, v in args.items() if v is not None}
+        (tmp_path / "args.json").write_text(json.dumps(args))
+        (tmp_path / "hp.json").write_text(json.dumps(vector))
+        return run(
+            "args-check",
+            "--args-json",
+            tmp_path / "args.json",
+            "--expected-hp",
+            tmp_path / "hp.json",
+            "--seed",
+            42,
+            "--data-name",
+            self.DATA,
+            "--fl-algo",
+            self.ALGO,
+            "--min-workers",
+            6,
+        )
+
+    def test_matching_arguments_pass(self, tmp_path):
+        res = self._check(tmp_path)
+        assert res.returncode == 0, res.stdout + res.stderr
+
+    @pytest.mark.parametrize(
+        "key, value",
+        [
+            ("seed", 43),
+            ("min_workers", 2),
+            ("dataset", "Other"),
+            ("nn", "other"),
+            ("data_name", "clf_num_b"),
+            ("fl", "CentralizedAsync"),
+            ("learning_rate", 0.5),
+            ("epochs", None),
+        ],
+    )
+    def test_each_differing_or_missing_argument_fails(self, tmp_path, key, value):
+        res = self._check(tmp_path, **{key: value})
+        assert res.returncode == 1
+        assert key in res.stdout

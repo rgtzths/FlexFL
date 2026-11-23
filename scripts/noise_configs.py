@@ -22,6 +22,8 @@ FL_ALGOS = (
     "DecentralizedSync",
     "DecentralizedAsync",
 )
+LAUNCHER_DATASET = "Benchmark"
+LAUNCHER_NN = "benchmark"
 DATA_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 LIST_FIELDS = (
     "strategy",
@@ -252,21 +254,43 @@ def cmd_compare(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_args_check(args: argparse.Namespace) -> int:
-    with open(args.args_json, "r") as f:
-        actual = json.load(f)
-    if not isinstance(actual, dict):
-        print(f"{args.args_json}: not a JSON object", file=sys.stderr)
-        return 1
-    expected = {"seed": args.seed, "data_name": args.data_name, "fl": args.fl_algo}
-    with open(args.expected_hp, "r") as f:
-        expected.update(json.load(f))
+def args_diffs(
+    actual: dict,
+    expected_hp: dict,
+    seed: int,
+    data_name: str,
+    fl_algo: str,
+    min_workers: int,
+) -> list[str]:
+    expected = {
+        "dataset": LAUNCHER_DATASET,
+        "data_name": data_name,
+        "nn": LAUNCHER_NN,
+        "fl": fl_algo,
+        "seed": seed,
+        "min_workers": min_workers,
+        **expected_hp,
+    }
     diffs = []
     for key, value in expected.items():
         if key not in actual:
             diffs.append(f"$.{key}: missing key in actual")
         else:
             diffs.extend(diff_json(value, actual[key], _path=f"$.{key}"))
+    return diffs
+
+
+def cmd_args_check(args: argparse.Namespace) -> int:
+    with open(args.args_json, "r") as f:
+        actual = json.load(f)
+    if not isinstance(actual, dict):
+        print(f"{args.args_json}: not a JSON object", file=sys.stderr)
+        return 1
+    with open(args.expected_hp, "r") as f:
+        expected_hp = json.load(f)
+    diffs = args_diffs(
+        actual, expected_hp, args.seed, args.data_name, args.fl_algo, args.min_workers
+    )
     for line in diffs:
         print(line)
     return 1 if diffs else 0
@@ -468,6 +492,27 @@ def _read_json(path: Path, problems: list[str], who: str) -> object:
     return _UNREADABLE
 
 
+def _check_original_args(
+    entry: dict, rep_dir: Path, hp: dict, problems: list[str], who: str
+) -> None:
+    master_log = next(iter(sorted(rep_dir.rglob("log_0.jsonl"))), None)
+    args_path = None if master_log is None else master_log.parent / "args.json"
+    if args_path is None or not args_path.is_file():
+        problems.append(f"{who}: no args.json beside the master log under {rep_dir}")
+        return
+    actual = _read_json(args_path, problems, who)
+    if actual is _UNREADABLE:
+        return
+    if not isinstance(actual, dict):
+        problems.append(f"{who}: {args_path} is not a JSON object")
+        return
+    min_workers = entry["n1"] + entry["n2"] + entry["n3"]
+    for line in args_diffs(
+        actual, hp, entry["seed"], entry["data_name"], entry["fl_algo"], min_workers
+    ):
+        problems.append(f"{who}: args.json vs the list identity: {line}")
+
+
 def _embed_expected(entries: list[dict], results_dir: Path) -> None:
     problems: list[str] = []
     for entry in entries:
@@ -491,6 +536,8 @@ def _embed_expected(entries: list[dict], results_dir: Path) -> None:
                 )
         if isinstance(division, dict) and "worker_feature_entropy" not in division:
             problems.append(f"{who}: division.json has no worker_feature_entropy")
+        if isinstance(hp, dict):
+            _check_original_args(entry, hp_path.parent, hp, problems, who)
         entry["expected_hyperparameters"] = hp
         entry["expected_division"] = division
     if problems:
@@ -609,6 +656,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--seed", required=True, type=int)
     p.add_argument("--data-name", required=True)
     p.add_argument("--fl-algo", required=True)
+    p.add_argument("--min-workers", required=True, type=int)
     p.set_defaults(func=cmd_args_check)
 
     p = sub.add_parser("sample", help="draw the stratified rerun list")

@@ -116,6 +116,11 @@ mkdir -p "$out/master"
 { for i in 1 2 3 4 5 6; do echo '{"event": "new_worker"}'; done
   echo '{"event": "end"}'; } > "$out/master/log_0.jsonl"
 [ ! -f "$CALLS.args.json" ] || cp "$CALLS.args.json" "$out/master/args.json"
+for i in 1 2 3 4 5 6; do
+    [ "$i" = "${GATHER_SHORT:-}" ] && continue
+    mkdir -p "$out/master/worker_$i"
+    echo '{"event": "start"}' > "$out/master/worker_$i/log_$i.jsonl"
+done
 """
 
 STUB_UV = """\
@@ -332,6 +337,9 @@ def test_extra_arguments_reach_the_run(tmp_path):
         ("--epochs", "3"),
         ("--learning_r", "0.5"),
         ("--epochs=3",),
+        ("--min_workers", "2"),
+        ("--dataset", "Other"),
+        ("--nn", "other"),
     ],
 )
 def test_effective_argument_overrides_fail_the_run(tmp_path, args):
@@ -354,6 +362,16 @@ def test_missing_effective_arguments_fail_the_run(tmp_path):
     assert run.proc.returncode == 0, run.proc.stderr
     assert (_rep(run, DATA_A, SYNC) / "_FAILED").exists()
     assert _failures(run) == [_failure("args_mismatch", DATA_A, SYNC)]
+
+
+def test_short_gather_fails_the_run(tmp_path):
+    run = _run(tmp_path, [_entry(DATA_A, SYNC)], env={"GATHER_SHORT": "3"})
+
+    assert run.proc.returncode == 0, run.proc.stderr
+    rep = _rep(run, DATA_A, SYNC)
+    assert not (rep / "_SUCCESS").exists()
+    assert (rep / "_FAILED").exists()
+    assert _failures(run) == [_failure("gather_incomplete", DATA_A, SYNC)]
 
 
 def test_tampered_expected_hyperparameters_skip_the_entry(tmp_path):
