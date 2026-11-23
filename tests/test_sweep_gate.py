@@ -165,8 +165,12 @@ def _sweep(
     setup=None,
     gather_fails=0,
     expect_rc=0,
+    retry_delay="0",
 ):
     work, bin_dir = _stub_sweep_workdir(tmp_path)
+    sleep = bin_dir / "sleep"
+    sleep.write_text('#!/bin/bash\necho "$*" >> "$SLEEP_LOG"\n')
+    sleep.chmod(0o755)
     if setup is not None:
         setup(work)
     if sampler is None:
@@ -199,11 +203,15 @@ run_sweep
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "GATHER_LOG": str(tmp_path / "gather.txt"),
         "REMOTE_LOG": str(tmp_path / "remote.txt"),
+        "SLEEP_LOG": str(tmp_path / "sleep.txt"),
         "GATHER_FAILS": str(gather_fails),
-        "FLEXFL_GATHER_RETRY_DELAY": "0",
+        "FLEXFL_GATHER_RETRY_DELAY": retry_delay,
     }
+    if retry_delay is None:
+        del env["FLEXFL_GATHER_RETRY_DELAY"]
     (tmp_path / "gather.txt").touch()
     (tmp_path / "remote.txt").touch()
+    (tmp_path / "sleep.txt").touch()
     result = _run(snippet, cwd=work, env=env)
     assert result.returncode == expect_rc, result.stderr
     ran = dict(line.split("|", 1) for line in calls.read_text().splitlines())
@@ -337,3 +345,38 @@ def test_persistent_gather_failure_marks_the_run_failed_and_halts(tmp_path):
     assert not _rep_dir(work, 43).exists()
     assert _remote_commands(tmp_path) == []
     assert not list((work / "results").rglob(".hp_*"))
+
+
+def test_failed_run_whose_gather_also_fails_still_halts_as_a_gather_failure(tmp_path):
+    work, ran = _sweep(tmp_path, run_rc="1", gather_fails=99, expect_rc=3)
+
+    assert set(ran) == {"42"}
+    assert _gather_attempts(tmp_path) == 3
+    assert (_rep_dir(work, 42) / "_FAILED").exists()
+    failures = (work / "results/_failures.log").read_text()
+    assert "step=gather_results" in failures
+    assert "step=run_on_vms" not in failures
+    assert not _rep_dir(work, 43).exists()
+    assert _remote_commands(tmp_path) == []
+
+
+def _sleeps(tmp_path):
+    return (tmp_path / "sleep.txt").read_text().splitlines()
+
+
+def test_gather_retries_wait_the_configured_delay_between_attempts(tmp_path):
+    _sweep(tmp_path, gather_fails=99, expect_rc=3, retry_delay="7")
+
+    assert _sleeps(tmp_path) == ["7", "7"]
+
+
+def test_gather_retry_delay_defaults_to_ten_seconds(tmp_path):
+    _sweep(tmp_path, gather_fails=99, expect_rc=3, retry_delay=None)
+
+    assert _sleeps(tmp_path) == ["10", "10"]
+
+
+def test_a_recovered_gather_waits_once_before_its_retry(tmp_path):
+    _sweep(tmp_path, gather_fails=1, retry_delay="7")
+
+    assert _sleeps(tmp_path) == ["7"]
