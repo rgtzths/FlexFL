@@ -75,6 +75,33 @@ exit 0
 
 STUB_RUN_ON_VMS = """\
 echo "run_on_vms $*" >> "$CALLS"
+if [ -z "${OMIT_ARGS_JSON:-}" ]; then
+    "$REAL_PYTHON" - "$@" <<'PY'
+import argparse
+import json
+import os
+import sys
+
+p = argparse.ArgumentParser()
+for name in ("dataset", "data_name", "nn", "fl", "info", "early_stop_on"):
+    p.add_argument("--" + name)
+for name in (
+    "seed",
+    "min_workers",
+    "batch_size",
+    "patience",
+    "local_epochs",
+    "epochs",
+    "min_epochs",
+):
+    p.add_argument("--" + name, type=int)
+for name in ("learning_rate", "delta"):
+    p.add_argument("--" + name, type=float)
+args, _ = p.parse_known_args(sys.argv[1:])
+with open(os.environ["CALLS"] + ".args.json", "w") as f:
+    json.dump({k: v for k, v in vars(args).items() if v is not None}, f)
+PY
+fi
 if [ -n "${TAMPER_HP:-}" ]; then
     for f in $(find "$FLEXFL_NOISE_ROOT" -name '.hp_*.json'); do
         echo '{"learning_rate": 1}' > "$f"
@@ -88,6 +115,7 @@ while getopts "f:o:" o; do [ "$o" = o ] && out="$OPTARG"; done
 mkdir -p "$out/master"
 { for i in 1 2 3 4 5 6; do echo '{"event": "new_worker"}'; done
   echo '{"event": "end"}'; } > "$out/master/log_0.jsonl"
+[ ! -f "$CALLS.args.json" ] || cp "$CALLS.args.json" "$out/master/args.json"
 """
 
 STUB_UV = """\
@@ -288,11 +316,44 @@ def test_two_entries_rerun_into_the_noise_root_only(tmp_path):
 
 
 def test_extra_arguments_reach_the_run(tmp_path):
-    run = _run(tmp_path, [_entry(DATA_A, SYNC)], args=("--epochs", "3"))
+    run = _run(tmp_path, [_entry(DATA_A, SYNC)], args=("--info", "note"))
 
     assert run.proc.returncode == 0, run.proc.stderr
     (line,) = _calls(run, "run_on_vms")
-    assert line.endswith(" --epochs 3")
+    assert line.endswith(" --info note")
+    assert (_rep(run, DATA_A, SYNC) / "_SUCCESS").exists()
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("--seed", "43"),
+        ("--learning_rate", "0.5"),
+        ("--epochs", "3"),
+        ("--learning_r", "0.5"),
+        ("--epochs=3",),
+    ],
+)
+def test_effective_argument_overrides_fail_the_run(tmp_path, args):
+    run = _run(tmp_path, [_entry(DATA_A, SYNC)], args=args)
+
+    assert run.proc.returncode == 0, run.proc.stderr
+    rep = _rep(run, DATA_A, SYNC)
+    assert not (rep / "_SUCCESS").exists()
+    assert (rep / "_FAILED").exists()
+    assert _failures(run) == [_failure("args_mismatch", DATA_A, SYNC)]
+
+
+def test_missing_effective_arguments_fail_the_run(tmp_path):
+    run = _run(
+        tmp_path,
+        [_entry(DATA_A, SYNC)],
+        env={"OMIT_ARGS_JSON": "1"},
+    )
+
+    assert run.proc.returncode == 0, run.proc.stderr
+    assert (_rep(run, DATA_A, SYNC) / "_FAILED").exists()
+    assert _failures(run) == [_failure("args_mismatch", DATA_A, SYNC)]
 
 
 def test_tampered_expected_hyperparameters_skip_the_entry(tmp_path):

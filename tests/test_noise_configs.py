@@ -206,6 +206,12 @@ class TestValidate:
             [make_entry(n1=0)],
             [make_entry(n2=-3)],
             [make_entry(n3=0)],
+            [make_entry(data_name="../venv")],
+            [make_entry(data_name="a/b")],
+            [make_entry(data_name="")],
+            [make_entry(data_name="-x")],
+            [make_entry(data_name="a b")],
+            [make_entry(fl_algo="Unknown")],
             [],
         ],
         ids=[
@@ -215,6 +221,12 @@ class TestValidate:
             "n1-zero",
             "n2-negative",
             "n3-zero",
+            "data-parent",
+            "data-slash",
+            "data-empty",
+            "data-leading-dash",
+            "data-space",
+            "unknown-algorithm",
             "empty",
         ],
     )
@@ -432,6 +444,11 @@ class TestSeedGuard:
         text = (REPO / "scripts" / "run_full_experiments.sh").read_text()
         first = int(re.search(r"SEEDS=\((\d+)", text).group(1))
         assert noise_configs.REPEAT1_SEED == first
+
+    def test_fl_algos_match_launcher(self):
+        text = (REPO / "scripts" / "run_full_experiments.sh").read_text()
+        line = next(line for line in text.splitlines() if line.startswith("fl_algos=("))
+        assert noise_configs.FL_ALGOS == tuple(re.findall(r"\w+", line)[1:])
 
     def test_helpers(self):
         entry = make_entry()
@@ -699,6 +716,35 @@ class TestSampleResultsDir:
         assert "learning_rate" in res.stderr
         assert not out.exists()
         assert not summary.exists()
+
+    def test_null_artifacts_exit_1_and_write_no_list(
+        self, csv_path, results_tree, tmp_path
+    ):
+        first = tmp_path / "first.jsonl"
+        assert (
+            sample_cmd(
+                csv_path, first, "--target", 20, "--results-dir", results_tree
+            ).returncode
+            == 0
+        )
+        selected = read_entries(first)
+        hp_entry = selected[0]
+        division_entry = next(
+            entry for entry in selected if entry["data_name"] != hp_entry["data_name"]
+        )
+        hp_id = identity(hp_entry)
+        division_id = identity(division_entry)
+        hp_base = results_tree / hp_id[0] / hp_id[1] / hp_id[2]
+        division_base = results_tree / division_id[0] / division_id[1] / division_id[2]
+        (hp_base / hp_id[3] / "rep_1" / "hyperparameters.json").write_text("null")
+        (division_base / "division.json").write_text("null")
+
+        out = tmp_path / "second.jsonl"
+        res = sample_cmd(csv_path, out, "--target", 20, "--results-dir", results_tree)
+        assert res.returncode == 1
+        assert "/".join(hp_id) in res.stderr
+        assert "/".join(division_id) in res.stderr
+        assert not out.exists()
 
     def test_missing_division_lists_identity(self, csv_path, results_tree, tmp_path):
         first = tmp_path / "first.jsonl"

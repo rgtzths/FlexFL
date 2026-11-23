@@ -158,12 +158,19 @@ def test_identical_files_give_zero_cv_and_unit_r2(tmp_path):
 
 
 def test_zero_mean_pairs_give_na_cv(tmp_path):
-    result = run_report(tmp_path, *time_rows([-5, -3], [5, 3]))
+    result = run_report(tmp_path, *time_rows([0, 0], [0, 0]))
     assert result.returncode == 0, result.stderr
     row = summary_row(tmp_path / "out", "total_time_s")
     assert row["cv_median"] == "NA"
     assert row["cv_mean"] == "NA"
     assert row["cv_pooled"] == "NA"
+
+
+def test_pooled_cv_includes_zero_sum_pairs(tmp_path):
+    result = run_report(tmp_path, *time_rows([1, -0.5], [1, 0.5]))
+    assert result.returncode == 0, result.stderr
+    row = summary_row(tmp_path / "out", "total_time_s")
+    assert float(row["cv_pooled"]) == pytest.approx(1.0)
 
 
 def test_constant_original_gives_na_r2(tmp_path):
@@ -365,6 +372,59 @@ def test_pairs_file_holds_values_and_pair_cv(tmp_path):
     assert float(pair["rerun"]) == 12
     assert float(pair["pair_cv"]) == pytest.approx(abs(2) / math.sqrt(2) / 11)
     assert pair["reason"] == "included"
+
+
+def test_every_report_target_is_covered(tmp_path):
+    from noise_report import TARGETS as REPORT_TARGETS
+
+    assert REPORT_TARGETS == TARGETS
+    originals, reruns, expected = [], [], {}
+    for index in range(3):
+        original_values, rerun_values = {}, {}
+        for target_index, target in enumerate(TARGETS):
+            base = 10 * (target_index + 1)
+            original_values[target] = base + (1, 3, 7)[index]
+            rerun_values[target] = base + (2, 4, 9)[index]
+            expected[(target, f"ds{index}")] = (
+                original_values[target],
+                rerun_values[target],
+            )
+        originals.append(make_row(index, is_clf="True", **original_values))
+        reruns.append(make_row(index, is_clf="True", **rerun_values))
+
+    result = run_report(tmp_path, originals, reruns)
+    assert result.returncode == 0, result.stderr
+    out = tmp_path / "out"
+    summary = read_rows(out / "noise_summary.csv")
+    assert {row["target"] for row in summary} == set(REPORT_TARGETS)
+    for target in TARGETS:
+        row = summary_row(
+            out, target, "classification" if target == "performance" else "all"
+        )
+        assert row["n_pairs"] == "3"
+        target_values = [expected[(target, f"ds{i}")] for i in range(3)]
+        cvs = [
+            abs(original - rerun) / math.sqrt(2) / abs((original + rerun) / 2)
+            for original, rerun in target_values
+        ]
+        assert float(row["cv_median"]) == pytest.approx(statistics.median(cvs))
+        truth = [original for original, _ in target_values]
+        pred = [rerun for _, rerun in target_values]
+        mean = sum(truth) / len(truth)
+        expected_r2 = 1 - sum((a - b) ** 2 for a, b in zip(truth, pred)) / sum(
+            (a - mean) ** 2 for a in truth
+        )
+        assert float(row["r2_raw"]) == pytest.approx(expected_r2)
+        pairs = [
+            pair
+            for pair in read_rows(out / "noise_pairs.csv")
+            if pair["target"] == target
+        ]
+        assert len(pairs) == 3
+        for pair in pairs:
+            original, rerun = expected[(target, pair["dataset"])]
+            assert float(pair["original"]) == pytest.approx(original)
+            assert float(pair["rerun"]) == pytest.approx(rerun)
 
 
 def test_writes_only_the_two_output_files(tmp_path):

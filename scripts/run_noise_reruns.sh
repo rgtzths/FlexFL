@@ -245,14 +245,28 @@ EOF
 
             if [ "$run_rc" -eq 0 ] && run_output_complete "$run_dir" "$total"; then
                 cp -f "$hp_file" "$run_dir/hyperparameters.json"
-                touch "$run_dir/_SUCCESS"
-                if noise_cfg compare --expected "$expected_hp" --actual "$run_dir/hyperparameters.json" >&2; then
+                args_json="$(dirname "$(find "$run_dir" -name 'log_0.jsonl' | head -n 1)")/args.json"
+                if noise_cfg compare --expected "$expected_hp" --actual "$run_dir/hyperparameters.json" >&2 && \
+                    [ -f "$args_json" ] && noise_cfg args-check --args-json "$args_json" \
+                    --expected-hp "$expected_hp" --seed "$seed" --data-name "$data_name" \
+                    --fl-algo "$fl_algo" >&2; then
+                    touch "$run_dir/_SUCCESS"
                     echo "    - ${fl_algo} rep 1: success"
                 else
                     rm -f "$run_dir/_SUCCESS"
                     touch "$run_dir/_FAILED"
-                    log_failure "hp_written_mismatch"
-                    echo "    - ${fl_algo} rep 1: FAILED (written hyperparameters differ, marked _FAILED, will retry on re-run)"
+                    if [ ! -f "$args_json" ]; then
+                        log_failure "args_mismatch"
+                        echo "    - ${fl_algo} rep 1: FAILED (effective arguments differ from the list, marked _FAILED, will retry on re-run)"
+                    elif ! noise_cfg args-check --args-json "$args_json" \
+                        --expected-hp "$expected_hp" --seed "$seed" --data-name "$data_name" \
+                        --fl-algo "$fl_algo" >&2; then
+                        log_failure "args_mismatch"
+                        echo "    - ${fl_algo} rep 1: FAILED (effective arguments differ from the list, marked _FAILED, will retry on re-run)"
+                    else
+                        log_failure "hp_written_mismatch"
+                        echo "    - ${fl_algo} rep 1: FAILED (written hyperparameters differ, marked _FAILED, will retry on re-run)"
+                    fi
                 fi
             else
                 touch "$run_dir/_FAILED"

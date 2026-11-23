@@ -7,6 +7,7 @@ import json
 import math
 import os
 import random
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -15,6 +16,13 @@ from sample_hyperparameters import sample
 
 REPEAT1_SEED = 42
 STRATEGIES = ("iid", "non_iid", "dirichlet")
+FL_ALGOS = (
+    "CentralizedSync",
+    "CentralizedAsync",
+    "DecentralizedSync",
+    "DecentralizedAsync",
+)
+DATA_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 LIST_FIELDS = (
     "strategy",
     "n1",
@@ -143,6 +151,14 @@ def validate_entries(entries: list[dict]) -> None:
             problems.append(
                 f"{who}: strategy {entry['strategy']!r} is not one of {STRATEGIES}"
             )
+        if not DATA_NAME_RE.fullmatch(entry["data_name"]) or ".." in entry["data_name"]:
+            problems.append(
+                f"{who}: data_name {entry['data_name']!r} is not a safe path component"
+            )
+        if entry["fl_algo"] not in FL_ALGOS:
+            problems.append(
+                f"{who}: fl_algo {entry['fl_algo']!r} is not one of {FL_ALGOS}"
+            )
         for field in ("n1", "n2", "n3"):
             if entry[field] <= 0:
                 problems.append(f"{who}: {field} must be positive, got {entry[field]}")
@@ -234,6 +250,26 @@ def cmd_compare(args: argparse.Namespace) -> int:
         print(f"{len(diffs)} difference(s)", file=sys.stderr)
         return 1
     return 0
+
+
+def cmd_args_check(args: argparse.Namespace) -> int:
+    with open(args.args_json, "r") as f:
+        actual = json.load(f)
+    if not isinstance(actual, dict):
+        print(f"{args.args_json}: not a JSON object", file=sys.stderr)
+        return 1
+    expected = {"seed": args.seed, "data_name": args.data_name, "fl": args.fl_algo}
+    with open(args.expected_hp, "r") as f:
+        expected.update(json.load(f))
+    diffs = []
+    for key, value in expected.items():
+        if key not in actual:
+            diffs.append(f"$.{key}: missing key in actual")
+        else:
+            diffs.extend(diff_json(value, actual[key], _path=f"$.{key}"))
+    for line in diffs:
+        print(line)
+    return 1 if diffs else 0
 
 
 def parse_bands(text: str) -> list[tuple[str, int, int]]:
@@ -418,6 +454,9 @@ def _entry_from(cand: dict) -> dict:
     }
 
 
+_UNREADABLE = object()
+
+
 def _read_json(path: Path, problems: list[str], who: str) -> object:
     try:
         with open(path, "r") as f:
@@ -426,7 +465,7 @@ def _read_json(path: Path, problems: list[str], who: str) -> object:
         problems.append(f"{who}: missing file {path}")
     except (OSError, json.JSONDecodeError) as exc:
         problems.append(f"{who}: cannot read {path}: {exc}")
-    return None
+    return _UNREADABLE
 
 
 def _embed_expected(entries: list[dict], results_dir: Path) -> None:
@@ -441,15 +480,16 @@ def _embed_expected(entries: list[dict], results_dir: Path) -> None:
         hp_path = base / entry["fl_algo"] / "rep_1" / "hyperparameters.json"
         hp = _read_json(hp_path, problems, who)
         division = _read_json(base / "division.json", problems, who)
-        if hp is not None:
+        for path, value in ((hp_path, hp), (base / "division.json", division)):
+            if value is not _UNREADABLE and not isinstance(value, dict):
+                problems.append(f"{who}: {path} is not a JSON object")
+        if isinstance(hp, dict):
             resampled = sample(entry["fl_algo"], key_of(entry))
             for line in diff_json(hp, resampled):
                 problems.append(
                     f"{who}: hyperparameters.json vs current sampler: {line}"
                 )
-        if division is not None and not (
-            isinstance(division, dict) and "worker_feature_entropy" in division
-        ):
+        if isinstance(division, dict) and "worker_feature_entropy" not in division:
             problems.append(f"{who}: division.json has no worker_feature_entropy")
         entry["expected_hyperparameters"] = hp
         entry["expected_division"] = division
@@ -562,6 +602,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--expected", required=True, type=Path)
     p.add_argument("--actual", required=True, type=Path)
     p.set_defaults(func=cmd_compare)
+
+    p = sub.add_parser("args-check", help="verify effective run arguments")
+    p.add_argument("--args-json", required=True, type=Path)
+    p.add_argument("--expected-hp", required=True, type=Path)
+    p.add_argument("--seed", required=True, type=int)
+    p.add_argument("--data-name", required=True)
+    p.add_argument("--fl-algo", required=True)
+    p.set_defaults(func=cmd_args_check)
 
     p = sub.add_parser("sample", help="draw the stratified rerun list")
     p.add_argument("--csv", required=True, type=Path)

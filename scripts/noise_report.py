@@ -144,8 +144,11 @@ def r_squared(truth, pred):
 def summarize(records, n_excluded):
     originals = [r["original"] for r in records]
     reruns = [r["rerun"] for r in records]
-    usable = [(a, b) for a, b in zip(originals, reruns) if (a + b) != 0]
-    cvs = [abs(a - b) / math.sqrt(2) / abs((a + b) / 2) for a, b in usable]
+    cvs = [
+        cv
+        for cv in (pair_cv(a, b) for a, b in zip(originals, reruns))
+        if cv is not None
+    ]
     out = {
         "cv_median": statistics.median(cvs) if cvs else None,
         "cv_mean": statistics.fmean(cvs) if cvs else None,
@@ -153,9 +156,9 @@ def summarize(records, n_excluded):
         "r2_raw": r_squared(originals, reruns),
         "r2_log1p": None,
     }
-    if usable:
-        variances = [(a - b) ** 2 / 2 for a, b in usable]
-        mean_abs = statistics.fmean(abs((a + b) / 2) for a, b in usable)
+    if originals:
+        variances = [(a - b) ** 2 / 2 for a, b in zip(originals, reruns)]
+        mean_abs = statistics.fmean(abs((a + b) / 2) for a, b in zip(originals, reruns))
         if mean_abs != 0:
             out["cv_pooled"] = math.sqrt(statistics.fmean(variances)) / mean_abs
     if originals and min(originals + reruns) >= 0:
