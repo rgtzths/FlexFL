@@ -40,14 +40,28 @@ function copy_results {
         echo "Results copied from $IP successfully!"
     else
         echo "Failed to copy results from $IP!"
+        return 1
     fi
 }
 
+pids=()
+ips=()
 while read -r IP; do
     if [[ -z "$IP" || "$IP" =~ ^# ]]; then
         continue
     fi
     copy_results "$IP" &
+    pids+=("$!")
+    ips+=("$IP")
 done < "$VM_LIST"
-wait
+
+failed=()
+for i in "${!pids[@]}"; do
+    wait "${pids[$i]}" || failed+=("${ips[$i]}")
+done
+
+if [ "${#failed[@]}" -gt 0 ]; then
+    echo "Results copying failed for ${#failed[@]} VM(s): ${failed[*]}" >&2
+    exit 1
+fi
 echo "Results copying completed!"

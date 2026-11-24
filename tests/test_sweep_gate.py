@@ -135,13 +135,16 @@ def _stub_sweep_workdir(tmp_path):
     shutil.copy(SCRIPT.parent / "sample_hyperparameters.py", scripts)
     for name in ("subset_ids.py", "vm_identity.py", "compute_partition_entropy.py"):
         (scripts / name).write_text("")
-    for name in ("dataset_division.sh", "send_dataset.sh", "run_commands.sh"):
+    for name in ("dataset_division.sh", "send_dataset.sh"):
         (scripts / name).write_text("exit 0\n")
+    (scripts / "run_commands.sh").write_text('echo "$*" >> "$REMOTE_LOG"\n')
     (scripts / "gather_results.sh").write_text(
         'while getopts "f:o:" o; do [ "$o" = o ] && out="$OPTARG"; done\n'
+        'echo gather >> "$GATHER_LOG"\n'
         'mkdir -p "$out/master"\n'
         '{ for i in 1 2 3 4 5 6; do echo \'{"event": "new_worker"}\'; done\n'
         '  echo \'{"event": "end"}\'; } > "$out/master/log_0.jsonl"\n'
+        '[ "$(wc -l < "$GATHER_LOG")" -gt "${GATHER_FAILS:-0}" ]\n'
     )
     uv = bin_dir / "uv"
     uv.write_text("#!/bin/bash\nexit 0\n")
@@ -153,8 +156,21 @@ def _rep_dir(work, seed):
     return work / "results/iid" / COMBO / DATA / ALGO / f"rep_{SEEDS.index(seed) + 1}"
 
 
-def _sweep(tmp_path, *, run_rc="0", sampler=None, preseed=(), setup=None):
+def _sweep(
+    tmp_path,
+    *,
+    run_rc="0",
+    sampler=None,
+    preseed=(),
+    setup=None,
+    gather_fails=0,
+    expect_rc=0,
+    retry_delay="0",
+):
     work, bin_dir = _stub_sweep_workdir(tmp_path)
+    sleep = bin_dir / "sleep"
+    sleep.write_text('#!/bin/bash\necho "$*" >> "$SLEEP_LOG"\n')
+    sleep.chmod(0o755)
     if setup is not None:
         setup(work)
     if sampler is None:
@@ -182,9 +198,22 @@ mkdir -p results
 execute_fl_run() {{ echo "$4|$5" >> "{calls}"; run_rc={run_rc}; }}
 run_sweep
 """
-    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "GATHER_LOG": str(tmp_path / "gather.txt"),
+        "REMOTE_LOG": str(tmp_path / "remote.txt"),
+        "SLEEP_LOG": str(tmp_path / "sleep.txt"),
+        "GATHER_FAILS": str(gather_fails),
+        "FLEXFL_GATHER_RETRY_DELAY": retry_delay,
+    }
+    if retry_delay is None:
+        del env["FLEXFL_GATHER_RETRY_DELAY"]
+    (tmp_path / "gather.txt").touch()
+    (tmp_path / "remote.txt").touch()
+    (tmp_path / "sleep.txt").touch()
     result = _run(snippet, cwd=work, env=env)
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == expect_rc, result.stderr
     ran = dict(line.split("|", 1) for line in calls.read_text().splitlines())
     return work, ran
 
@@ -274,3 +303,80 @@ def test_sweep_rebuilds_a_cache_without_scaling_statistics(
     tmp_path, cached_files, expected
 ):
     assert _preprocess_flag(tmp_path, cached_files) == expected
+
+
+def _gather_attempts(tmp_path):
+    return len((tmp_path / "gather.txt").read_text().splitlines())
+
+
+def _remote_commands(tmp_path):
+    return (tmp_path / "remote.txt").read_text().splitlines()
+
+
+def test_successful_gather_is_followed_by_the_remote_cleanup(tmp_path):
+    _sweep(tmp_path)
+
+    assert _gather_attempts(tmp_path) == len(SEEDS)
+    assert [
+        c for c in _remote_commands(tmp_path) if c.endswith("rm -rf ~/flexfl/results")
+    ]
+
+
+def test_gather_retry_recovers_a_transient_copy_failure(tmp_path):
+    work, ran = _sweep(tmp_path, gather_fails=1)
+
+    assert set(ran) == {str(seed) for seed in SEEDS}
+    assert _gather_attempts(tmp_path) == len(SEEDS) + 1
+    for seed in SEEDS:
+        assert (_rep_dir(work, seed) / "_SUCCESS").exists()
+        assert not (_rep_dir(work, seed) / "_FAILED").exists()
+
+
+def test_persistent_gather_failure_marks_the_run_failed_and_halts(tmp_path):
+    work, ran = _sweep(tmp_path, gather_fails=99, expect_rc=3)
+
+    assert set(ran) == {"42"}
+    assert _gather_attempts(tmp_path) == 3
+    rep = _rep_dir(work, 42)
+    assert (rep / "_FAILED").exists()
+    assert not (rep / "_SUCCESS").exists()
+    assert not (rep / "hyperparameters.json").exists()
+    assert "step=gather_results" in (work / "results/_failures.log").read_text()
+    assert not _rep_dir(work, 43).exists()
+    assert _remote_commands(tmp_path) == []
+    assert not list((work / "results").rglob(".hp_*"))
+
+
+def test_failed_run_whose_gather_also_fails_still_halts_as_a_gather_failure(tmp_path):
+    work, ran = _sweep(tmp_path, run_rc="1", gather_fails=99, expect_rc=3)
+
+    assert set(ran) == {"42"}
+    assert _gather_attempts(tmp_path) == 3
+    assert (_rep_dir(work, 42) / "_FAILED").exists()
+    failures = (work / "results/_failures.log").read_text()
+    assert "step=gather_results" in failures
+    assert "step=run_on_vms" not in failures
+    assert not _rep_dir(work, 43).exists()
+    assert _remote_commands(tmp_path) == []
+
+
+def _sleeps(tmp_path):
+    return (tmp_path / "sleep.txt").read_text().splitlines()
+
+
+def test_gather_retries_wait_the_configured_delay_between_attempts(tmp_path):
+    _sweep(tmp_path, gather_fails=99, expect_rc=3, retry_delay="7")
+
+    assert _sleeps(tmp_path) == ["7", "7"]
+
+
+def test_gather_retry_delay_defaults_to_ten_seconds(tmp_path):
+    _sweep(tmp_path, gather_fails=99, expect_rc=3, retry_delay=None)
+
+    assert _sleeps(tmp_path) == ["10", "10"]
+
+
+def test_a_recovered_gather_waits_once_before_its_retry(tmp_path):
+    _sweep(tmp_path, gather_fails=1, retry_delay="7")
+
+    assert _sleeps(tmp_path) == ["7"]

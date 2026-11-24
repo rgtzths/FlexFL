@@ -112,6 +112,7 @@ exit "${RUN_RC:-0}"
 
 STUB_GATHER = """\
 while getopts "f:o:" o; do [ "$o" = o ] && out="$OPTARG"; done
+echo gather >> "$CALLS.gather"
 mkdir -p "$out/master"
 { for i in 1 2 3 4 5 6; do echo '{"event": "new_worker"}'; done
   echo '{"event": "end"}'; } > "$out/master/log_0.jsonl"
@@ -121,6 +122,7 @@ for i in 1 2 3 4 5 6; do
     mkdir -p "$out/master/worker_$i"
     echo '{"event": "start"}' > "$out/master/worker_$i/log_$i.jsonl"
 done
+[ "$(wc -l < "$CALLS.gather")" -gt "${GATHER_FAILS:-0}" ] && [ -z "${GATHER_FAIL:-}" ]
 """
 
 STUB_UV = """\
@@ -244,6 +246,7 @@ def _run(
         "FLEXFL_NOISE_LIST": str(list_path),
         "FLEXFL_NOISE_ROOT": str(rerun_root) if root is None else root,
         "FLEXFL_PXM_DIR": str(tmp_path / "pxm"),
+        "FLEXFL_GATHER_RETRY_DELAY": "0",
         **(env or {}),
     }
     full_env = {k: v for k, v in full_env.items() if v is not None}
@@ -261,6 +264,11 @@ def _calls(run, prefix):
     return [
         line for line in run.calls.read_text().splitlines() if line.startswith(prefix)
     ]
+
+
+def _gather_attempts(run):
+    path = Path(f"{run.calls}.gather")
+    return len(path.read_text().splitlines()) if path.exists() else 0
 
 
 def _rep(run, data, algo):
@@ -372,6 +380,61 @@ def test_short_gather_fails_the_run(tmp_path):
     assert not (rep / "_SUCCESS").exists()
     assert (rep / "_FAILED").exists()
     assert _failures(run) == [_failure("gather_incomplete", DATA_A, SYNC)]
+
+
+def test_failed_gather_marks_the_run_failed_and_halts_with_remote_results_kept(
+    tmp_path,
+):
+    entries = [_entry(DATA_A, SYNC), _entry(DATA_A, DSYNC), _entry(DATA_B, SYNC)]
+
+    run = _run(tmp_path, entries, env={"GATHER_FAIL": "1"})
+
+    assert run.proc.returncode == 3, run.proc.stderr
+    rep = _rep(run, DATA_A, SYNC)
+    assert (rep / "_FAILED").exists()
+    assert not (rep / "_SUCCESS").exists()
+    assert _failures(run) == [_failure("gather_results", DATA_A, SYNC)]
+    assert len(_calls(run, "run_on_vms")) == 1
+    assert _calls(run, "run_commands") == [
+        f"run_commands -i {run.work / 'scripts' / 'ips_subset_noise.txt'} "
+        "rm -rf ~/flexfl/results"
+    ]
+    assert not _rep(run, DATA_A, DSYNC).exists()
+    assert "HALT: logs for" in run.proc.stderr
+    assert _gather_attempts(run) == 3
+
+
+def test_failed_run_whose_gather_also_fails_still_halts_before_any_cleanup(
+    tmp_path,
+):
+    entries = [_entry(DATA_A, SYNC), _entry(DATA_A, DSYNC)]
+
+    run = _run(tmp_path, entries, env={"RUN_RC": "1", "GATHER_FAIL": "1"})
+
+    assert run.proc.returncode == 3, run.proc.stderr
+    assert (_rep(run, DATA_A, SYNC) / "_FAILED").exists()
+    assert _failures(run) == [_failure("gather_results", DATA_A, SYNC)]
+    assert _gather_attempts(run) == 3
+    assert len(_calls(run, "run_on_vms")) == 1
+    assert _calls(run, "run_commands") == [
+        f"run_commands -i {run.work / 'scripts' / 'ips_subset_noise.txt'} "
+        "rm -rf ~/flexfl/results"
+    ]
+    assert not _rep(run, DATA_A, DSYNC).exists()
+
+
+def test_transient_gather_failure_is_retried_without_rerunning_the_experiment(
+    tmp_path,
+):
+    run = _run(tmp_path, [_entry(DATA_A, SYNC)], env={"GATHER_FAILS": "1"})
+
+    assert run.proc.returncode == 0, run.proc.stderr
+    rep = _rep(run, DATA_A, SYNC)
+    assert (rep / "_SUCCESS").exists()
+    assert not (rep / "_FAILED").exists()
+    assert _gather_attempts(run) == 2
+    assert len(_calls(run, "run_on_vms")) == 1
+    assert _failures(run) == []
 
 
 def test_failed_run_is_retried_then_skipped_on_the_same_root(tmp_path):
